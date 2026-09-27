@@ -684,6 +684,63 @@
   }
 
   /**
+   * Messung panel (3-column layout, user 27.09.): the Yacht and every shown benchmark (return, € change, max. drawdown
+   * within the span) and every selected position (return, € change) over the measured span – live while measuring – or
+   * over the whole period while nothing is measured. Numbers: the chart's series (daily or the sub-daily frame), "Echt"
+   * like the benchmark boxes, positions from engine.assetsSpan. Registered with Sync, so it redraws with the overlays;
+   * skipped while the panel is hidden (< 1200px).
+   */
+  var mpKey = '', mpStamp = 0;
+  function renderMeasPanel(meas) {
+    var el = $('measPanel'), M = cur;
+    if (!el || !M) return;
+    if (el.offsetParent === null) { mpKey = ''; return; }
+    var I = M.intra, p = M.p, span = !!(meas && meas.a != null && meas.b != null && meas.a !== meas.b);
+    var first = I ? Math.max(0, I.ctxEnd) : 0, last = I ? I.last : (p ? p.value.length - 1 : 0);
+    var a = span ? Math.max(0, Math.min(meas.a, meas.b)) : first, b = span ? Math.min(last, Math.max(meas.a, meas.b)) : last;
+    var key = mpStamp + '|' + span + '|' + a + '|' + b + '|' + (meas && meas.live ? 1 : 0);
+    if (key === mpKey) return;
+    mpKey = key;
+    var lbl = function (k) { return I ? slotLabel(I, k) : F.date(ctx.dates[M.R.start + k], 'short'); };
+    var sub = $('mpSub');
+    sub.textContent = span ? lbl(a) + ' – ' + lbl(b) : 'Zeitraum ' + periodText(M.R);
+    sub.classList.toggle('is-live', span);
+    sub.title = span ? (meas.live ? 'Messung läuft' : 'Gemessener Zeitraum') + ' – ohne Messung zeigt das Panel den ganzen Zeitraum' :
+      'Ganzer Zeitraum – eine Messung im Chart zeigt hier den gemessenen Abschnitt';
+    if (!p || b <= a) {
+      $('mpTable').innerHTML = '<tbody><tr><td class="mp-empty">' + esc(!p ? emptyText() : 'Zeitraum zu kurz') + '</td></tr></tbody>';
+      $('mpList').innerHTML = '';
+      $('mpNote').textContent = '';
+      return;
+    }
+    var vals = I ? I.value : p.value, frame = I ? I.frame : null, i = I ? a : M.R.start + a, j = I ? b : M.R.start + b, tgt = depotTarget();
+    function row(name, color, v, eur, eurTitle) {
+      var w = E.intradayWindow(v, a, b), dd = E.drawdown(v.slice(a, b + 1)), r = get(w, 'ret');
+      return '<tr><td><span class="mp-nm" style="--c:' + color + '" title="' + esc(name) + '"><i></i><span>' + esc(name) + '</span></span></td>' +
+        '<td class="' + sgn(r) + '">' + pct(r) + '</td><td class="' + sgn(eur) + '" title="' + esc(eurTitle) + '">' + eurS(eur, 0) + '</td>' +
+        '<td class="' + (dd && dd.maxDD < 0 ? 'neg' : '') + '">' + pctU(dd ? dd.maxDD : null, 1) + '</td></tr>';
+    }
+    var yw = E.intradayWindow(vals, a, b), html = row('Yacht', 'var(--accent)', vals, get(yw, 'pl'), 'Wertänderung des Portfolios (Startwert-skaliert)');
+    var list = I ? I.benches.filter(function (o) { return o.s; }).map(function (o) { return { x: o.x, v: o.s.value }; }) :
+      M.selB.filter(function (x) { return x.s; }).map(function (x) { return { x: x, v: x.s.value }; });
+    list.forEach(function (o) {
+      var real = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, o.x.b, i, j, { frame: frame, target: tgt, buyAt: M.R.start })) : null;
+      html += row(o.x.name, o.x.color, o.v, real, 'Echt: €-Veränderung bei einem Wert von ' + eur(tgt, { dec: 0 }) + ' („Benchmark (€)“) heute');
+    });
+    $('mpTable').innerHTML = '<thead><tr><th></th><th>Rendite</th><th title="Yacht: Wertänderung · Benchmarks: „Echt“ wie in der Messbox">G/V €</th>' +
+      '<th title="Größter Rückgang innerhalb des Zeitraums">Max. DD</th></tr></thead><tbody>' + html + '</tbody>';
+    var rows = E.assetsSpan ? E.assetsSpan(ctx, { selected: state.selected, scale: I ? I.scale : p.scale, a: i, b: j, frame: frame }) : [];
+    rows = rows.filter(function (r) { return r.selected; }).sort(function (x, y) { return (nv(y.pl) || 0) - (nv(x.pl) || 0); });
+    $('mpNote').textContent = rows.length + ' · nach G/V';
+    $('mpList').innerHTML = rows.map(function (r) {
+      return '<div class="mp-row" title="' + esc(r.name + ' · ' + r.isin + ' · Beitrag ' + pp(r.contrib) + ' %-Punkte') + '">' + avatarHTML(r, 'av--sm') +
+        '<span class="mp-n">' + esc(r.short || r.name) + '</span>' +
+        '<span class="mp-v"><b class="' + sgn(r.ret) + '">' + pct(r.ret) + '</b><span>' + eurS(r.pl) + '</span></span></div>';
+    }).join('');
+  }
+  sync.add({ drawOverlay: function (S) { renderMeasPanel(S && S.measure); } });
+
+  /**
    * Muted note under the chart: the chart's interval ("Intervall: 30 Min." / "2 Std." / "1 Tag") and, when the range
    * stepped down to a coarser grid, why ("keine 30-Min-Kurse für diesen Zeitraum"). The title lists what was collected.
    */
@@ -1182,8 +1239,11 @@
   function placeDrop() {
     if (!drop) return;
     var row = drop.inp.closest('.bb-row') || drop.inp, rr = row.getBoundingClientRect(), ir = drop.inp.getBoundingClientRect();
-    var sc = drop.inp.closest('.bb-rows'), sr = sc ? sc.getBoundingClientRect() : null;
-    if (!ir.width || (sr && (ir.bottom < sr.top + 4 || ir.top > sr.bottom - 4))) { closeDrop(); return; }   // scrolled out of its card
+    var out = [drop.inp.closest('.bb-rows'), drop.inp.closest('.rail-in')].some(function (sc) {
+      var sr = sc && sc.scrollHeight > sc.clientHeight ? sc.getBoundingClientRect() : null;
+      return sr && (ir.bottom < sr.top + 4 || ir.top > sr.bottom - 4);
+    });
+    if (!ir.width || out) { closeDrop(); return; }            // scrolled out of its card / the right column
     var vv = window.visualViewport, bar = $('topBar');
     var vw = document.documentElement.clientWidth, vh = vv ? Math.min(window.innerHeight, vv.offsetTop + vv.height) : window.innerHeight;  // above an on-screen keyboard
     var w = Math.min(Math.max(rr.width, 340), vw - 16), left = Math.max(8, Math.min(rr.left, vw - 8 - w));
@@ -1286,7 +1346,7 @@
     });
     window.addEventListener('resize', placeDrop);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', placeDrop);
-    box.addEventListener('scroll', function () { if (drop) placeDrop(); }, true);     // rows scroll inside a card: the list follows
+    document.addEventListener('scroll', function () { if (drop) placeDrop(); }, true);   // rows / the right column scroll: the list follows
   }
 
   function renderHeadline(M) {
@@ -2035,6 +2095,8 @@
     renderAssets(cur);
     renderRisk(cur);
     renderMeasureBar();
+    mpStamp++;
+    renderMeasPanel(sync.measure);
   }
 
   /** What-if: a Stück input was committed (Enter / blur). */
@@ -2099,6 +2161,7 @@
     $('depotReset').hidden = !s;
     renderOvBench(holdPeriod());                  // benchmark values in the overview use the same amount
     mainChart.tipKey = '';                        // rebuild an open measure box with the new value
+    mpStamp++;                                    // and the "Echt" column of the Messung panel
     sync.draw();
   }
 
@@ -2251,6 +2314,7 @@
         var widthChanged = w !== lastW;
         lastW = w; lastH = h;
         rerenderChartsOnly();
+        renderMeasPanel(sync.measure);                         // shown again after the window got wide enough
         if (widthChanged && heat.model) heat.render();         // cell size follows the card width
       });
     }

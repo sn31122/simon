@@ -52,6 +52,67 @@ button { -webkit-tap-highlight-color: transparent; }
 .page { max-width: 868px; margin: 0 auto; padding: 8px 24px 56px; }   /* 820px content column like the app at 1920x1080 */
 .fatal { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--neg); border-radius: 8px; color: var(--neg); }
 
+/* ------------------------------------------------------------------ 3-column layout (user, 27.09.)
+   >= 1680px: Messung panel left | overview + chart centre | settings + benchmark cards right (both side columns scroll
+   inside, the row is as tall as the centre); 1200–1679px: centre + right column, Messung under the chart; narrower: the
+   single 820px column as before (Messung hidden). Benchmark-Vergleich, Drawdown and the rest follow at full width. */
+.mg-left { display: none; }
+@media (min-width: 1200px) {
+  .page, .topbar .hdr { max-width: 1880px; }
+  .main-grid {
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: "center right" "left right";
+    column-gap: 32px; align-items: start;
+  }
+  .mg-center { grid-area: center; min-width: 0; }
+  .mg-right { grid-area: right; position: relative; align-self: stretch; min-width: 0; }
+  .mg-right > .rail-in, .mg-left > .rail-in { scrollbar-width: thin; scrollbar-color: #3a3e42 transparent; }
+  .mg-right > .rail-in { position: absolute; inset: 0; overflow-y: auto; padding: 22px 6px 12px 0; }
+  .mg-left { display: block; grid-area: left; min-width: 0; margin-top: 26px; }
+  /* settings stacked in the right column */
+  .mg-right .settings { flex-direction: column; align-items: stretch; gap: 10px; margin-top: 0; }
+  .mg-right .daterange { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+  .mg-right .dr-field { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .mg-right .dr-hint { grid-column: 1 / -1; }
+  .mg-right .set-field { flex-wrap: wrap; justify-content: space-between; }
+  .mg-right .inp-wrap input { width: 160px; }
+  .mg-right .set-hint { flex: 1 0 100%; text-align: right; }
+  .mg-right .set-bench { margin-top: 10px; }
+  .mg-right .bb-grid { grid-template-columns: minmax(0, 1fr); }
+  .mg-right .bb-add { min-height: 52px; }
+  .page .kpis { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  /* a single list keeps a readable 820px column, centred (both lists: side by side as before) */
+  .lists:not(.is-side) .lists-row > .holdings { max-width: 820px; margin-left: auto; margin-right: auto; }
+  .mp-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+}
+@media (min-width: 1680px) {
+  .main-grid { grid-template-columns: 320px minmax(0, 1fr) 340px; grid-template-areas: "left center right"; }
+  .mg-left { position: relative; align-self: stretch; margin-top: 0; }
+  .mg-left > .rail-in { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 22px 6px 12px 0; }
+  .mg-left .mp-list { display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #3a3e42 transparent; }
+}
+/* Messung panel: table (Yacht + shown benchmarks) and the positions over the span */
+.mp-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 2px 10px; margin-bottom: 8px; }
+.mp-head h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.mp-sub { color: var(--muted); font-size: 12px; }
+.mp-sub.is-live { color: var(--accent); }
+.mp-card { flex: 0 0 auto; padding: 3px 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.mp-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.mp-tbl th { padding: 4px 10px 3px 0; color: var(--muted); font-size: 11px; font-weight: 600; text-align: right; white-space: nowrap; }
+.mp-tbl td { padding: 5px 10px 5px 0; text-align: right; white-space: nowrap; }
+.mp-tbl th:first-child, .mp-tbl td:first-child { padding-left: 10px; text-align: left; }
+.mp-tbl td.mp-empty { padding: 8px 10px; color: var(--muted); text-align: left; white-space: normal; }
+.mp-nm { --c: var(--accent); display: inline-flex; align-items: center; gap: 6px; max-width: 104px; color: #fff; font-weight: 600; }
+.mp-nm i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.mp-nm span { overflow: hidden; text-overflow: ellipsis; }
+.mp-h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 14px 0 2px; font-size: 13px; font-weight: 700; }
+.mp-note { color: var(--muted); font-size: 11.5px; font-weight: 500; }
+.mp-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; column-gap: 9px; padding: 5px 2px 5px 0; }
+.mp-row + .mp-row { border-top: 1px solid rgba(255, 255, 255, .045); }
+.mp-n { overflow: hidden; color: #fff; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.mp-v { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3; white-space: nowrap; }
+.mp-v b { font-size: 13px; font-weight: 600; }
+.mp-v span { color: var(--muted); font-size: 11.5px; }
+
 /* ------------------------------------------------------------------ header */
 /* sticky bar like the app: full window width, the page scrolls underneath it */
 .topbar { position: sticky; top: 0; z-index: 60; background: var(--bg); }

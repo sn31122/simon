@@ -746,6 +746,32 @@
     return out;
   }
 
+  /**
+   * assetsSpan(ctx, {selected, scale, a, b, frame}) -> one row per position (selected or not) for a measured span:
+   * a/b = daily indices (no frame) or points of a sub-daily frame (gridFrame; order-independent). Row = { isin, name,
+   * short, selected, p0, p1, ret = p1/p0 − 1, pl = shares · scale · (p1 − p0), contrib = pl / V0 (V0 = Σ shares · scale · p0
+   * of the selected positions; null if not selected) }. Prices follow the fill rules of the daily series / the frame.
+   */
+  function assetsSpan(ctx, opts) {
+    opts = opts || {};
+    const sel = selectionSet(ctx, opts.selected);
+    const F = opts.frame ? frameOf(ctx, opts.frame) : null;
+    const i = Math.min(opts.a, opts.b), j = Math.max(opts.a, opts.b);
+    const lim = F ? Math.min(F.last, F.m - 1) : ctx.n - 1;
+    if (!isNum(i) || !isNum(j) || i < 0 || j > lim) return [];
+    const price = F ? (isin, k) => framePx(ctx, F, isin, k) : (isin, k) => (ctx.px[isin] ? ctx.px[isin][k] : null);
+    const scale = isNum(opts.scale) && opts.scale > 0 ? opts.scale : 1;
+    const rows = ctx.positions.map((p) => {
+      const p0 = fin(price(p.isin, i)), p1 = fin(price(p.isin, j)), q = sharesOf(p) * scale;
+      const r = div(p1, p0);
+      return { isin: p.isin, name: p.name, short: p.short, selected: sel.has(p.isin), p0, p1,
+        ret: r === null ? null : r - 1, pl: p0 === null || p1 === null ? null : fin(q * (p1 - p0)), v0: p0 === null ? null : q * p0 };
+    });
+    const V0 = sum(rows.filter((r) => r.selected && r.v0 !== null).map((r) => r.v0));
+    rows.forEach((r) => { r.contrib = r.selected ? div(r.pl, V0) : null; delete r.v0; });
+    return rows;
+  }
+
   /** assets(ctx, {selected, start, end, scale}) -> one row per position (selected or not) */
   function assets(ctx, opts) {
     opts = opts || {};
@@ -1082,6 +1108,8 @@
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },
     util: { mean, sampleSd, sampleCov, quantile, returnsOf, minusMonths, daysBetween, dayNumber, isMonthComplete },
   };
+
+  PFEngine.assetsSpan = assetsSpan;         // measurement panel (3-column layout, user 27.09.)
 
   if (typeof module !== 'undefined' && module.exports) module.exports = PFEngine; else root.PFEngine = PFEngine;
 })(typeof window !== 'undefined' ? window : globalThis);
