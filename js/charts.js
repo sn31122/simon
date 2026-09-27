@@ -751,10 +751,13 @@
     if (mk && isNum(mk.value) && mk.value < 0 && mk.i >= 0 && mk.i < m) {
       var mx = X.x(mk.i), my = yOf(mk.value), font = '600 11px ' + ff, lw = textW(mk.label, font);
       svgEl('circle', { cx: r1(mx), cy: r1(my), r: 3.5, 'class': 'pc-ddmark' }, this.gTop);
-      var right = mx + 8 + lw <= W - 4;
+      // right of the marker, else left of it; when it fits on neither side (long sub-daily labels on phones) it goes
+      // under the marker, centred on it and kept inside the plot (its text stroke keeps it readable over the lines)
+      var right = mx + 8 + lw <= W - 4, left = mx - 8 - lw >= 0, under = !right && !left;
+      var lx = right ? mx + 8 : left ? mx - 8 : clamp(mx - lw / 2, 0, Math.max(0, X.padL + X.plotW - lw));
+      var ly = under ? (my + 17 <= bottom + 12 ? my + 17 : my - 9) : clamp(my + 4, top + 10, bottom + 12);
       var lt = svgEl('text', {
-        x: r1(right ? mx + 8 : mx - 8), y: r1(clamp(my + 4, top + 10, bottom + 12)),
-        'text-anchor': right ? 'start' : 'end', 'class': 'pc-ddlabel'
+        x: r1(lx), y: r1(ly), 'text-anchor': right || under ? 'start' : 'end', 'class': 'pc-ddlabel'
       }, this.gTop);
       lt.textContent = mk.label;
     }
