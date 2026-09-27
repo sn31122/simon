@@ -656,6 +656,9 @@ test('fmt.date / asofBerlin', () => {
   assert.strictEqual(F.date('2026-09-25', 'monthYear'), 'Sept. 2026');
   assert.strictEqual(F.date('2026-04-21', 'dayMonthShort'), '21.04.');
   assert.strictEqual(F.date('2026-01-02', 'dayMonthShort'), '02.01.');
+  assert.strictEqual(F.date('2026-09-23', 'weekdayDayMonth'), 'Mi 23.09.', 'weekday without dot');
+  assert.strictEqual(F.date('2026-09-18', 'weekdayDayMonth'), 'Fr 18.09.');
+  assert.deepStrictEqual(calendar('2026-09-21', '2026-09-27').map((d) => F.date(d, 'weekdayDayMonth').slice(0, 2)), ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']);
   const months = Array.from({ length: 12 }, (_, m) => F.date(`2026-${String(m + 1).padStart(2, '0')}-15`, 'month'));
   assert.deepStrictEqual(months, ['Jan.', 'Feb.', 'März', 'Apr.', 'Mai', 'Juni', 'Juli', 'Aug.', 'Sept.', 'Okt.', 'Nov.', 'Dez.']);
   for (const bad of [null, undefined, '', 'garbage', '2026-02-30', 20260421]) assert.strictEqual(F.date(bad, 'long'), '–');
@@ -690,7 +693,8 @@ test('UMD: classic script sets window.PFEngine without module', () => {
   const ws = W.portfolio(W.prepare(S_DATA), { selected: foreignSet, start: 0, end: 3 });
   assert.ok(ws && ws.raw.length === 4 && Math.abs(ws.raw[0] - 40) < 1e-12, 'cross-realm Set selection');
   for (const k of ['prepare', 'presetRange', 'customRange', 'portfolio', 'benchmark', 'drawdown', 'stats', 'relative', 'monthly', 'assets', 'groupSummary',
-    'withShares', 'correlationMatrix', 'riskContribution'])
+    'withShares', 'correlationMatrix', 'riskContribution', 'chartInterval', 'gridCovers', 'gridFrame', 'intraday', 'intradayBenchmark',
+    'intradayAsset', 'intradayWindow', 'equalValueWindow', 'benchmarkValueNow', 'benchmarkRealPl'])
     assert.strictEqual(typeof E[k], 'function', k);
   for (const k of ['eur', 'num', 'pct', 'ratio', 'date', 'asofBerlin', 'parseDE']) assert.strictEqual(typeof E.fmt[k], 'function', 'fmt.' + k);
 });
@@ -880,21 +884,32 @@ const I_DATA = () => ({
   ],
   benchmarks: [{ id: 'ab', name: 'AB', holdings: { A: 1, B: 0.5 } }],
   prices: { A: [10, 11, 12], B: [20, 21, 19], C: [5, 6, 7] },
-  intraday: {
-    dates: ['2026-03-03', '2026-03-04'], times: ['07:30', '08:00', '08:30'], asof_utc: '2026-03-04T07:05Z',
-    px: { A: [null, 11.5, 11, 12.5, null, null], B: [21.5, null, 21, null, 18, null] },
+  grids: {
+    m30: {
+      dates: ['2026-03-03', '2026-03-04'], times: ['07:30', '08:00', '08:30'], asof_utc: '2026-03-04T07:05Z',
+      px: { A: [null, 11.5, 11, 12.5, null, null], B: [21.5, null, 21, null, 18, null] },
+    },
   },
 });
 
 test('intraday: fill rules (previous close before the first quote, forward-fill, flat daily price without quotes, null after the last slot)', () => {
   const ctx = E.prepare(I_DATA());
-  const I = ctx.intraday;
-  assert.ok(I && I.ok, 'intraday ok');
-  assert.strictEqual(I.last, 4);
-  assert.deepStrictEqual(I.px.A, [10, 11.5, 11, 12.5, 12.5, null]);
-  assert.deepStrictEqual(I.px.B, [21.5, 21.5, 21, 21, 18, null]);
-  assert.deepStrictEqual(I.px.C, [6, 6, 6, 7, 7, null]);
-  assert.strictEqual(I.has.C, false);
+  const G = ctx.grids.m30;
+  assert.ok(G, 'm30 grid');
+  assert.strictEqual(ctx.grids.h2, null, 'no h2 data');
+  assert.deepStrictEqual(G.dates, ['2026-03-03', '2026-03-04']);
+  assert.deepStrictEqual(G.idx, [1, 2]);
+  assert.deepStrictEqual(G.last, [2, 1], 'final session complete, open session up to its latest point');
+  assert.deepStrictEqual(G.px.A, [10, 11.5, 11, 12.5, 12.5, null]);
+  assert.deepStrictEqual(G.px.B, [21.5, 21.5, 21, 21, 18, null]);
+  assert.deepStrictEqual(G.px.C, [6, 6, 6, 7, 7, null]);
+  assert.deepStrictEqual(G.seen.C, [false, false]);
+  assert.deepStrictEqual(G.seen.A, [true, true]);
+  // the old data.intraday shape is read as the 30-min grid
+  const legacy = I_DATA();
+  legacy.intraday = legacy.grids.m30;
+  delete legacy.grids;
+  assert.deepStrictEqual(E.prepare(legacy).grids.m30.px.B, G.px.B, 'legacy data.intraday');
 });
 
 test('intraday: portfolio value, base = 1T start value, pl, ctxEnd, missing, scaling', () => {
@@ -994,12 +1009,13 @@ test('equalValueWindow: benchmark return over the span × portfolio value at the
 
 test('intraday: stale or missing data -> null (1T falls back to daily)', () => {
   const d = I_DATA();
-  d.intraday.dates = ['2026-03-02', '2026-03-03'];            // older than the last daily date
+  d.grids.m30.dates = ['2026-03-02', '2026-03-03'];            // older than the last daily date
   assert.strictEqual(E.intraday(E.prepare(d), { selected: ['A'] }), null);
+  assert.strictEqual(E.chartInterval(E.prepare(d), E.presetRange(E.prepare(d), '1T'), '1T').key, 'day', '1T steps down to daily');
   const e = I_DATA();
-  delete e.intraday;
+  delete e.grids;
   const ctx = E.prepare(e);
-  assert.strictEqual(ctx.intraday, null);
+  assert.deepStrictEqual(ctx.grids, { m30: null, h2: null });
   assert.strictEqual(E.intraday(ctx, { selected: ['A'] }), null);
   assert.strictEqual(E.intradayAsset(ctx, 'A'), null);
   const w = E.withShares(E.prepare(I_DATA()), { A: 0 });      // what-if keeps the intraday grid
@@ -1016,6 +1032,172 @@ test('real data: intraday (if present and current) ends at the daily 1T end valu
   approx(s.base, d.startValue, 1e-9, 'base = 1T start');
   assert.ok(Math.abs(s.value[s.last] / d.value[1] - 1) < 0.01, `intraday end ${s.value[s.last]} vs daily ${d.value[1]}`);
   s.value.forEach((v, k) => assert.ok(k > s.last ? v === null : Number.isFinite(v) && v > 0, `slot ${k}`));
+});
+
+// ---------- chart interval (30 min / 2 h / daily) and sub-daily frames, hand-computed
+// Mon 02.03. … Mon 09.03.; m30 (3 slots) has 03., 05., 06., 09. (04. missing); h2 (2 slots) has every session 03.–09.
+const G_DATES = ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06', '2026-03-09'];
+const G_DATA = (lastStatus) => ({
+  meta: {}, dates: G_DATES, status: G_DATES.map((_, k) => (k === 5 && lastStatus) || 'final'), groups: ['G1'],
+  positions: [{ isin: 'A', name: 'A', short: 'A', group: 'G1', shares: 2 }, { isin: 'B', name: 'B', short: 'B', group: 'G1', shares: 1 }],
+  benchmarks: [{ id: 'ab', name: 'AB', holdings: { A: 1, B: 0.5 } }, { id: 'bb', name: 'BB', holdings: { B: 1 } }],
+  prices: { A: [10, 11, 12, 11, 13, 14], B: [20, 21, 19, 22, 20, 21] },
+  grids: {
+    m30: {
+      dates: ['2026-03-03', '2026-03-05', '2026-03-06', '2026-03-09'], times: ['09:00', '13:00', '23:00'], asof_utc: '2026-03-09T08:10Z',
+      px: {
+        A: [10.5, null, null, 11.5, 12.5, 11, null, 12, 13, 13.5, null, null],
+        B: [null, 20.5, 21, 19.5, null, 22.5, 21, 20.5, 20, null, null, null],     // 05.03. 23:00 = 22.5 ≠ close 22 -> pinned
+      },
+    },
+    h2: {
+      dates: ['2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06', '2026-03-09'], times: ['09:00', '23:00'], asof_utc: '2026-03-09T08:10Z',
+      px: { A: [10.8, 11, 11.8, 12, 11.4, 11, 12.2, 13, 13.6, null], B: [20.4, 21, 19.6, 19, 20.8, 22, 21.2, 20, 20.6, null] },
+    },
+  },
+});
+
+test('grids: fill per session, final sessions end on the daily close (pinned), not-seen session flat, gaps allowed', () => {
+  const G = E.prepare(G_DATA()).grids.m30;
+  assert.deepStrictEqual(G.dates, ['2026-03-03', '2026-03-05', '2026-03-06', '2026-03-09']);
+  assert.deepStrictEqual(G.pos, { 1: 0, 3: 1, 4: 2, 5: 3 });
+  assert.deepStrictEqual(G.px.A, [10.5, 10.5, 11, 11.5, 12.5, 11, 11, 12, 13, 13.5, 13.5, 14]);
+  assert.deepStrictEqual(G.px.B, [20, 20.5, 21, 19.5, 19.5, 22, 21, 20.5, 20, 21, 21, 21]);
+  assert.deepStrictEqual(G.seen.B, [true, true, true, false]);
+  const O = E.prepare(G_DATA('intraday')).grids.m30;         // open last session: ends after its latest point (A 09:00)
+  assert.deepStrictEqual(O.last, [2, 2, 2, 0]);
+  assert.deepStrictEqual(O.px.A.slice(9), [13.5, null, null]);
+  assert.deepStrictEqual(O.px.B.slice(9), [21, null, null], 'no point that day: flat at the daily price');
+});
+
+test('chartInterval: presets, custom by calendar days, step-down 30 min -> 2 h -> daily when a session is missing', () => {
+  const c = E.prepare(G_DATA());
+  const iv = (p, r) => E.chartInterval(c, r || E.presetRange(c, p), p);
+  assert.deepStrictEqual(iv('1T'), { key: 'm30', want: 'm30', stepped: false, skipped: [], days: 3 });
+  assert.deepStrictEqual(iv('1W'), { key: 'h2', want: 'm30', stepped: true, skipped: ['m30'], days: 7 }, '1W needs 04.03. -> 2 h');
+  assert.strictEqual(iv('1M').key, 'h2');
+  for (const p of ['3M', '6M', 'YTD', '1J', 'MAX']) assert.deepStrictEqual(iv(p), { key: 'day', want: 'day', stepped: false, skipped: [], days: 7 }, p);
+  assert.strictEqual(iv('1D').key, 'm30', 'alias');
+  assert.strictEqual(E.chartInterval(c, { start: 2, end: 4 }, 'custom').key, 'm30', 'sessions 05./06. collected');
+  assert.deepStrictEqual(E.chartInterval(c, { start: 1, end: 3 }, 'custom'), { key: 'h2', want: 'm30', stepped: true, skipped: ['m30'], days: 2 });
+  assert.strictEqual(E.chartInterval(c, { start: 0, end: 1 }, 'custom').key, 'm30', 'the start session need not be collected');
+  const noH2 = G_DATA(); delete noH2.grids.h2;
+  assert.deepStrictEqual(E.chartInterval(E.prepare(noH2), { start: 1, end: 3 }, 'custom'),
+    { key: 'day', want: 'm30', stepped: true, skipped: ['m30', 'h2'], days: 2 });
+  assert.strictEqual(E.chartInterval(c, { start: 4, end: 4 }, 'custom').key, 'day', 'no session in the range');
+  // calendar-day thresholds on a long weekday calendar where both grids hold every session
+  const days = calendar('2026-01-05', '2026-02-27', true);
+  const full = (times) => ({ dates: days, times, px: { A: days.flatMap((_, k) => times.map(() => 10 + k)) } });
+  const L = E.prepare(Object.assign(dataOf(days, { prices: { A: days.map((_, k) => 10 + k) }, positions: [{ isin: 'A', group: 'G1', shares: 1 }] }),
+    { grids: { m30: full(['09:00', '13:00', '23:00']), h2: full(['09:00', '23:00']) } }));
+  const cu = (a, b) => E.chartInterval(L, E.customRange(L, a, b), 'custom');
+  assert.deepStrictEqual([cu('2026-01-05', '2026-01-12'), cu('2026-01-05', '2026-01-13'), cu('2026-01-05', '2026-02-05'), cu('2026-01-05', '2026-02-06')]
+    .map((x) => x.key + ' ' + x.days), ['m30 7', 'h2 8', 'h2 31', 'day 32']);
+  assert.strictEqual(E.chartInterval(L, E.presetRange(L, '1W'), '1W').key, 'm30');
+  assert.strictEqual(E.chartInterval(L, E.presetRange(L, '1M'), '1M').key, 'h2');
+});
+
+test('gridFrame: point 0 = daily close of the start, sessions concatenated, context (1T), trim, null without coverage', () => {
+  const c = E.prepare(G_DATA());
+  const f = E.gridFrame(c, 'm30', 2, 4);
+  assert.deepStrictEqual([f.m, f.last, f.ctxEnd, f.context], [7, 6, -1, false]);
+  assert.deepStrictEqual(f.src, [-1, 3, 4, 5, 6, 7, 8]);
+  assert.deepStrictEqual(f.day, [2, 3, 3, 3, 4, 4, 4]);
+  assert.deepStrictEqual(f.slot, [-1, 0, 1, 2, 0, 1, 2]);
+  assert.deepStrictEqual(f.sessions.map((x) => [x.date, x.from, x.to]), [['2026-03-05', 1, 3], ['2026-03-06', 4, 6]]);
+  assert.strictEqual(E.gridFrame(c, 'm30', 1, 3), null, '04.03. not collected');
+  assert.strictEqual(E.gridFrame(c, 'm30', 3, 3), null, 'empty range');
+  const k = E.gridFrame(c, 'm30', 4, 5, { context: true });
+  assert.deepStrictEqual([k.m, k.ctxEnd, k.context, k.segs.length, k.sessions.length], [6, 2, true, 2, 1]);
+  assert.deepStrictEqual(k.src, [6, 7, 8, 9, 10, 11]);
+  const n = E.gridFrame(c, 'm30', 2, 3, { context: true });   // start session 04.03. not collected: point 0 = its close
+  assert.deepStrictEqual([n.context, n.ctxEnd, n.src[0], n.m], [false, -1, -1, 4]);
+  const o = E.prepare(G_DATA('intraday'));
+  const t = E.gridFrame(o, 'm30', 3, 5, { trim: true }), u = E.gridFrame(o, 'm30', 3, 5);
+  assert.deepStrictEqual([t.m, t.last, u.m, u.last], [5, 4, 7, 4], 'trim cuts the open session after its latest point');
+  assert.strictEqual(t.sessions[1].to, 4);
+});
+
+test('intraday on a multi-day frame: values, base = daily start, end = daily end, Startwert scale, what-if', () => {
+  const c = E.prepare(G_DATA()), f = E.gridFrame(c, 'm30', 2, 4);
+  const s = E.intraday(c, { selected: ['A', 'B'], frame: f });
+  approxArr(s.value, [43, 42.5, 44.5, 44, 43, 44.5, 46], 1e-12, 'value (2 A + B)');
+  const d = E.portfolio(c, { selected: ['A', 'B'], start: 2, end: 4 });
+  approx(s.base, d.startValue, 1e-12, 'base = daily start value');
+  approx(s.value[s.last], d.value[d.value.length - 1], 1e-12, 'end = daily end (final sessions)');
+  approxArr(s.pl, [0, -0.5, 1.5, 1, 0, 1.5, 3], 1e-12, 'pl');
+  assert.deepStrictEqual([s.key, s.m, s.last, s.ctxEnd], ['m30', 7, 6, -1]);
+  assert.deepStrictEqual(s.dates, ['2026-03-05', '2026-03-06']);
+  const sc = E.intraday(c, { selected: ['A', 'B'], frame: f, startValue: 86 });
+  approx(sc.scale, 2, 1e-12, 'scale');
+  approx(sc.value[6], 92, 1e-12, 'scaled end');
+  approx(sc.base, E.portfolio(c, { selected: ['A', 'B'], start: 2, end: 4, startValue: 86 }).startValue, 1e-12, 'scaled base = daily');
+  const w = E.withShares(c, { A: 0 });
+  approxArr(E.intraday(w, { selected: ['A', 'B'], frame: f }).value, [19, 19.5, 19.5, 22, 21, 20.5, 20], 1e-12, 'what-if on the same frame');
+  const dd = E.drawdown(s.value);
+  assert.deepStrictEqual([dd.peak, dd.trough], [2, 4]);
+  approx(dd.maxDD, 43 / 44.5 - 1, 1e-12, 'drawdown on the grid');
+  assert.strictEqual(E.intraday(c, { selected: [], frame: f }), null);
+  // 2-h grid, range 03.–05.03. (m30 lacks 04.03.): A [11, 11.8, 12, 11.4, 11], B [21, 19.6, 19, 20.8, 22]
+  const h = E.intraday(c, { selected: ['A', 'B'], frame: E.gridFrame(c, 'h2', 1, 3) });
+  approxArr(h.value, [43, 43.2, 43, 43.6, 44], 1e-12, 'h2 value');
+  approx(h.value[h.last], E.portfolio(c, { selected: ['A', 'B'], start: 1, end: 3 }).value[2], 1e-12, 'h2 end = daily end');
+});
+
+test('intradayBenchmark on a frame: holdings normalized to the base, weights bought at the start close and held; real P/L', () => {
+  const c = E.prepare(G_DATA()), f = E.gridFrame(c, 'm30', 2, 4);
+  const B = [19, 19.5, 19.5, 22, 21, 20.5, 20], A = [12, 11.5, 12.5, 11, 11, 12, 13];
+  const hb = E.intradayBenchmark(c, 'bb', 43, f);
+  approxArr(hb.value, B.map((x) => 43 * x / 19), 1e-12, 'holdings');
+  approx(hb.value[6], E.benchmark(c, 'bb', 2, 4, 43).value[2], 1e-12, 'end = daily benchmark end');
+  approxArr(hb.ret, B.map((x) => x / 19 - 1), 1e-12, 'ret since the range start');
+  const wb = { id: 'w', name: 'W', weights: { A: 50, B: 50 } };
+  const wv = E.intradayBenchmark(c, wb, 43, f);
+  approxArr(wv.value, A.map((a, k) => 43 * (0.5 * a / 12 + 0.5 * B[k] / 19)), 1e-12, 'weights: bought at the close of the start, held');
+  approx(wv.value[6], E.benchmark(c, wb, 2, 4, 43).value[2], 1e-12, 'weights end = daily buy-and-hold end');
+  // real € change of AB = A + 0.5 B between points 1 and 5: 21.25 -> 22.25; now = 14 + 10.5 = 24.5
+  approx(E.benchmarkRealPl(c, 'ab', 1, 5, { frame: f }), 1, 1e-12, 'real pl on the frame');
+  approx(E.benchmarkRealPl(c, 'ab', 5, 1, { frame: f, target: 49 }), 2, 1e-12, 'order-independent, scaled to target');
+  assert.strictEqual(E.benchmarkRealPl(c, 'ab', 1, 7, { frame: f }), null, 'beyond the frame');
+  const eq = E.equalValueWindow(E.intraday(c, { selected: ['A', 'B'], frame: f }).value, hb.value, 1, 5);
+  approx(eq.pl, 42.5 * (20.5 / 19.5 - 1), 1e-12, 'Gleicher Wert on the frame');
+  const a = E.intradayAsset(c, 'A', f);
+  assert.deepStrictEqual(a.px, A);
+  assert.strictEqual(a.prevClose, 12);
+});
+
+test('real data: chart interval per range and multi-day grids end on the daily values', () => {
+  const D = globalThis.PORTFOLIO_DATA;
+  const c = E.prepare(D), all = c.positions.map((p) => p.isin);
+  const G = c.grids;
+  if (!G.m30 || !G.h2) return;                                  // no sub-daily data: nothing to check
+  const iv = (p) => E.chartInterval(c, E.presetRange(c, p), p).key;
+  const cu = (a, b) => E.chartInterval(c, E.customRange(c, a, b), 'custom');
+  if (G.m30.dates[G.m30.D - 1] === c.dates[c.n - 1]) { assert.strictEqual(iv('1T'), 'm30'); }
+  for (const p of ['3M', '6M', 'YTD', '1J', 'MAX']) assert.strictEqual(iv(p), 'day', p);
+  const inM30 = cu(G.m30.dates[0], G.m30.dates[G.m30.D - 1]);
+  if (G.m30.D > 1) assert.strictEqual(inM30.key, inM30.days <= 7 ? 'm30' : inM30.days <= 31 ? 'h2' : 'day', 'custom inside m30');
+  const before = c.dates.filter((d) => d < G.h2.dates[0]);
+  if (before.length > 6) {
+    const r = cu(before[before.length - 6], before[before.length - 1]);
+    assert.deepStrictEqual([r.key, r.want, r.skipped.join()], ['day', 'm30', 'm30,h2'], 'custom week before the 2-h data');
+  }
+  for (const [key, p] of [['m30', '1W'], ['h2', '1M']]) {
+    const R = E.presetRange(c, p);
+    if (!E.gridCovers(c, key, R.start, R.end)) continue;
+    const f = E.gridFrame(c, key, R.start, R.end, { trim: true }), s = E.intraday(c, { selected: all, frame: f });
+    const d = E.portfolio(c, { selected: all, start: R.start, end: R.end });
+    approx(s.base, d.startValue, 1e-9, `${p} base`);
+    assert.strictEqual(s.m, 1 + (R.end - R.start) * c.grids[key].S - (c.status[R.end] === 'final' ? 0 : c.grids[key].S - 1 - c.grids[key].last[c.grids[key].D - 1]), `${p} frame length`);
+    s.value.forEach((v, k) => assert.ok(Number.isFinite(v) && v > 0, `${p} point ${k}`));
+    if (c.status[R.end] === 'final') {
+      approx(s.value[s.last], d.value[d.value.length - 1], 1e-9, `${p} end = daily end`);
+      for (const b of [c.benchmarks[0], { id: 'w', name: 'W', weights: { IE00B4L5Y983: 40, US5949181045: 60 } }]) {
+        const ib = E.intradayBenchmark(c, b, s.base, f), db = E.benchmark(c, b, R.start, R.end, s.base);
+        approx(ib.value[ib.last], db.value[db.value.length - 1], 1e-9, `${p} ${b.id} end`);
+      }
+    }
+  }
 });
 
 console.log(`\nengine tests: ${passed} passed, ${failed} failed`);

@@ -353,6 +353,9 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .chart-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-height: 30px; margin-top: 6px; }
 .chart-help { color: var(--muted); font-size: 12px; }
+/* interval of the chart (30 Min. / 2 Std. / 1 Tag, why it stepped down); the title lists the collected sub-daily data */
+.chart-iv { margin-left: auto; color: var(--muted); font-size: 12px; cursor: help; }
+.chart-iv b { color: var(--axis); font-weight: 600; white-space: nowrap; }
 
 .btn {
   height: 28px; padding: 0 11px;
