@@ -24,6 +24,9 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   Energie next to Mein Depot); "Mein Depot" is editable like the other cards (rows = today's value shares, starting as the
   fetched allocation, ↺ restores it; edited shares = constant quantities); card rows show ~4 lines and scroll; the fields
   are "Startwert (Yacht)" and "Benchmark (€)" (default: the real Mein Depot value). Browser acceptance: 94 of 94 checks.
+  Then: the overview shows "Yacht" + value and beside it one block per shown benchmark (value + € change over the period
+  in the amount of "Benchmark (€)", like "Echt"; engine `benchmarkRealValue`), the headline's big figure is gone and the
+  space between bar, overview and tabs is smaller. Browser acceptance: 104 of 104 checks.
 - **Chart interval per range:** 1T and 1W 30 min, 1M 2 h, 3M and longer daily; custom ranges by length (≤ 7 days 30 min,
   ≤ 31 days 2 h, else daily), stepping down where finer data was not collected (a note under the chart shows the interval
   and why it stepped down). Main chart, hover, measurement boxes and drawdown follow the interval; Kennzahlen,
@@ -72,6 +75,11 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   it (one wrapping row), so the band gets taller and the plot shorter (decided without asking; change on request).
 - "Echt" for Energie / own cards = their € change had they been worth "Benchmark (€)" today (bought at the period start);
   for an edited Mein Depot the same with its constant quantities (decided without asking).
+- Overview benchmark blocks, decided without asking (change on request): every benchmark is worth exactly "Benchmark (€)"
+  on the last day, so with a period ending today Mein Depot and Energie show the same value (298.811,25 €) and differ only
+  in their change; the "Yacht" label is always shown (also with no benchmark); "Seit Kauf" labels the benchmarks
+  "seit 02.01.2026" (MAX) instead of "seit Kauf"; with an empty selection the blocks stay (they do not depend on the
+  positions); on phones two blocks per row under the Yacht value, which pushes the chart further down with 3+ benchmarks.
 - Chart interval details decided without asking (change on request): a custom range's length counts from its first to its
   last trading day, not the typed dates (a Saturday-to-Saturday week = Mon–Fri, 30 min); the last point of a day reads
   "23:00" in hover/measurement (only a chart's start point reads "Schluss"); "Zeitraum auf Auswahl setzen" stays hidden on
