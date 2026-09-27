@@ -440,6 +440,25 @@
     return fin((vb - va) * target / now);
   }
 
+  /**
+   * benchmarkRealValue(ctx, bench|id, k, {target, buyAt}) -> the benchmark's holdings value at daily index k, scaled by
+   * target / benchmarkValueNow (target omitted = the holdings as they are): its value on day k had it been worth `target`
+   * on the last day (overview block, user 27.09.; unedited "Mein Depot" without target = the real depot value). A weights
+   * benchmark is bought at daily index `buyAt` (the period start) and held (without buyAt: null). The same scaling as
+   * benchmarkRealPl, so value(b) − value(a) = benchmarkRealPl(a, b) for a <= b. null for an index outside the data.
+   */
+  function benchmarkRealValue(ctx, bench, k, opts) {
+    opts = opts || {};
+    const h = benchHoldings(ctx, bench, opts.buyAt), now = benchmarkValueNow(ctx, bench, opts.buyAt);
+    if (!h || now === null || !isNum(k)) return null;
+    const i = Math.round(k);
+    if (i < 0 || i > ctx.n - 1) return null;
+    let v = 0;
+    h.forEach((x) => { v += x[1] * ctx.px[x[0]][i]; });
+    const target = isNum(opts.target) && opts.target > 0 ? opts.target : now;
+    return fin(v * target / now);
+  }
+
   /** intradayWindow(values, a, b) -> { pl, ret } between two points (order-independent) | null */
   function intradayWindow(values, a, b) {
     if (!Array.isArray(values)) return null;
@@ -1059,7 +1078,7 @@
     withShares, correlationMatrix, riskContribution,
     assetsTotal, chartInterval, gridCovers, gridFrame,
     intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
-    benchmarkWeights, holdingsFromWeights,
+    benchmarkRealValue, benchmarkWeights, holdingsFromWeights,
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },
     util: { mean, sampleSd, sampleCov, quantile, returnsOf, minusMonths, daysBetween, dayNumber, isMonthComplete },
   };

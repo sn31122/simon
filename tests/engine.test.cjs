@@ -695,7 +695,7 @@ test('UMD: classic script sets window.PFEngine without module', () => {
   for (const k of ['prepare', 'presetRange', 'customRange', 'portfolio', 'benchmark', 'drawdown', 'stats', 'relative', 'monthly', 'assets', 'groupSummary',
     'withShares', 'correlationMatrix', 'riskContribution', 'chartInterval', 'gridCovers', 'gridFrame', 'intraday', 'intradayBenchmark',
     'intradayAsset', 'intradayWindow', 'equalValueWindow', 'benchmarkValueNow', 'benchmarkRealPl',
-    'benchmarkWeights', 'holdingsFromWeights'])
+    'benchmarkRealValue', 'benchmarkWeights', 'holdingsFromWeights'])
     assert.strictEqual(typeof E[k], 'function', k);
   for (const k of ['eur', 'num', 'pct', 'ratio', 'date', 'asofBerlin', 'parseDE']) assert.strictEqual(typeof E.fmt[k], 'function', 'fmt.' + k);
 });
@@ -992,6 +992,57 @@ test('benchmarkRealPl / benchmarkValueNow with weights: bought at buyAt, then he
   approx(E.benchmarkRealPl(ctx, w, 2, 1, { buyAt: 1, target: 1000 }), (q(12, 19) - 1) * 1000 / now, 1e-12, 'scaled: worth 1000 today');
   // on the 1T frame (bought at the previous close = day 1): A [10,11.5,11,12.5,12.5], B [21.5,21.5,21,21,18]
   approx(E.benchmarkRealPl(ctx, w, 1, 4, { intraday: true, buyAt: 1 }), q(12.5, 18) - q(11.5, 21.5), 1e-12, 'intraday');
+});
+
+test('benchmarkRealValue: holdings value at a daily index, scaled to a target; value(b) − value(a) = benchmarkRealPl(a, b)', () => {
+  const ctx = E.prepare(I_DATA());                              // ab = A:1 + B:0.5; daily A [10,11,12], B [20,21,19]
+  approx(E.benchmarkRealValue(ctx, 'ab', 2), 21.5, 1e-12, 'last day untargeted = benchmarkValueNow');
+  approx(E.benchmarkRealValue(ctx, 'ab', 0), 20, 1e-12, 'day 0 untargeted');
+  approx(E.benchmarkRealValue(ctx, 'ab', 1), 11 + 10.5, 1e-12, 'day 1 untargeted');
+  approx(E.benchmarkRealValue(ctx, 'ab', 2, { target: 43 }), 43, 1e-12, 'last day = target');
+  approx(E.benchmarkRealValue(ctx, 'ab', 0, { target: 43 }), 40, 1e-12, 'day 0 scaled (20 · 43 / 21.5)');
+  approx(E.benchmarkRealValue(ctx, { id: 'ab', holdings: { A: 1, B: 0.5 } }, 1.4, {}), 21.5, 1e-12, 'bench object, index rounded');
+  for (const t of [undefined, 43, 1000])
+    for (const [a, b] of [[0, 2], [0, 1], [1, 2], [1, 1]])
+      approx(E.benchmarkRealValue(ctx, 'ab', b, { target: t }) - E.benchmarkRealValue(ctx, 'ab', a, { target: t }),
+        E.benchmarkRealPl(ctx, 'ab', a, b, { target: t }), 1e-12, 'identity holdings ' + t + ' ' + a + '-' + b);
+  // weights: bought at buyAt, value per 1 invested there, target = worth that much on the last day
+  const w = { id: 'w', weights: { A: 50, B: 50 } }, now = 0.5 * 12 / 11 + 0.5 * 19 / 21;
+  assert.strictEqual(E.benchmarkRealValue(ctx, w, 2), null, 'weights need buyAt');
+  approx(E.benchmarkRealValue(ctx, w, 1, { buyAt: 1 }), 1, 1e-12, 'worth 1 at the purchase');
+  approx(E.benchmarkRealValue(ctx, w, 2, { buyAt: 1 }), now, 1e-12, 'value now per 1 invested');
+  approx(E.benchmarkRealValue(ctx, w, 2, { buyAt: 1, target: 1000 }), 1000, 1e-12, 'last day = target');
+  approx(E.benchmarkRealValue(ctx, w, 1, { buyAt: 1, target: 1000 }), 1000 / now, 1e-12, 'purchase day scaled');
+  approx(E.benchmarkRealValue(ctx, w, 0, { buyAt: 1 }), 0.5 * 10 / 11 + 0.5 * 20 / 21, 1e-12, 'before the purchase: the same quantities');
+  for (const t of [undefined, 1000])
+    for (const [a, b] of [[1, 2], [0, 2]])
+      approx(E.benchmarkRealValue(ctx, w, b, { buyAt: 1, target: t }) - E.benchmarkRealValue(ctx, w, a, { buyAt: 1, target: t }),
+        E.benchmarkRealPl(ctx, w, a, b, { buyAt: 1, target: t }), 1e-12, 'identity weights ' + t + ' ' + a + '-' + b);
+  // null-safe, never NaN
+  assert.strictEqual(E.benchmarkRealValue(ctx, 'nope', 1), null);
+  assert.strictEqual(E.benchmarkRealValue(ctx, 'ab', -1), null);
+  assert.strictEqual(E.benchmarkRealValue(ctx, 'ab', 3), null);
+  assert.strictEqual(E.benchmarkRealValue(ctx, 'ab', NaN), null);
+  assert.strictEqual(E.benchmarkRealValue(ctx, 'ab', null), null);
+  assert.strictEqual(E.benchmarkRealValue(ctx, { id: 'e', holdings: {} }, 1), null, 'no holdings');
+  assert.strictEqual(E.benchmarkRealValue(ctx, { id: 'z', weights: { NOPRICE: 100 } }, 1, { buyAt: 0 }), null, 'no valid weight');
+  approx(E.benchmarkRealValue(ctx, 'ab', 2, { target: -5 }), 21.5, 1e-12, 'invalid target = untargeted');
+});
+
+test('real data: benchmarkRealValue of Mein Depot and the Energie preset (identity with benchmarkRealPl over every preset)', () => {
+  const n = ctx.n, now = E.benchmarkValueNow(ctx, 'my_depot');
+  approx(E.benchmarkRealValue(ctx, 'my_depot', n - 1), now, 1e-9, 'Mein Depot today = its real value');
+  const en = (D.card_presets || []).find((c) => c.id === 'energie');
+  for (const pr of PRESETS) {
+    const R = E.presetRange(ctx, pr);
+    for (const [b, opts] of [['my_depot', {}], ['my_depot', { target: 100000 }]].concat(en ? [[{ id: 'energie', weights: en.weights }, { target: 298811.25 }]] : [])) {
+      const o = Object.assign({ buyAt: R.start }, opts);
+      const v0 = E.benchmarkRealValue(ctx, b, R.start, o), v1 = E.benchmarkRealValue(ctx, b, R.end, o);
+      assert.ok(Number.isFinite(v0) && Number.isFinite(v1), pr + ' finite');
+      approx(v1 - v0, E.benchmarkRealPl(ctx, b, R.start, R.end, o), 1e-6, pr + ' identity');
+      if (opts.target) approx(v1, opts.target, 1e-6, pr + ' ends on the target on the last day');
+    }
+  }
 });
 
 test('benchmark with weights: bought at the range start, then held (buy and hold, no rebalancing)', () => {

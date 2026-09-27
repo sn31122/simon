@@ -39,12 +39,15 @@
 
   <div class="page" id="app">
 
-    <!-- overview like the app: big value + change over the selected period -->
-    <section class="ov" aria-label="Portfoliowert">
+    <!-- overview like the app: "Yacht" + big value + change over the selected period; to its right one smaller block per
+         benchmark shown in the chart (value + € change in the amount of „Benchmark (€)“), rendered by renderOvBench() in app.js -->
+    <section class="ov" aria-label="Portfoliowert und Benchmarks">
       <div class="ov-val">
+        <div class="ov-lbl">Yacht</div>
         <div class="bigval" id="holdTotal"></div>
         <div class="hold-chg" id="holdChg"></div>
       </div>
+      <div class="ov-bench" id="ovBench" hidden></div>
     </section>
 
     <div class="rangebar">

@@ -1297,17 +1297,19 @@
     if (!M.p || !s) {
       // actionable: the button switches „Einzelwerte“ on (also when hidden), scrolls to it and focuses the next step (openAssets)
       var zero = state.selected.size && ctx !== ctx0;
+      main.hidden = false;
       main.innerHTML = '<span class="hl-empty"><span class="weak">' + esc(zero ? 'Keine Bestände in der Auswahl' : 'Keine Position ausgewählt') + '</span>' +
         '<button type="button" class="hl-act" data-hl-act="assets">' + (zero ? 'Stück anpassen' : 'Positionen auswählen') + '</button></span>';
       sub.innerHTML = (zero ? 'Was-wäre-wenn: alle ausgewählten Positionen stehen auf 0 Stück · ' : 'Auswahl über die Liste „Einzelwerte“ · ') + period;
       $('legend').innerHTML = '';
       return;
     }
+    // no big figure here (user, 27.09.: the overview block above already shows the value) – only the line with the period
+    main.hidden = true;
+    main.innerHTML = '';
     if (state.mode === 'value') {
-      main.innerHTML = eur(s.endValue);
       sub.innerHTML = colored(s.pl, eurS(s.pl) + ' (' + pct(s.totalReturn) + ')') + ' ' + period;
     } else {
-      main.innerHTML = '<span class="' + (isNum(s.pl) && s.pl < 0 ? 'neg' : 'pos') + '">' + eurS(s.pl) + '</span>';
       sub.innerHTML = colored(s.totalReturn, pct(s.totalReturn)) + ' ' + period + ' · Endwert ' + eur(s.endValue);
     }
     var lg = '<span class="lg-item" style="--c:var(--accent)"><i></i><span>' + (M.orig ? 'Was-wäre-wenn' : 'Portfolio') + '</span>' +
@@ -1636,6 +1638,7 @@
     return i < 0 ? '<b>' + esc(s) + '</b>' : '<b>' + esc(s.slice(0, i)) + '</b><sup>' + esc(s.slice(i + 1)) + '</sup>';
   }
 
+  /** App-style value "553.343⁹⁹ €": integer part big, decimals and € stacked (sizes via .bigval / .bigval--sm). */
   function bigValueHTML(v) {
     if (!isNum(v)) return '<span class="bv-int weak">–</span>';
     var s = F.num(v, 2), i = s.lastIndexOf(',');
@@ -1722,6 +1725,55 @@
       '</div>';
   }
 
+  /**
+   * Overview block (user, 27.09.): beside the Yacht value one block per benchmark shown in the chart (cur.selB, card
+   * order: Mein Depot, Energie, own cards). Value at the period end and € change over the period in the amount of
+   * „Benchmark (€)“ – the same scaling as "Echt" in the measurement boxes: benchmarkRealValue / benchmarkRealPl
+   * (cards bought at the period start and held; unedited Mein Depot with the field empty = the real depot). % (tooltip)
+   * = the benchmark's period return (legend / card). Daily like the Yacht value (1T: previous close -> last close).
+   * "Seit Kauf": benchmarks have no cost basis, so they use the chart period (MAX) and say so.
+   */
+  function renderOvBench(H) {
+    var box = $('ovBench'), list = cur ? cur.selB : [];
+    if (!list.length) { box.innerHTML = ''; box.hidden = true; return; }
+    var R = H.R, sk = H.sk, tgt = depotTarget(), today = F.date(ctx0.dates[ctx0.n - 1], 'short');
+    var label = sk ? periodLabel({ hp: 'MAX', sk: false, R: R }) : periodLabel(H);
+    var tgtTxt = isNum(tgt) ? eur(tgt, { dec: 0 }) : '–', dflt = state.depotValue == null;
+    var intra = ctx0.status[R.end] === 'intraday' ? ' (intraday' + (ASOF ? ' ' + ASOF : '') + ')' : '';
+    box.innerHTML = list.map(function (x, k) {
+      var o = { target: tgt, buyAt: R.start };
+      var val = E.benchmarkRealValue ? nv(E.benchmarkRealValue(ctx0, x.b, R.end, o)) : null;
+      var chg = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, x.b, R.start, R.end, o)) : null;
+      var ret = get(x.st, 'totalReturn');
+      var basis = x.real && dflt ? 'Wert = echte Stückzahlen deines Depots × Kurs (ohne Guthaben), am ' + today + ' ' + eur(tgt) :
+        (x.real ? 'echte Stückzahlen deines Depots' :
+          x.hold ? 'Stückzahlen aus den Anteilen vom ' + today + ', konstant' :
+            'gekauft am ' + F.date(ctx0.dates[R.start], 'short') + ', dann gehalten') +
+        ' – hochgerechnet auf ' + tgtTxt + ' am ' + today + ' (Betrag aus „Benchmark (€)“' +
+        (dflt ? ' = Wert von „Mein Depot“ heute' : '') + ')';
+      var tip = pct(ret) + ' · Veränderung von „' + x.name + '“ im Zeitraum ' + periodText(R) + intra + ' · ' + basis +
+        (sk ? ' · Seit Kauf: Benchmarks haben keinen Einstand, daher der ganze Chartzeitraum (MAX)' : '');
+      return '<div class="ovb" style="--c:' + x.color + '" data-bench="' + esc(x.id) + '">' +
+        '<div class="ov-lbl"><i aria-hidden="true"></i><span>' + esc(x.name) + '</span></div>' +
+        '<div class="bigval bigval--sm">' + bigValueHTML(val) + '</div>' +
+        '<div class="hold-chg hold-chg--sm"><b class="' + sgn(chg) + '">' + eurS(chg) + '</b>' +
+        ' <span class="hold-per">' + esc(label) + '</span>' +
+        '<span class="info" tabindex="0" role="img" aria-label="Info" aria-describedby="ovTip' + k + '"></span>' +
+        '<span class="info-tip" id="ovTip' + k + '" role="tooltip">' + esc(tip) + '</span></div></div>';
+    }).join('');
+    box.hidden = false;
+  }
+  /** Keeps an overview tooltip inside the window (the benchmark blocks can sit at the right edge). */
+  function fitTip(ev) {
+    var info = ev.target.closest && ev.target.closest('.ov .info'), tip = info && info.nextElementSibling;
+    if (!tip || !tip.classList.contains('info-tip')) return;
+    tip.style.left = '';
+    requestAnimationFrame(function () {
+      var r = tip.getBoundingClientRect(), over = r.right - (document.documentElement.clientWidth - 8);
+      if (r.width && over > 0) tip.style.left = -Math.min(over, Math.max(0, r.left - 8)) + 'px';
+    });
+  }
+
   function renderHoldings() {
     var H = holdPeriod(), R = H.R, sk = H.sk, sel = state.selected;
     var rows = E.assets(ctx, { selected: sel, start: R.start, end: R.end, scale: 1 }) || [];
@@ -1758,6 +1810,7 @@
       '<span class="info" tabindex="0" role="img" aria-label="Info" aria-describedby="holdTip"></span>' +
       '<span class="info-tip" id="holdTip" role="tooltip">' + esc(tipText) + '</span>' :
       '<span class="weak">Keine Position ausgewählt</span>';
+    renderOvBench(H);
 
     Array.prototype.forEach.call($('holdPills').querySelectorAll('[data-hp]'), function (b) {
       var on = b.getAttribute('data-hp') === H.hp;
@@ -2036,7 +2089,7 @@
     update({ keepMeasure: true });
   }
 
-  /** "Mein Depot (€)": only the "echt" amount of the measure box uses it – no re-render of the charts. */
+  /** "Benchmark (€)": only "Echt" in the measure boxes and the benchmark values of the overview use it – no re-render of the charts. */
   function onDepotValue() {
     var inp = $('depotValue'), s = inp.value.trim(), v = s ? F.parseDE(s) : null, hint = $('depotHint');
     if (s && (!isNum(v) || v <= 0)) { inp.classList.add('is-invalid'); hint.textContent = 'ungültiger Betrag'; $('depotReset').hidden = false; return; }
@@ -2044,6 +2097,7 @@
     hint.textContent = '';
     state.depotValue = s ? v : null;
     $('depotReset').hidden = !s;
+    renderOvBench(holdPeriod());                  // benchmark values in the overview use the same amount
     mainChart.tipKey = '';                        // rebuild an open measure box with the new value
     sync.draw();
   }
@@ -2094,6 +2148,9 @@
     });
     $('startValue').addEventListener('input', onStartValue);
     $('depotValue').addEventListener('input', onDepotValue);
+    var ov = document.querySelector('.ov');
+    ov.addEventListener('pointerover', fitTip);
+    ov.addEventListener('focusin', fitTip);
     $('depotReset').addEventListener('click', function () { $('depotValue').value = ''; onDepotValue(); $('depotValue').focus(); });
     $('startReset').addEventListener('click', function () { $('startValue').value = ''; onStartValue(); $('startValue').focus(); });
     $('rfInput').addEventListener('input', onRf);
