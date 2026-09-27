@@ -1,4 +1,4 @@
-// Browser acceptance checks for dashboard.html (docs/ACCEPTANCE_CHECKLIST.md) with real mouse and keyboard input.
+// Browser acceptance checks for dashboard.html (see docs/VERIFICATION.md) with real mouse, keyboard and touch input.
 // Optional test dependency, not used by the page: Playwright (npm install --no-save --package-lock=false playwright,
 // or a global install via NODE_PATH). BROWSER_EXECUTABLE selects a browser binary (e.g. Edge on Windows).
 // Usage: python3 -m http.server 8770 --bind 127.0.0.1   then   node tools/acceptance-check.cjs [url] [outDir]
