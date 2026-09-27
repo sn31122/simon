@@ -1,8 +1,8 @@
-# Yacht portfolio dashboard — cloud continuation
+# Yacht portfolio dashboard
 
-Cloud handoff: **sn31122/simon → cloud-handoff-2026-09-27**. Private repository containing financial portfolio data. Snapshot of the local **Yacht scalable** project, captured 27 September 2026.
+Private repository containing financial portfolio data: **sn31122/simon**, branch `cloud-handoff-2026-09-27` (the local **Yacht scalable** project, continued and finished in a Claude Code cloud session on 27 September 2026).
 
-**Start with [CLOUD_HANDOFF.md](CLOUD_HANDOFF.md).** Paste [CLOUD_PROMPT.md](CLOUD_PROMPT.md) into a new Claude Code cloud session on branch `cloud-handoff-2026-09-27`. No original chat or live agents are required.
+**Start with [HANDOFF.md](HANDOFF.md)** (state, open points, first steps on the local machine). **New quotes:** say "update" (or "refresh", "check for new quotes", "Kurse aktualisieren", "run UPDATE.md") in Claude Code in this folder, see [UPDATE.md](UPDATE.md).
 
 ## Run
 
@@ -25,15 +25,15 @@ python3 tests/crosscheck.py
 node tests/crosscheck.cjs
 ```
 
-Python 3 and Node.js required; no pip/npm packages for these checks. Optional browser smoke instructions: [docs/VERIFICATION.md](docs/VERIFICATION.md).
+Python 3 and Node.js required; no pip/npm packages for these checks. Browser acceptance (Playwright, test-only): [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## Read order
 
-1. `CLAUDE.md`, `AGENTS.md`, `CLOUD_HANDOFF.md`: instructions and current state.
-2. `docs/ACCEPTANCE_CHECKLIST.md`: definition of done.
-3. `SPEC.md`: engine formulas/reference; historical UI text is marked as superseded.
-4. `UPDATE_PRICES.md`: data workflow.
+1. `CLAUDE.md`, `AGENTS.md`, `HANDOFF.md`: instructions and current state.
+2. `SPEC.md`: data contract, engine formulas and UI behaviour.
+3. `UPDATE_PRICES.md`: data workflow (hook, skill, scripts).
+4. `docs/ACCEPTANCE_CHECKLIST.md`, `docs/verification/`: acceptance evidence of 27.09.2026; `CLOUD_HANDOFF.md`, `CLOUD_PROMPT.md`: the finished cloud task.
 5. `docs/agent-tasks/`, `docs/AGENT_REPORTS.md`, `docs/REQUIREMENTS_SOURCE.md`: full task specifications and evidence.
 6. `docs/references/`: user references and historical screenshots.
 
-The app and pending data were copied intact. Migration changes concern documentation and verification support. Original snapshot hashes are in `docs/SOURCE_SNAPSHOT.json`; original docs are archived in `docs/history/`.
+Original snapshot hashes of the migration are in `docs/SOURCE_SNAPSHOT.json`; original docs are archived in `docs/history/`.

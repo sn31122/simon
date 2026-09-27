@@ -1,5 +1,7 @@
 # Yacht dashboard: complete cloud handoff
 
+> **Completed 27.09.2026** in the cloud session on branch `cloud-handoff-2026-09-27`: all work below is done and verified; see `HANDOFF.md` for the current state, the new quote-update flow and open points. This file is kept as history.
+
 Snapshot: **27 September 2026**. Source conversation: **Yacht scalable**, local session `6431a1ba-d884-42f1-93ea-bc0a95bf3595`. This is the current continuation guide. Historical agent reports describe earlier moments in a shared working tree; they do not prove that every reported issue remains.
 
 ## Goal and working boundary

@@ -2,9 +2,29 @@
 
 ## Baseline already run during packaging
 
-`BASELINE_TEST_RESULTS.json` records syntax checks, 51 engine tests and 5,441 independent crosschecks. `BACKFILL_TRIAL.txt` records a successful merge/test run in a disposable copy. The shipped data still has pending inputs.
+`BASELINE_TEST_RESULTS.json` records syntax checks, 51 engine tests and 5,441 independent crosschecks of the migration snapshot. `BACKFILL_TRIAL.txt` records a successful merge/test run in a disposable copy (the pending inputs were merged on 27.09.2026).
 
 Run commands from README after integration and after mathematical changes. Python scripts use only the standard library; JavaScript numerical tests use Node built-ins.
+
+## Browser acceptance (27.09.2026)
+
+`tools/acceptance-check.cjs` drives the real page with Playwright (real mouse drags, clicks, keyboard and touch taps, no
+programmatic shortcuts) at 1903, 1400 and 375 px: startup and console errors, list toggles and layout, 3M/6M, the section
+order, the benchmark-card builder (search, keyboard, validation, duplicate/delete, focus), measurement in both directions
+(daily and sub-daily), the Mein Depot box, Startwert scaling, the hover band with 3 benchmarks, the chart interval per range,
+touch and overflow. It writes `results.json` and screenshots.
+
+```sh
+python3 -m http.server 8770 --bind 127.0.0.1
+SEGOE_UI_FALLBACK_DIR=<dir with Selawik TTFs> NODE_PATH=<global node_modules with playwright> \
+  node tools/acceptance-check.cjs http://127.0.0.1:8770/dashboard.html artifacts/acceptance
+```
+
+Linux containers have no Segoe UI, and the wider fallback font makes the two lists stack at 1903 px. `tools/segoe-fallback.cjs`
+therefore injects Selawik (Microsoft, SIL OFL, metric-compatible with Segoe UI; `Selawik_Release.zip` from
+github.com/microsoft/Selawik) as "Segoe UI" into the test browser only; the dashboard files are unchanged. Without the variable
+the run uses the system font and the side-by-side check fails for that reason alone. Evidence of the final run:
+`docs/verification/2026-09-27/`.
 
 ## Optional portable browser smoke
 
