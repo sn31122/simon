@@ -181,6 +181,14 @@ button { -webkit-tap-highlight-color: transparent; }
 .bb-meta { margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .bb-meta b { color: var(--text); font-weight: 600; }
 .bb-ico[hidden] { display: none; }
+/* "Depot-Historie" (transactions preset): locked, no rows – two fact lines (value today, real gain in the period) */
+.bb-meta--tx > span { white-space: nowrap; }          /* breaks only between the parts */
+.bb-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.bb-fact { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
+.bb-fact > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.bb-fact > b { flex: 0 0 auto; color: var(--text); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bb-fact > b.pos { color: var(--accent); }
+.bb-fact > b.neg { color: var(--neg); }
 .bb-name, .bb-ins, .bb-pct {
   height: 32px; min-width: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
   color: var(--text); font-size: 13px;

@@ -72,7 +72,8 @@ benchmarks, card_presets, tx_names = [], [], {}
 for b in bench:
     if b['holdings'].strip() == 'transactions':
         tx = load_transactions(b['id'])
-        if tx: benchmarks.append({'id': b['id'], 'name': b['name'], 'description': b['description'], 'transactions': tx})
+        if tx: benchmarks.append({'id': b['id'], 'name': b['name'], 'description': b['description'], 'transactions': tx,
+                                  'names': {t['isin']: tx_names[t['isin']] for t in tx}})
         continue
     parts = [x.split(':') for x in b['holdings'].split('|') if x.strip()]
     pct = [v.strip().endswith('%') for _, v in parts]

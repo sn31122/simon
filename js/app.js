@@ -223,7 +223,7 @@
     // every locked benchmark + every valid card (their returns show on the cards); selB = the ones shown in the chart
     var benches = benchDefs().map(function (d) {
       var s = E.benchmark(ctx, d.b, R.start, R.end, base);
-      return { b: d.b, id: d.id, name: d.name, color: d.color, show: d.show, hold: d.hold, real: d.real, s: s, st: s ? E.stats(s, { rf: rf }) : null };
+      return { b: d.b, id: d.id, name: d.name, color: d.color, show: d.show, hold: d.hold, tx: d.tx, real: d.real, s: s, st: s ? E.stats(s, { rf: rf }) : null };
     });
     var byId = {};
     benches.forEach(function (x) { byId[x.id] = x; });
@@ -504,6 +504,8 @@
         (get(w, 'base') !== null ? ' (' + eur(w.base) + ')' : '')) +
       row('<span class="tt-dl">Echt' + (tgtTxt ? ' (' + tgtTxt + ')' : '') + '</span>', real, eurS(real),
         (x.real ? 'Echt: tatsächliche Veränderung deines Depots, hochgerechnet auf den Wert aus „Benchmark (€)“' + tgtNote :
+          x.tx ? 'Echt: tatsächlicher Gewinn deines Depots laut Transaktionen (Wertänderung ohne die Käufe und Verkäufe), ' +
+            'hochgerechnet auf den Wert aus „Benchmark (€)“' + tgtNote :
           'Echt: Veränderung von „' + x.name + '“, wenn es heute (' + today + ') so viel wert wäre wie „Benchmark (€)“' + tgtNote +
           (x.hold ? '' : ' – gekauft am ' + F.date(ctx.dates[cur.R.start], 'short') + ', dann gehalten'))) +
       '</div>';
@@ -801,11 +803,19 @@
   // value shares on the last day and start as the fetched allocation; unedited the card uses the real quantities, edited
   // shares become constant quantities (engine.holdingsFromWeights, backcast like the positions). Not deletable.
   ctx0.benchmarks.forEach(function (b) {
+    if (b.transactions) return;                                  // Depot-Historie: its own locked card (below)
     var def = shareRows(E.benchmarkWeights ? E.benchmarkWeights(ctx0, b) : null);
     if (!def.length) return;
     var name = String(b.name || b.id);
     state.cards.push({ id: b.id, hold: true, base: b, name: name, defName: name, color: colorOf(b.id), show: b.id === DEPOT_ID,
       def: def, rows: def.map(function (r) { return newRow(r.isin, r.pct); }) });
+  });
+  // transactions preset (data/benchmarks.csv "transactions" = data/transactions.csv, "Depot-Historie"; user 27.09.): the real
+  // depot replayed from its trades, time-weighted. Locked: only the eye button, no rows; hidden in the chart; after Mein Depot.
+  ctx0.benchmarks.forEach(function (b) {
+    if (!b.transactions || !E.transactionHistory || !E.transactionHistory(ctx0, b)) return;
+    var name = String(b.name || b.id);
+    state.cards.push({ id: b.id, tx: true, base: b, name: name, defName: name, color: colorOf(b.id), show: false, rows: [] });
   });
   // weighting presets (data/benchmarks.csv "ISIN:20%|…", e.g. "Energie"; user 27.09.): start as own cards – editable,
   // deletable, hidden in the chart; a reload brings them back as defined
@@ -901,6 +911,7 @@
   function benchDefs() {
     var out = [];
     state.cards.forEach(function (c) {
+      if (c.tx) { out.push({ b: c.base, id: c.id, name: cardName(c), color: c.color, show: c.show, hold: false, tx: true, real: false }); return; }
       var info = cardInfo(c);
       if (!info.valid) return;
       var desc = c.rows.filter(function (r) { return r.isin && pctVal(r.pct) > 0; }).map(function (r) {
@@ -940,6 +951,25 @@
       '<div class="bb-rows">' + c.rows.map(rowHTML).join('') + '</div>' +
       '<div class="bb-foot"><span class="bb-hint" aria-live="polite"></span><span class="bb-total"></span></div></div>';
   }
+  /** "Depot-Historie" (transactions preset): locked – dot, kind, fixed name + period return, facts; only the eye button. */
+  function txCardHTML(c) {
+    var b = c.base, tx = b.transactions || [], trades = tx.filter(function (t) { return t.type === 'Buy' || t.type === 'Sell'; }).length;
+    var H = E.transactionHistory(ctx0, b), un = Object.keys((H && H.unpriced) || {}).map(function (i) { return (b.names && b.names[i]) || i; });
+    var span = tx.length ? F.date(tx[0].date, 'short') + '–' + F.date(tx[tx.length - 1].date, 'short') : '';
+    var how = 'Dein Depot aus dem Scalable-Transaktionsexport nachgespielt: Stückzahlen ändern sich mit jedem Kauf und Verkauf. ' +
+      'Nur Wertpapiere (ohne Cash, Gebühren, Steuern, Dividenden). Rendite zeitgewichtet (Käufe/Verkäufe zählen nicht als Gewinn); ' +
+      '„Echt“ = Wertänderung ohne die Käufe und Verkäufe.' + (un.length ? ' Ohne Kurse, zum letzten Handelspreis bewertet: ' + un.join(', ') + '.' : '');
+    return '<div class="bb-card bb-card--tx" role="group" data-card="' + esc(c.id) + '" style="--c:' + c.color + '">' +
+      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i><span class="bb-kind">Echte Transaktionen</span></span><span class="bb-icons">' +
+      showBtn() + '</span></div>' +
+      '<div class="bb-namerow"><span class="bb-fixname">' + esc(c.name) + '</span><b class="bb-ret"></b></div>' +
+      '<div class="bb-meta bb-meta--tx" title="' + esc(how) + '"><span>' + trades + ' Käufe/Verkäufe</span> · <span>' + esc(span) +
+      '</span> · <span>nur Wertpapiere, zeitgewichtet</span></div>' +
+      '<div class="bb-facts">' +
+      '<div class="bb-fact"><span>Wert am ' + esc(F.date(TODAY, 'short')) + '</span><b class="bb-tx-now"></b></div>' +
+      '<div class="bb-fact" title="Echter Gewinn im Zeitraum: Wertänderung ohne die Käufe und Verkäufe (nicht hochgerechnet)"><span class="bb-tx-per"></span><b class="bb-tx-pl"></b></div>' +
+      '</div></div>';
+  }
   function rowHTML(r, k) {
     var i = r.isin ? INSTR_BY[r.isin] : null;
     return '<div class="bb-row" data-row="' + r.id + '">' +
@@ -969,7 +999,7 @@
     list.forEach(function (o) {
       var el = old[o.id], sig = cardSig(o.c);
       if (!el || el._sig !== sig) {
-        var nu = makeEl(o.c.hold ? holdCardHTML(o.c) : cardHTML(o.c));
+        var nu = makeEl(o.c.tx ? txCardHTML(o.c) : o.c.hold ? holdCardHTML(o.c) : cardHTML(o.c));
         nu._sig = sig;
         if (el) box.replaceChild(nu, el);
         el = nu;
@@ -1005,7 +1035,9 @@
     var rb = el.querySelector('.bb-ret');
     rb.className = 'bb-ret ' + sgn(r);
     rb.textContent = pct(r);
-    rb.title = x ? 'Rendite im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') : 'wird erst bei 100 % berechnet';
+    rb.title = x ? (c.tx ? 'Zeitgewichtete Rendite' : 'Rendite') + ' im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') :
+      'wird erst bei 100 % berechnet';
+    if (c.tx) { patchTx(el, c, M); return; }
     var info = cardInfo(c), tot = el.querySelector('.bb-total'), hint = el.querySelector('.bb-hint');
     el.classList.toggle('is-invalid', !info.valid);
     tot.textContent = fmtShare(info.total) + ' %';
@@ -1023,6 +1055,18 @@
     });
     var ni = el.querySelector('.bb-name');
     if (ni && document.activeElement !== ni && ni.value !== c.name) ni.value = c.name;
+  }
+  /** Depot-Historie card: its real value on the last day and its real € gain in the period (without purchases / sales). */
+  function patchTx(el, c, M) {
+    var now = E.benchmarkValueNow ? nv(E.benchmarkValueNow(ctx0, c.base)) : null;
+    var pl = M && E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, c.base, M.R.start, M.R.end)) : null;
+    el.querySelector('.bb-tx-now').textContent = eur(now);
+    var per = el.querySelector('.bb-tx-per');
+    per.textContent = 'Gewinn im Zeitraum';
+    per.title = M ? 'Zeitraum ' + periodText(M.R) : '';
+    var b = el.querySelector('.bb-tx-pl');
+    b.className = 'bb-tx-pl ' + sgn(pl);
+    b.textContent = eurS(pl);
   }
   /** Holdings card: kind label, value line and the reset button follow whether the fetched allocation was edited. */
   function patchHold(el, c, info) {
@@ -1228,6 +1272,7 @@
       if (act === 'new') { addCard(); return; }
       if (!o.c) return;
       if (act === 'show') { o.c.show = !o.c.show; benchChanged(); return; }
+      if (o.c.tx) return;                                        // Depot-Historie: locked (only show / hide)
       if (act === 'reset') { resetCard(o.c); return; }
       if (act === 'dup' && !o.c.hold) dupCard(o.c);
       else if (act === 'del' && !o.c.hold) delCard(o.c);
@@ -1747,6 +1792,7 @@
       var ret = get(x.st, 'totalReturn');
       var basis = x.real && dflt ? 'Wert = echte Stückzahlen deines Depots × Kurs (ohne Guthaben), am ' + today + ' ' + eur(tgt) :
         (x.real ? 'echte Stückzahlen deines Depots' :
+          x.tx ? 'Stückzahlen laut Transaktionen (ohne Guthaben), Veränderung = Gewinn ohne die Käufe und Verkäufe, % zeitgewichtet' :
           x.hold ? 'Stückzahlen aus den Anteilen vom ' + today + ', konstant' :
             'gekauft am ' + F.date(ctx0.dates[R.start], 'short') + ', dann gehalten') +
         ' – hochgerechnet auf ' + tgtTxt + ' am ' + today + ' (Betrag aus „Benchmark (€)“' +
