@@ -18,7 +18,7 @@ Canonical folder: `<repository-root>`. Canonical page: `dashboard.html` (open di
 | `data/prices_daily.csv` | wide table: `date,status,asof_utc,<ISIN>…` – one row per trading day, EUR mid close; `status` final/intraday (only the last row may be intraday, `asof_utc` only there); empty cell = no quote | only through `data/update_prices.py` |
 | `data/intraday.csv` | long table `isin,timestamp_utc,price`: the 30-min points (seven_days) of **every collected session** (kept forever, user 27.09.) | only through `data/update_prices.py` |
 | `data/intraday_2h.csv` | same format: the 2-hour points (one_month) of every collected session | only through `data/update_prices.py` |
-| `data/incoming/` | temporary fetch files: `<ISIN>.csv` (seven_days), `2h/` (one_month), `3m/` (three_months, gap fill), `ytd/` (year_to_date backfill), `_plan.txt`; deleted/archived after a successful merge | written only by the hook `.claude/hooks/save-chart.cjs` |
+| `data/incoming/` | temporary fetch files: `<ISIN>.csv` (seven_days), `2h/` (one_month), `3m/` (three_months, gap fill), `ytd/` (year_to_date backfill), `_plan.txt`; deleted/archived after a successful merge; git-ignored | written only by the hook `.claude/hooks/save-chart.cjs` |
 | `.claude/settings.json`, `.claude/hooks/save-chart.cjs` | PostToolUse hook: saves each `get_security_chart` result to `data/incoming/` and shows the model one `SAVED …` line | change together with `update_prices.py` |
 | `.claude/skills/update-quotes/SKILL.md`, `UPDATE.md` | the one-command update (trigger words above; "run UPDATE.md") | keep in sync with `UPDATE_PRICES.md` |
 | `UPDATE_PRICES.md` | step-by-step price-update runbook, written for Haiku agents | keep in sync with `update_prices.py` |

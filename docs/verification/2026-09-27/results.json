@@ -1,14 +1,14 @@
 {
   "url": "http://127.0.0.1:8770/dashboard.html",
-  "at": "2026-09-27T03:51:35.662Z",
+  "at": "2026-09-27T04:52:51.748Z",
   "browser": "141.0.7390.37",
   "fonts": "Selawik injected as \"Segoe UI\" (Segoe UI metrics)",
-  "passed": 75,
+  "passed": 91,
   "failed": 0,
   "results": [
     {
       "area": "data",
-      "name": "50 instruments and price series, 188 final rows to 2026-09-25, intraday 24/25.09.",
+      "name": "50 instruments and price series, 188 final rows to 2026-09-25, grids 30 min 18.–25.09. (6) and 2 h 25.08.–25.09. (24)",
       "pass": true,
       "detail": {
         "instruments": 50,
@@ -17,10 +17,8 @@
         "first": "2026-01-02",
         "last": "2026-09-25",
         "lastStatus": "final",
-        "intraday": [
-          "2026-09-24",
-          "2026-09-25"
-        ],
+        "m30": "2026-09-18..2026-09-25 (6)",
+        "h2": "2026-08-25..2026-09-25 (24)",
         "bloom": 1,
         "newOnes": true,
         "benchmarks": [
@@ -424,7 +422,7 @@
     },
     {
       "area": "hover",
-      "name": "desktop: hover box with 3 shown benchmarks never covers lines, y labels or the last-value box (YTD/1T, both modes)",
+      "name": "desktop: hover box with 3 shown benchmarks never covers lines, y labels or the last-value box (YTD/1T/1W 30 min/1M 2 h, both modes)",
       "pass": true,
       "detail": {
         "shownNow": 3,
@@ -432,7 +430,11 @@
           "value/YTD": [],
           "pl/YTD": [],
           "value/1T": [],
-          "pl/1T": []
+          "pl/1T": [],
+          "value/1W": [],
+          "pl/1W": [],
+          "value/1M": [],
+          "pl/1M": []
         }
       }
     },
@@ -716,6 +718,252 @@
       }
     },
     {
+      "area": "interval",
+      "name": "interval per range: 1T/1W 30 min, 1M 2 h, 3M daily; custom week in the 30-min data 30 min, early-Sept. week 2 h, Aug. week daily, 3 weeks 2 h",
+      "pass": true,
+      "detail": {
+        "1T": "m30",
+        "1W": "m30",
+        "1M": "h2",
+        "3M": "day",
+        "week in 30 min": "m30",
+        "week early Sept.": "h2",
+        "week in Aug.": "day",
+        "3 weeks": "h2"
+      }
+    },
+    {
+      "area": "interval",
+      "name": "note under the chart: \"Intervall: 30 Min.\" / \"2 Std.\" / \"1 Tag\" and why it stepped down",
+      "pass": true,
+      "detail": {
+        "1T": "Intervall: 30 Min.",
+        "1W": "Intervall: 30 Min.",
+        "1M": "Intervall: 2 Std.",
+        "3M": "Intervall: 1 Tag",
+        "week in 30 min": "Intervall: 30 Min.",
+        "week early Sept.": "Intervall: 2 Std. · keine 30-Min-Kurse für diesen Zeitraum",
+        "week in Aug.": "Intervall: 1 Tag · keine 30-Min- oder 2-Std-Kurse für diesen Zeitraum",
+        "3 weeks": "Intervall: 2 Std."
+      }
+    },
+    {
+      "area": "interval",
+      "name": "sub-daily charts start on the daily start value and end on the daily end value (headline = chart end); points per interval",
+      "pass": true,
+      "detail": {
+        "1T": {
+          "m": 64,
+          "endGap": 0,
+          "baseGap": 0
+        },
+        "1W": {
+          "m": 161,
+          "endGap": 0,
+          "baseGap": 0
+        },
+        "1M": {
+          "m": 208,
+          "endGap": 0,
+          "baseGap": 0
+        },
+        "3M": {
+          "m": null,
+          "endGap": null,
+          "baseGap": null
+        },
+        "week in 30 min": {
+          "m": 161,
+          "endGap": 0,
+          "baseGap": 0
+        },
+        "week early Sept.": {
+          "m": 37,
+          "endGap": 0,
+          "baseGap": 0
+        },
+        "week in Aug.": {
+          "m": null,
+          "endGap": null,
+          "baseGap": null
+        },
+        "3 weeks": {
+          "m": 127,
+          "endGap": 0,
+          "baseGap": 0
+        }
+      }
+    },
+    {
+      "area": "interval",
+      "name": "x axis: 1T unchanged (day words + 15:15), 1W one label per session \"Mo 21.09.\", 1M dates at week starts; drawdown on the same grid",
+      "pass": true,
+      "detail": {
+        "1T": [
+          "Donnerstag",
+          "15:15",
+          "Freitag",
+          "15:15"
+        ],
+        "1W": [
+          "Mo 21.09.",
+          "Di 22.09.",
+          "Mi 23.09.",
+          "Do 24.09.",
+          "Fr 25.09."
+        ],
+        "1M": [
+          "26. Aug.",
+          "31",
+          "7. Sept.",
+          "14",
+          "21"
+        ],
+        "earlySept": [
+          "Mi 02.09.",
+          "Do 03.09.",
+          "Fr 04.09.",
+          "Mo 07.09."
+        ]
+      }
+    },
+    {
+      "area": "interval",
+      "name": "1W hover: date + time (\"Mi 23.09., 14:30\"), the start point \"Fr 18.09., Schluss\"; drawdown read-out with the same label",
+      "pass": true,
+      "detail": {
+        "h0": "Fr 18.09., Schluss",
+        "h1": {
+          "t": "Mi 23.09., 12:30",
+          "dd": "Mi 23.09., 12:30: -0,75 % · Mein Depot -3,75 % · Benchmark 1 -0,05 % · Benchmark 2 -0,06 %"
+        }
+      }
+    },
+    {
+      "area": "interval",
+      "name": "1W forward drag: pinned, both boxes with date + time labels, Mein Depot numbers match the engine on the 30-min grid, nothing covered, no \"Zeitraum auf Auswahl setzen\"",
+      "pass": true,
+      "detail": {
+        "w1": {
+          "pin": {
+            "a": 48,
+            "b": 120
+          },
+          "btn": false,
+          "dates": [
+            "Di 22.09., 15:00",
+            "Do 24.09., 19:00"
+          ],
+          "help": "Messung Di 22.09., 15:00 – Do 24.09., 19:00 · Klick in den Chart oder Esc hebt sie auf"
+        },
+        "hits": [],
+        "rows": [
+          "-6,44 %",
+          "-34.601,50 €",
+          "-20.248,76 €"
+        ],
+        "expect": [
+          "-6,44 %",
+          "-34.601,50 €",
+          "-20.248,76 €"
+        ]
+      }
+    },
+    {
+      "area": "interval",
+      "name": "1W reverse drag (a < b, numbers match), Gesamtrendite keeps it with signed values and the same Mein Depot numbers, Esc clears",
+      "pass": true,
+      "detail": {
+        "wrev": {
+          "a": 19,
+          "b": 144
+        },
+        "rows": [
+          "-5,27 %",
+          "-27.943,89 €",
+          "-16.434,52 €"
+        ],
+        "pl": [
+          "-5,27 %",
+          "-27.943,89 €",
+          "-16.434,52 €"
+        ]
+      }
+    },
+    {
+      "area": "interval",
+      "name": "1W click-follow-click (leftwards): live boxes, the next click ends it",
+      "pass": true,
+      "detail": {
+        "following": true,
+        "m": {
+          "a": 112,
+          "b": 40,
+          "live": true,
+          "follow": true
+        },
+        "tips": 2
+      }
+    },
+    {
+      "area": "interval",
+      "name": "1W with Startwert 100.000: grid scaled from 100.000 €, ends on the scaled daily end, measure numbers match",
+      "pass": true,
+      "detail": {
+        "wsv": {
+          "base": 100000,
+          "end": 108435.74746861558,
+          "ps": 108435.74746861558
+        },
+        "rows": [
+          "-7,69 %",
+          "-8.055,29 €",
+          "-24.112,54 €"
+        ]
+      }
+    },
+    {
+      "area": "interval",
+      "name": "1W what-if draws the dashed original on the same grid; empty selection shows the empty text (no NaN)",
+      "pass": true,
+      "detail": {
+        "ghost": true,
+        "orig": true,
+        "legend": true,
+        "empty": "Keine Position ausgewählt",
+        "intraNull": true,
+        "note": "Intervall: 30 Min."
+      }
+    },
+    {
+      "area": "interval",
+      "name": "1M drag on the 2-h grid: boxes cover nothing, labels with time, Mein Depot numbers match",
+      "pass": true,
+      "detail": {
+        "lm1": [
+          "Mo 31.08., 13:30",
+          "Di 22.09., 15:30"
+        ],
+        "hits": [],
+        "rows": [
+          "+8,81 %",
+          "+42.172,66 €",
+          "+25.600,34 €"
+        ],
+        "expect": [
+          "+8,81 %",
+          "+42.172,66 €",
+          "+25.600,34 €"
+        ]
+      }
+    },
+    {
+      "area": "interval",
+      "name": "no console errors in the interval checks",
+      "pass": true,
+      "detail": []
+    },
+    {
       "area": "periods",
       "name": "3M/6M pills and tabs update each other and the labels; MAX = no pill; Seit Kauf = MAX tab",
       "pass": true,
@@ -949,6 +1197,43 @@
       ]
     },
     {
+      "area": "interval",
+      "name": "1920: 1W (30 min) and 1M (2 h) measurements cover nothing, Mein Depot numbers match, no page overflow",
+      "pass": true,
+      "detail": {
+        "1W": {
+          "key": "m30",
+          "tips": 2,
+          "hits": [],
+          "inside": true,
+          "rows": true,
+          "ok": true,
+          "x": [
+            "Mo 21.09.",
+            "Di 22.09.",
+            "Mi 23.09.",
+            "Do 24.09.",
+            "Fr 25.09."
+          ]
+        },
+        "1M": {
+          "key": "h2",
+          "tips": 2,
+          "hits": [],
+          "inside": true,
+          "rows": true,
+          "ok": true,
+          "x": [
+            "26. Aug.",
+            "31",
+            "7. Sept.",
+            "14",
+            "21"
+          ]
+        }
+      }
+    },
+    {
       "area": "general",
       "name": "1920: no console errors, no NaN/undefined",
       "pass": true,
@@ -996,6 +1281,43 @@
       ]
     },
     {
+      "area": "interval",
+      "name": "1400: 1W (30 min) and 1M (2 h) measurements cover nothing, Mein Depot numbers match, no page overflow",
+      "pass": true,
+      "detail": {
+        "1W": {
+          "key": "m30",
+          "tips": 2,
+          "hits": [],
+          "inside": true,
+          "rows": true,
+          "ok": true,
+          "x": [
+            "Mo 21.09.",
+            "Di 22.09.",
+            "Mi 23.09.",
+            "Do 24.09.",
+            "Fr 25.09."
+          ]
+        },
+        "1M": {
+          "key": "h2",
+          "tips": 2,
+          "hits": [],
+          "inside": true,
+          "rows": true,
+          "ok": true,
+          "x": [
+            "26. Aug.",
+            "31",
+            "7. Sept.",
+            "14",
+            "21"
+          ]
+        }
+      }
+    },
+    {
       "area": "general",
       "name": "1400: no console errors, no NaN/undefined",
       "pass": true,
@@ -1039,11 +1361,41 @@
     },
     {
       "area": "mobile",
-      "name": "hover box with 3 shown benchmarks covers nothing (YTD/1T)",
+      "name": "hover box with 3 shown benchmarks covers nothing (YTD/1T/1W/1M)",
       "pass": true,
       "detail": {
         "value/YTD": [],
-        "value/1T": []
+        "value/1T": [],
+        "value/1W": [],
+        "pl/1M": []
+      }
+    },
+    {
+      "area": "mobile",
+      "name": "375 1W (30 min): reverse drag, stacked boxes cover nothing, numbers match; session labels and interval note fit, no page overflow",
+      "pass": true,
+      "detail": {
+        "gm1w": [],
+        "rows": [
+          "-6,21 %",
+          "-33.224,73 €",
+          "-19.489,50 €"
+        ],
+        "m1w": {
+          "x": [
+            "21.09.",
+            "22.09.",
+            "23.09.",
+            "24.09.",
+            "25.09."
+          ],
+          "note": "Intervall: 30 Min.",
+          "noteRight": true
+        },
+        "o1w": {
+          "w": 375,
+          "sw": 375
+        }
       }
     },
     {
@@ -1140,6 +1492,29 @@
       }
     },
     {
+      "area": "mobile",
+      "name": "touch 1W (30 min): tap = start point, drag pins (boxes cover nothing, numbers match), tap in the plot clears",
+      "pass": true,
+      "detail": {
+        "key": "m30",
+        "wt1": {
+          "following": true,
+          "help": "Startpunkt gesetzt – ziehen zum Messen · erneutes Tippen beendet"
+        },
+        "wtpin": {
+          "a": 32,
+          "b": 128
+        },
+        "hits": [],
+        "rows": [
+          "-6,44 %",
+          "-34.426,04 €",
+          "-20.194,18 €"
+        ],
+        "wtclear": true
+      }
+    },
+    {
       "area": "general",
       "name": "touch page: no console errors",
       "pass": true,
@@ -1180,6 +1555,30 @@
       "note": "1T measurement"
     },
     {
+      "file": "interval-2h-custom-1903.png",
+      "viewport": {
+        "width": 1903,
+        "height": 1000
+      },
+      "note": "custom 3-week range on the 2-h grid"
+    },
+    {
+      "file": "measure-1w-1903.png",
+      "viewport": {
+        "width": 1903,
+        "height": 1000
+      },
+      "note": "1W (30 min) measurement"
+    },
+    {
+      "file": "measure-1m-1903.png",
+      "viewport": {
+        "width": 1903,
+        "height": 1000
+      },
+      "note": "1M (2 h) measurement"
+    },
+    {
       "file": "lists-side-1903.png",
       "viewport": {
         "width": 1903,
@@ -1210,6 +1609,14 @@
         "height": 812
       },
       "note": "stacked measurement boxes on a phone"
+    },
+    {
+      "file": "measure-1w-375.png",
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "note": "1W measurement on a phone"
     },
     {
       "file": "cards-375.png",

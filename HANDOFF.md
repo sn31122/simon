@@ -6,7 +6,7 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 27.09.2026 06:18 Berlin): 188 trading days 2026-01-02 … 2026-09-25; last row 2026-09-25 = final; 30-min (intraday.csv): 6 sessions 2026-09-18 … 2026-09-25; 2-h (intraday_2h.csv): 24 sessions 2026-08-25 … 2026-09-25; engine tests: 51 passed, 0 failed; crosscheck: 5441/5441 checks passed.
+- Data status (update 27.09.2026 06:51 Berlin): 188 trading days 2026-01-02 … 2026-09-25; last row 2026-09-25 = final; 30-min (intraday.csv): 6 sessions 2026-09-18 … 2026-09-25; 2-h (intraday_2h.csv): 24 sessions 2026-08-25 … 2026-09-25; engine tests: 57 passed, 0 failed; crosscheck: 7492/7492 checks passed.
 <!-- data-status:end -->
 (The block above is rewritten by `--finish` / `--finish-add`; do not edit it by hand.)
 
@@ -18,8 +18,9 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   from ~1900 px), 3M/6M pills, section order Lists → Benchmark-Vergleich → Drawdown → Monatsrenditen → Kennzahlen → Risiko &
   Korrelation → Hinweise, touch: a tap outside the chart ends a tapped measurement. Details: `SPEC.md`.
 - **Chart interval per range:** 1T and 1W 30 min, 1M 2 h, 3M and longer daily; custom ranges by length (≤ 7 days 30 min,
-  ≤ 31 days 2 h, else daily), stepping down where finer data was not collected. Main chart, hover, measurement and drawdown
-  follow the interval; Kennzahlen, Monatsrenditen, tables and sparklines stay daily. Details: `SPEC.md`.
+  ≤ 31 days 2 h, else daily), stepping down where finer data was not collected (a note under the chart shows the interval
+  and why it stepped down). Main chart, hover, measurement boxes and drawdown follow the interval; Kennzahlen,
+  Monatsrenditen, tables and sparklines stay daily. Details: `SPEC.md`.
 - **Quote update in one sentence:** say "update", "refresh", "check for new quotes" or "Kurse aktualisieren" (or "run
   UPDATE.md"). The skill `update-quotes` runs `--plan` → 2 Haiku `price-fetcher` agents (seven_days + one_month per ISIN;
   three_months after a break of > 5 weekdays) → `--finish`. The PostToolUse hook `.claude/hooks/save-chart.cjs` writes every
@@ -46,8 +47,10 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 
 ## Verification
 - `node tests/engine.test.cjs`, `python tests/crosscheck.py && node tests/crosscheck.cjs` (numbers in the status block).
-- Browser acceptance: `tools/acceptance-check.cjs` (Playwright, real mouse/keyboard/touch at 1903/1400/375 px); results
-  and screenshots of the final run in `docs/verification/2026-09-27/`.
+- Browser acceptance: `tools/acceptance-check.cjs` (Playwright, real mouse/keyboard/touch at 1903/1400/375 px); final run
+  27.09.2026: 91 of 91 checks passed (Chromium 141, Segoe UI metrics via Selawik), results and screenshots in
+  `docs/verification/2026-09-27/`. Not covered: real Segoe UI on Windows, Edge, a physical touch device, a session still
+  in progress (only unit-tested).
   Usage and the Segoe UI font fallback for Linux: `docs/VERIFICATION.md`.
 
 ## Open points (for the user)
@@ -57,5 +60,9 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 - "Monatsrenditen" buys custom cards on the first data day (02.01.2026), not at the selected period start; the chart and
   tables use the period start.
 - Beyond 5 custom cards the colours of the palette get closer to each other.
-- A `.cmd` launcher for a double-click update outside a chat was not built (it would need a non-interactive `claude -p` run
-  with pre-approved tools and the Scalable connector locally; untested here).
+- Chart interval details decided without asking (change on request): a custom range's length counts from its first to its
+  last trading day, not the typed dates (a Saturday-to-Saturday week = Mon–Fri, 30 min); the last point of a day reads
+  "23:00" in hover/measurement (only a chart's start point reads "Schluss"); "Zeitraum auf Auswahl setzen" stays hidden on
+  30-min / 2-h charts, as it already was for 1T.
+- All work is on branch `cloud-handoff-2026-09-27`; `main` still holds only the original README. Merging the branch into
+  `main` (via a pull request) would let new sessions start on the default branch.
