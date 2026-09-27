@@ -6,12 +6,14 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 27.09.2026 06:51 Berlin): 188 trading days 2026-01-02 … 2026-09-25; last row 2026-09-25 = final; 30-min (intraday.csv): 6 sessions 2026-09-18 … 2026-09-25; 2-h (intraday_2h.csv): 24 sessions 2026-08-25 … 2026-09-25; engine tests: 57 passed, 0 failed; crosscheck: 7492/7492 checks passed.
+- Data status (update 27.09.2026 07:03 Berlin): 188 trading days 2026-01-02 … 2026-09-25; last row 2026-09-25 = final; 30-min (intraday.csv): 6 sessions 2026-09-18 … 2026-09-25; 2-h (intraday_2h.csv): 24 sessions 2026-08-25 … 2026-09-25; engine tests: 57 passed, 0 failed; crosscheck: 7492/7492 checks passed.
 <!-- data-status:end -->
 (The block above is rewritten by `--finish` / `--finish-add`; do not edit it by hand.)
 
-- **Data:** 50 price series (46 + Coherent, Lumentum, Microsoft, NVIDIA merged with `--finish-add`), all selectable in the
-  benchmark search and fetched by every update. 32 Yacht positions and the 9-holding "Mein Depot" unchanged.
+- **Data:** 64 price series (46 + Coherent, Lumentum, Microsoft, NVIDIA + on 27.09. Nebius, CoreWeave, Core Scientific, IREN,
+  GE Vernova, Vertiv, Constellation, AEP, Vistra, DTE, FirstEnergy, NRG, CMS, Solaris Energy), all selectable in the
+  benchmark search and fetched by every update. Preset "Energie" (11 names with fixed weights incl. Bloom) starts as an
+  editable card, hidden in the chart. 32 Yacht positions and the 9-holding "Mein Depot" unchanged.
 - **Dashboard (27.09. requests, all verified in a browser):** benchmark cards (only "Mein Depot" as locked preset, custom
   cards with instrument search and % rows, buy and hold), measurement boxes (Yacht + "Mein Depot" with Gleicher Wert / Echt),
   hover band that keeps the plot height with up to 3 shown benchmarks, list toggles (Portfolio / Einzelwerte, side by side
@@ -48,12 +50,15 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 ## Verification
 - `node tests/engine.test.cjs`, `python tests/crosscheck.py && node tests/crosscheck.cjs` (numbers in the status block).
 - Browser acceptance: `tools/acceptance-check.cjs` (Playwright, real mouse/keyboard/touch at 1903/1400/375 px); final run
-  27.09.2026: 91 of 91 checks passed (Chromium 141, Segoe UI metrics via Selawik), results and screenshots in
+  27.09.2026: 92 of 92 checks passed (Chromium 141, Segoe UI metrics via Selawik), results and screenshots in
   `docs/verification/2026-09-27/`. Not covered: real Segoe UI on Windows, Edge, a physical touch device, a session still
   in progress (only unit-tested).
   Usage and the Segoe UI font fallback for Linux: `docs/VERIFICATION.md`.
 
 ## Open points (for the user)
+- Big one-day moves flagged by the build for the stocks added 27.09. (Scalable data, not split ratios): Nebius +31,9 % and
+  IREN +31,9 % on 30.07.2026 (the day Bloom also rose +35,5 %), IREN −24,1 % on 05.02.2026. Confirm they are real, then they
+  join the known list in AGENTS.md.
 - The "Gruppen" table stays removed (user, 27.09.); its unused CSS was deleted.
 - With 2 or 3 benchmarks shown, the band above the plot reserves room for the hover box, so there is empty space between the
   measurement boxes and the plot while nothing is hovered (deliberate: the plot keeps its height and nothing covers lines).

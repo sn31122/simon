@@ -4,8 +4,11 @@ import csv, json, math, datetime, pathlib
 
 R = pathlib.Path(__file__).resolve().parent.parent
 pos = list(csv.DictReader(open(R/'data/positions.csv', encoding='utf-8')))
-presets = {b['id']: {x.split(':')[0]: float(x.split(':')[1]) for x in b['holdings'].split('|')}
-           for b in csv.DictReader(open(R/'data/benchmarks.csv', encoding='utf-8'))}          # UI presets (today only my_depot)
+def parse_preset(h):   # benchmarks.csv: "ISIN:qty|…" = fixed quantities (Mein Depot), "ISIN:20%|…" = weighting preset (Energie)
+    parts = [x.split(':') for x in h.split('|')]
+    if all(v.endswith('%') for _, v in parts): return ('weights', {i: float(v[:-1]) for i, v in parts})
+    return ('holdings', {i: float(v) for i, v in parts})
+presets = {b['id']: parse_preset(b['holdings']) for b in csv.DictReader(open(R/'data/benchmarks.csv', encoding='utf-8'))}
 # fixed test benchmarks, independent of the UI: ('holdings', {ISIN: qty}) = constant quantities,
 # ('weights', {ISIN: %}) = benchmark card, bought at the range start and held (buy and hold)
 P9 = 'US5951121038:191.032|AT0000969985:482.8456|IE00B53SZB19:37.1794|FR0010342592:4707.2392|US5128073062:123.3333|IE00BMC38736:326.1522|US0079031078:58.9772|US4581401001:252.9732|IE00BKVD2N49:32.9963'
@@ -15,9 +18,10 @@ BENCH = {
     'dax': ('holdings', {'DE0005933931': 1.0}), 'gold': ('holdings', {'IE00B4ND3602': 1.0}),
     'ftse_all_world': ('holdings', {'IE00BK5BQT80': 1.0}),
     'proxy9': ('holdings', {x.split(':')[0]: float(x.split(':')[1]) for x in P9.split('|')}),
-    'my_depot': ('holdings', presets['my_depot']),
+    'my_depot': presets['my_depot'],
     'mix_w': ('weights', {'IE00B4L5Y983': 40.0, 'FR0010342592': 35.0, 'US5951121038': 25.0}),
     'spacex_w': ('weights', {'US84615Q1031': 50.0, 'IE00B53SZB19': 50.0}),     # SpaceX quoted from 12.06. (flat before)
+    'energie': presets['energie'],                                               # weighting preset of benchmarks.csv
 }
 rows = list(csv.reader(open(R/'data/prices_daily.csv', encoding='utf-8')))
 head, rows = rows[0], rows[1:]
@@ -126,7 +130,7 @@ def monthly(v):
 ALL = {p['isin']: float(p['shares']) for p in pos}
 SEMI = {p['isin']: float(p['shares']) for p in pos if p['group'] == 'High Players Semiconductors'}
 cases = [
-    dict(name='all_MAX', hold=ALL, rng=preset('MAX'), startValue=None, bench=['msci_world', 'proxy9', 'sp500', 'mix_w', 'spacex_w']),
+    dict(name='all_MAX', hold=ALL, rng=preset('MAX'), startValue=None, bench=['msci_world', 'proxy9', 'sp500', 'mix_w', 'spacex_w', 'energie']),
     dict(name='all_3M', hold=ALL, rng=preset('3M'), startValue=None, bench=['nasdaq100', 'mix_w']),
     dict(name='all_1M', hold=ALL, rng=preset('1M'), startValue=None, bench=['semis', 'my_depot']),
     dict(name='all_1W', hold=ALL, rng=preset('1W'), startValue=None, bench=['dax']),
@@ -294,7 +298,7 @@ def grid_case(name, key, s, e, benches, context=False):
 
 out['grid_cases'] = [c for c in [
     grid_case('1W_m30', 'm30', *preset('1W'), ['my_depot', 'mix_w', 'msci_world']),
-    grid_case('1M_h2', 'h2', *preset('1M'), ['my_depot', 'mix_w', 'spacex_w']),
+    grid_case('1M_h2', 'h2', *preset('1M'), ['my_depot', 'mix_w', 'spacex_w', 'energie']),
     grid_case('custom_0901_0907_h2', 'h2', *custom('2026-09-01', '2026-09-07'), ['my_depot', 'mix_w']),
 ] if c]
 CUSTOM_IV = [('2026-09-18', '2026-09-25'), ('2026-09-01', '2026-09-07'), ('2026-08-10', '2026-08-17'), ('2026-09-01', '2026-09-21'),

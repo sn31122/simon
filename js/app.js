@@ -775,6 +775,15 @@
     .sort(function (a, b) { return a.short.localeCompare(b.short, 'de'); });
   var INSTR_BY = {};
   INSTR.forEach(function (i) { INSTR_BY[i.isin] = i; });
+  // weighting presets (data/benchmarks.csv "ISIN:20%|…", e.g. "Energie"; user 27.09.): start as own cards – editable,
+  // deletable, hidden in the chart; a reload brings them back as defined
+  (Array.isArray(D.card_presets) ? D.card_presets : []).forEach(function (p) {
+    var rows = Object.keys(p.weights || {}).filter(function (i) { return INSTR_BY[i]; })
+      .map(function (i) { return newRow(i, fmtShare(p.weights[i])); });
+    if (!rows.length) return;
+    var name = String(p.name || nextName()).slice(0, 40);
+    state.cards.push({ id: 'bm' + (++cardSeq), name: name, defName: name, color: nextColor(), show: false, rows: rows });
+  });
   function instrSub(i) { return [i.name, i.isin, i.type].filter(Boolean).join(' · '); }
   function insTitle(i) { return i ? i.short + ' · ' + instrSub(i) : 'Name, Kürzel oder ISIN eingeben'; }
   function words(s) { return ' ' + s.replace(/[^a-z0-9äöüß]+/g, ' '); }

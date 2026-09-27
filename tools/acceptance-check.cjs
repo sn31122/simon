@@ -169,24 +169,43 @@ async function depotBoxCheck(page) {
         instruments: ins.length, prices: Object.keys(D.prices).length, dates: D.dates.length, first: D.dates[0], last: D.dates[D.dates.length - 1],
         lastStatus: D.status[D.status.length - 1], m30: g('m30'), h2: g('h2'), bloom: ins.filter((i) => i === 'US0937121079').length,
         newOnes: ['US19247G1076', 'US55024U1097', 'US5949181045', 'US67066G1040'].every((i) => ins.indexOf(i) >= 0 && D.prices[i]),
+        added27: ['NL0009805522', 'US21873S1087', 'US21874A1060', 'AU0000185993', 'US36828A1016', 'US92537N1081', 'US21037T1097', 'US0255371017',
+          'US92840M1027', 'US2333311072', 'US3379321074', 'US6293775085', 'US1258961002', 'US83418M1036'].every((i) => ins.indexOf(i) >= 0 && D.prices[i]),
+        presets: (D.card_presets || []).map((b) => b.id + ':' + Object.keys(b.weights).length + ':' + Object.values(b.weights).reduce((a, x) => a + x, 0)),
         benchmarks: D.benchmarks.map((b) => b.id), positions: D.positions.length
       };
     });
     // data.intraday (last 2 sessions) was replaced by data.grids (chart interval, 27.09.): 30 min 18.–25.09., 2 h 25.08.–25.09.
-    check('data', '50 instruments and price series, 188 final rows to 2026-09-25, grids 30 min 18.–25.09. (6) and 2 h 25.08.–25.09. (24)',
-      data.instruments === 50 && data.prices === 50 && data.dates === 188 && data.last === '2026-09-25' && data.lastStatus === 'final' &&
+    check('data', '64 instruments and price series (50 + 14 added 27.09.), 188 final rows to 2026-09-25, grids 30 min 18.–25.09. (6) and 2 h 25.08.–25.09. (24)',
+      data.instruments === 64 && data.prices === 64 && data.added27 && data.dates === 188 && data.last === '2026-09-25' && data.lastStatus === 'final' &&
       data.m30 === '2026-09-18..2026-09-25 (6)' && data.h2 === '2026-08-25..2026-09-25 (24)', data);
-    check('data', 'four new stocks present, Bloom once, only my_depot preset, 32 positions',
-      data.newOnes && data.bloom === 1 && data.benchmarks.join() === 'my_depot' && data.positions === 32);
+    check('data', 'four new stocks present, Bloom once, locked preset my_depot + weighting preset energie (11 ISINs, 100 %), 32 positions',
+      data.newOnes && data.bloom === 1 && data.benchmarks.join() === 'my_depot' && data.presets.join() === 'energie:11:100' && data.positions === 32);
 
     // ================================================================= benchmark cards
     const init = await page.evaluate(() => {
-      const cards = document.querySelectorAll('#benchCards .bb-card'), f = cards[0];
+      const cards = document.querySelectorAll('#benchCards .bb-card'), f = cards[0], e = cards[1], c = PFApp.state.cards[0];
       return { n: cards.length, fixed: f.classList.contains('bb-card--fixed'), acts: Array.from(f.querySelectorAll('[data-act]')).map((b) => b.getAttribute('data-act')),
-        inputs: f.querySelectorAll('input').length, shown: PFApp.state.benchmarks.join(), legend: document.getElementById('legend').textContent };
+        inputs: f.querySelectorAll('input').length, shown: PFApp.state.benchmarks.join(), legend: document.getElementById('legend').textContent,
+        energie: e && c ? { name: c.name, show: c.show, rows: c.rows.length, first: c.rows[0].q + ' ' + c.rows[0].pct, hidden: e.classList.contains('is-hidden'),
+          total: e.querySelector('.bb-total').textContent, ret: e.querySelector('.bb-ret').textContent, del: !!e.querySelector('[data-act="del"]'),
+          pctInputs: e.querySelectorAll('.bb-pct').length } : null };
     });
-    check('cards', 'initially only the locked Mein Depot card, shown, no edit/delete controls',
-      init.n === 1 && init.fixed && init.acts.join() === 'show' && init.inputs === 0 && init.shown === 'my_depot' && /Mein Depot/.test(init.legend), init);
+    check('cards', 'initially the locked Mein Depot card (shown, no edit/delete controls) and the editable Energie preset card, hidden in the chart',
+      init.n === 2 && init.fixed && init.acts.join() === 'show' && init.inputs === 0 && init.shown === 'my_depot' && /Mein Depot/.test(init.legend) &&
+      !!init.energie && init.energie.name === 'Energie' && !init.energie.show && init.energie.hidden && init.energie.rows === 11 &&
+      init.energie.first === 'GE Vernova 20' && init.energie.total === '100 %' && /%/.test(init.energie.ret) && init.energie.del && init.energie.pctInputs === 11 &&
+      !/Energie/.test(init.legend), init);
+    const eid = await page.evaluate(() => PFApp.state.cards[0].id);
+    await page.click('#benchCards [data-card="' + eid + '"] [data-act="show"]');
+    await settle(page);
+    const eShown = await page.evaluate((id) => ({ shown: PFApp.state.benchmarks.join(), legend: /Energie/.test(document.getElementById('legend').textContent),
+      lines: PFApp.charts.main.model.benches.length, table: Array.from(document.querySelectorAll('#benchTable tbody tr')).some((r) => /Energie/.test(r.textContent)) }), eid);
+    await page.click('#benchCards [data-card="' + eid + '"] [data-act="del"]');
+    await settle(page);
+    const eDel = await page.evaluate(() => ({ cards: PFApp.state.cards.length, dom: document.querySelectorAll('#benchCards .bb-card').length, shown: PFApp.state.benchmarks.join() }));
+    check('cards', 'Energie preset: the eye draws it (legend, chart line, Benchmark-Vergleich), the trash deletes it like an own card',
+      eShown.shown === 'my_depot,' + eid && eShown.legend && eShown.lines === 2 && eShown.table && eDel.cards === 0 && eDel.dom === 1 && eDel.shown === 'my_depot', { eShown, eDel });
     await page.click('#benchCards .bb-card--fixed [data-act="show"]');
     await settle(page);
     const hidden = await page.evaluate(() => ({ shown: PFApp.state.benchmarks.length, legend: document.getElementById('legend').textContent,
@@ -202,10 +221,10 @@ async function depotBoxCheck(page) {
     const fresh = await page.evaluate(() => {
       const a = document.activeElement, c = PFApp.state.cards[0], drop = document.getElementById('bbDrop');
       return { focusIns: a && a.classList.contains('bb-ins'), inCard: !!(a && a.closest('[data-card="' + c.id + '"]')), rows: c.rows.length,
-        name: c.name, open: !drop.hidden, opts: drop.querySelectorAll('.bb-opt').length, color: c.color };
+        name: c.name, open: !drop.hidden, opts: drop.querySelectorAll('.bb-opt').length, all: window.PORTFOLIO_DATA.instruments.length, color: c.color };
     });
-    check('cards', 'new card: "Benchmark 1", one empty row, focus in its instrument field, list open with all 50 instruments',
-      fresh.focusIns && fresh.inCard && fresh.rows === 1 && fresh.name === 'Benchmark 1' && fresh.open && fresh.opts === 50, fresh);
+    check('cards', 'new card: "Benchmark 1", one empty row, focus in its instrument field, list open with every instrument (64)',
+      fresh.focusIns && fresh.inCard && fresh.rows === 1 && fresh.name === 'Benchmark 1' && fresh.open && fresh.opts === fresh.all && fresh.all === 64, fresh);
 
     async function searchTop(q) {
       await selectAllAndType(page, q);
@@ -872,7 +891,7 @@ async function depotBoxCheck(page) {
     await page.waitForFunction(() => window.PFApp && document.querySelector('#benchCards .bb-card'));
     if (page.fallbackFont) await fontsReady(page);
     const reset = await page.evaluate(() => ({ cards: PFApp.state.cards.length, shown: PFApp.state.benchmarks.join(), dom: document.querySelectorAll('#benchCards .bb-card').length, assets: PFApp.state.showAssets, hold: PFApp.state.showHold }));
-    check('cards', 'reload resets to Mein Depot only (and list defaults); nothing persisted', reset.cards === 0 && reset.shown === 'my_depot' && reset.dom === 1 && !reset.assets && reset.hold, reset);
+    check('cards', 'reload resets to Mein Depot + the hidden Energie preset (and list defaults); nothing persisted', reset.cards === 1 && reset.shown === 'my_depot' && reset.dom === 2 && !reset.assets && reset.hold, reset);
 
     // ================================================================= 1920 and 1400
     for (const w of [1920, 1400]) {

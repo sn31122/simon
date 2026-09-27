@@ -1,18 +1,18 @@
 {
   "url": "http://127.0.0.1:8770/dashboard.html",
-  "at": "2026-09-27T04:52:51.748Z",
+  "at": "2026-09-27T05:08:01.829Z",
   "browser": "141.0.7390.37",
   "fonts": "Selawik injected as \"Segoe UI\" (Segoe UI metrics)",
-  "passed": 91,
+  "passed": 92,
   "failed": 0,
   "results": [
     {
       "area": "data",
-      "name": "50 instruments and price series, 188 final rows to 2026-09-25, grids 30 min 18.–25.09. (6) and 2 h 25.08.–25.09. (24)",
+      "name": "64 instruments and price series (50 + 14 added 27.09.), 188 final rows to 2026-09-25, grids 30 min 18.–25.09. (6) and 2 h 25.08.–25.09. (24)",
       "pass": true,
       "detail": {
-        "instruments": 50,
-        "prices": 50,
+        "instruments": 64,
+        "prices": 64,
         "dates": 188,
         "first": "2026-01-02",
         "last": "2026-09-25",
@@ -21,6 +21,10 @@
         "h2": "2026-08-25..2026-09-25 (24)",
         "bloom": 1,
         "newOnes": true,
+        "added27": true,
+        "presets": [
+          "energie:11:100"
+        ],
         "benchmarks": [
           "my_depot"
         ],
@@ -29,23 +33,52 @@
     },
     {
       "area": "data",
-      "name": "four new stocks present, Bloom once, only my_depot preset, 32 positions",
+      "name": "four new stocks present, Bloom once, locked preset my_depot + weighting preset energie (11 ISINs, 100 %), 32 positions",
       "pass": true,
       "detail": null
     },
     {
       "area": "cards",
-      "name": "initially only the locked Mein Depot card, shown, no edit/delete controls",
+      "name": "initially the locked Mein Depot card (shown, no edit/delete controls) and the editable Energie preset card, hidden in the chart",
       "pass": true,
       "detail": {
-        "n": 1,
+        "n": 2,
         "fixed": true,
         "acts": [
           "show"
         ],
         "inputs": 0,
         "shown": "my_depot",
-        "legend": "Portfolio+126,83 %Mein Depot+8,43 %"
+        "legend": "Portfolio+126,83 %Mein Depot+8,43 %",
+        "energie": {
+          "name": "Energie",
+          "show": false,
+          "rows": 11,
+          "first": "GE Vernova 20",
+          "hidden": true,
+          "total": "100 %",
+          "ret": "+31,45 %",
+          "del": true,
+          "pctInputs": 11
+        }
+      }
+    },
+    {
+      "area": "cards",
+      "name": "Energie preset: the eye draws it (legend, chart line, Benchmark-Vergleich), the trash deletes it like an own card",
+      "pass": true,
+      "detail": {
+        "eShown": {
+          "shown": "my_depot,bm1",
+          "legend": true,
+          "lines": 2,
+          "table": true
+        },
+        "eDel": {
+          "cards": 0,
+          "dom": 1,
+          "shown": "my_depot"
+        }
       }
     },
     {
@@ -61,7 +94,7 @@
     },
     {
       "area": "cards",
-      "name": "new card: \"Benchmark 1\", one empty row, focus in its instrument field, list open with all 50 instruments",
+      "name": "new card: \"Benchmark 1\", one empty row, focus in its instrument field, list open with every instrument (64)",
       "pass": true,
       "detail": {
         "focusIns": true,
@@ -69,7 +102,8 @@
         "rows": 1,
         "name": "Benchmark 1",
         "open": true,
-        "opts": 50,
+        "opts": 64,
+        "all": 64,
         "color": "#6ea8ff"
       }
     },
@@ -1147,12 +1181,12 @@
     },
     {
       "area": "cards",
-      "name": "reload resets to Mein Depot only (and list defaults); nothing persisted",
+      "name": "reload resets to Mein Depot + the hidden Energie preset (and list defaults); nothing persisted",
       "pass": true,
       "detail": {
-        "cards": 0,
+        "cards": 1,
         "shown": "my_depot",
-        "dom": 1,
+        "dom": 2,
         "assets": false,
         "hold": true
       }
@@ -1403,6 +1437,7 @@
       "name": "cards full width",
       "pass": true,
       "detail": [
+        0,
         0,
         0,
         0
