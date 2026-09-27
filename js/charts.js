@@ -344,14 +344,18 @@
    *   benches: [{ id, color, values: [number] }],
    *   baseline: number,                              – start value (Portfoliowert) or 0 (Gesamtrendite)
    *   axisLabel(v, step), lastLabel(v), monthLabel(iso, withYear), dayLabel(iso),
-   *   hoverHTML(i), measureHTML(a, b) -> html | { main: html, side: html|'' }, emptyText
+   *   hoverHTML(i, maxBench), measureHTML(a, b) -> html | { main: html, side: html|'' }, emptyText
    * }
    * measureHTML's `side` is an optional second box ("Mein Depot") placed beside the measure box (same top, same
-   * height), or stacked under it on narrow charts. The band above the plot is sized from the real box heights.
+   * height), or stacked under it on narrow charts. hoverHTML's optional maxBench caps the benchmark rows (used to size
+   * the band). The band above the plot is sized from the real box heights: the measure box(es) and the hover box with
+   * up to BAND_BENCH_ROWS benchmarks. When the hover box needs more room than the measure boxes, the chart element
+   * grows by the difference (CSS var --band-extra), so the plot keeps its height.
    */
   var TIP_TOP = 2;          // px from the chart top to the tooltip boxes
   var TIP_GAP = 4;          // px between the measure box and the side box
   var BAND_MARGIN = 18;     // px between the lowest box and the plot top (keeps a y-label at the plot top clear)
+  var BAND_BENCH_ROWS = 3;  // hover box rows kept out of the plot (user, 27.09.: more benchmarks may overlap)
   function tipParts(h) {
     return h && typeof h === 'object' ? { main: h.main || '', side: h.side || '' } : { main: h || '', side: '' };
   }
@@ -381,11 +385,13 @@
     this.sideOn = false;
     this.stack = false;
     this.tipBottom = TIP_TOP;
+    this.bandExtra = 0;      // px the element is taller than its CSS height (--band-extra, see _band)
+    this.size = null;        // { W, H } of the last render
   }
 
   MainChart.prototype.render = function (model) {
     if (model !== undefined) this.model = model;
-    var M = this.model, size = sizeSvg(this), W = size.W, H = size.H;
+    var M = this.model;
     clear(this.defs); clear(this.gGrid); clear(this.gSeries); clear(this.gOver); clear(this.gAxis); clear(this.gTop);
     this.hideTip();
     this.L = null;
@@ -393,7 +399,19 @@
     var ghost = M && M.ghost && M.ghost.values ? M.ghost.values : null;          // what-if: original portfolio
     var ext = vals && vals.length ?
       extent([vals, ghost].concat((M.benches || []).map(function (b) { return b.values; })), [M.baseline]) : null;
-    var ok = !!(ext && W > 60 && H > 120);
+    var W0 = Math.floor(this.el.clientWidth), compact = W0 < 560;
+    this.el.classList.toggle('pc--compact', compact);                // before the boxes are measured (compact padding)
+    // intraday: M.last = last slot with data (later slots stay empty, as in the app), M.ctxEnd = end of the grey
+    // context (earlier sessions); the colored line, the area and the dashed baseline start after it
+    var lastI = ext ? (isNum(M.last) ? clamp(M.last, 0, vals.length - 1) : vals.length - 1) : 0;
+    // band above the plot for the boxes, derived from their real height so they never cover the plot; the chart
+    // grows by what the hover box needs beyond the measure boxes (the height is read after that)
+    var band = ext && W0 > 60 ? this._band(M, lastI, W0, compact) : null;
+    var extra = band ? band.extra : 0;
+    if (extra !== this.bandExtra) this._setExtra(extra);
+    var size = sizeSvg(this), W = size.W, H = size.H;
+    this.size = size;
+    var ok = !!(band && W > 60 && H > 120);
     this.msg.textContent = M && !ok ? (M.emptyText || '') : '';
     this.msg.hidden = !this.msg.textContent;
     this.el.classList.toggle('is-empty', !ok);
@@ -402,14 +420,7 @@
 
     var ff = root.getComputedStyle ? root.getComputedStyle(this.el).fontFamily : 'sans-serif';
     var m = vals.length, benches = M.benches || [];
-    var compact = W < 560;
-    this.el.classList.toggle('pc--compact', compact);
-
-    // intraday: M.last = last slot with data (later slots stay empty, as in the app), M.ctxEnd = end of the grey
-    // context (earlier sessions); the colored line, the area and the dashed baseline start after it
-    var lastI = isNum(M.last) ? clamp(M.last, 0, m - 1) : m - 1;
-    // band above the plot holds the measure box(es): derived from their real height, so they never cover the plot
-    var top = this._band(M, lastI, W, compact), bottom = H - (compact ? 30 : 38);
+    var top = band.top, bottom = H - (compact ? 30 : 38);
     var cEnd = isNum(M.ctxEnd) && M.ctxEnd < lastI ? M.ctxEnd : -1;
     var main = cEnd < 0 ? vals : vals.map(function (v, k) { return k > cEnd ? v : null; });
 
@@ -501,20 +512,43 @@
   MainChart.prototype.hideTip = function () { this.tip.hidden = true; this.tip2.hidden = true; this.tipKey = ''; };
 
   /**
-   * Height of the band above the plot: the real height of the measure box (+ side box: beside it, or stacked under
-   * it when both do not fit next to each other) for the current content, probed with the full range, plus a margin.
+   * Band above the plot for the current content: { top, extra }. top = the taller of the measure block (measure box
+   * + side box: beside it, or stacked under it when both do not fit next to each other; probed with the full range)
+   * and the hover box with at most BAND_BENCH_ROWS benchmark rows, plus a margin. extra = how much taller the hover
+   * box is than the measure block: the chart element grows by that, so the plot height does not depend on it.
    */
   MainChart.prototype._band = function (M, lastI, W, compact) {
     var t1 = this.tip, t2 = this.tip2, h = tipParts(M.measureHTML ? M.measureHTML(0, lastI) : '');
     t1.style.visibility = t2.style.visibility = 'hidden';
     fillTip(t1, 'pc-tip pc-tip--measure', h.main);
-    var w1 = t1.offsetWidth, h1 = t1.offsetHeight, w2 = 0, h2 = 0;
+    var w1 = t1.offsetWidth, h1 = t1.offsetHeight, w2 = 0, h2 = 0, hh = 0;
     if (h.side) { fillTip(t2, 'pc-tip pc-tip--side', h.side); w2 = t2.offsetWidth; h2 = t2.offsetHeight; }
+    if (M.hoverHTML) { fillTip(t1, 'pc-tip pc-tip--hover', tipParts(M.hoverHTML(lastI, BAND_BENCH_ROWS)).main); hh = t1.offsetHeight; }
     t1.style.visibility = t2.style.visibility = '';
     this.hideTip();
     this.stack = !!h.side && (compact || w1 + TIP_GAP + w2 > W);
-    var block = !h.side ? h1 : this.stack ? h1 + TIP_GAP + h2 : Math.max(h1, h2);
-    return h1 > 0 ? Math.ceil(TIP_TOP + block + BAND_MARGIN) : (compact ? 62 : 80);
+    var block = !(h1 > 0) ? (compact ? 62 : 80) - TIP_TOP - BAND_MARGIN : !h.side ? h1 : this.stack ? h1 + TIP_GAP + h2 : Math.max(h1, h2);
+    return { top: Math.ceil(TIP_TOP + Math.max(block, hh) + BAND_MARGIN), extra: Math.max(0, Math.ceil(hh - block)) };
+  };
+
+  /**
+   * Sets the extra band height. The change comes from controls below the chart (benchmark cards, Stück fields), so the
+   * content there stays where it is (manual scroll anchoring): the page scrolls by the height change when the focus is
+   * below the chart or the chart ends above the middle of the window – unless the browser already compensated.
+   */
+  MainChart.prototype._setExtra = function (extra) {
+    var el = this.el, dh = extra - this.bandExtra, t0 = el.getBoundingClientRect().top, a = document.activeElement;
+    el.style.setProperty('--band-extra', extra + 'px');
+    this.bandExtra = extra;
+    var r = el.getBoundingClientRect(), vh = root.innerHeight || 0;
+    var below = a && a !== document.body && !el.contains(a) && (el.compareDocumentPosition(a) & 4);   // 4 = FOLLOWING
+    if (dh && r.top === t0 && (below || r.bottom - dh < vh / 2) && root.scrollBy) root.scrollBy(0, dh);
+  };
+
+  /** True when the element's size differs from the last render (a resize the chart did not cause itself). */
+  MainChart.prototype.sizeChanged = function () {
+    var s = this.size;
+    return !s || Math.floor(this.el.clientWidth) !== s.W || Math.floor(this.el.clientHeight) !== s.H;
   };
 
   MainChart.prototype.drawOverlay = function (S) {

@@ -234,6 +234,14 @@ button { -webkit-tap-highlight-color: transparent; }
 /* as in the app: small bold figure above the chart */
 .headline { margin-top: 20px; }
 .hl-main { font-size: 16px; font-weight: 700; line-height: 1.3; }
+/* empty selection: "Positionen auswählen" opens the Einzelwerte list (openAssets in app.js) */
+.hl-empty { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.hl-act {
+  height: 24px; padding: 0 10px;
+  border: 1px solid rgba(var(--accent-rgb), .55); border-radius: 999px; background: none;
+  color: var(--accent); font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.hl-act:hover { border-color: var(--accent); background: var(--accent-soft); }
 .hl-sub { margin-top: 2px; color: var(--muted); font-size: 12px; }
 .hl-sub b { font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; color: var(--muted); font-size: 12px; }
@@ -242,12 +250,13 @@ button { -webkit-tap-highlight-color: transparent; }
 .lg-item span { color: var(--text); }
 .lg-item b { font-weight: 600; }
 .lg-item--ghost i { height: 0; border-top: 2px dashed var(--ghost); background: none; }
-.tt-ghost { color: var(--ghost); }
 
 /* ------------------------------------------------------------------ charts */
 .chart-block { position: relative; z-index: 2; margin-top: 2px; }
 .pc { position: relative; user-select: none; -webkit-user-select: none; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
-.pc-main { height: 490px; }   /* app: ~820x490 incl. tooltip band and x labels */
+/* app: ~820x490 incl. tooltip band and x labels; --band-extra (MainChart) = extra band for a hover box with up to
+   3 benchmarks when it is taller than the measure boxes, so the plot keeps its height */
+.pc-main { height: calc(490px + var(--band-extra, 0px)); }
 .pc-dd { height: 150px; }
 .pc:not(.is-empty) .pc-svg { cursor: crosshair; }
 .pc-svg { position: absolute; left: 0; top: 0; display: block; overflow: visible; }
@@ -334,10 +343,11 @@ button { -webkit-tap-highlight-color: transparent; }
 .pc--compact .tt-m { column-gap: 10px; row-gap: 2px; }
 .pc--compact .tt-d { row-gap: 2px; }
 .pc--compact .tt-dr { column-gap: 12px; }
-.tt-h { display: grid; grid-template-columns: auto auto auto; column-gap: 12px; row-gap: 2px; align-items: baseline; }
-.tt-h .tt-date { grid-column: 1 / -1; margin-bottom: 2px; }
-.tt-name { --c: var(--accent); display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
-.tt-name i { width: 10px; height: 2px; border-radius: 1px; background: var(--c); }
+/* hover rows; a name too long for a narrow chart is cut with "…" (first column may shrink) instead of overflowing the box */
+.tt-h { display: grid; grid-template-columns: minmax(0, auto) auto auto; column-gap: 12px; row-gap: 2px; align-items: baseline; }
+.tt-name { --c: var(--accent); display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
+.tt-name i { flex: 0 0 auto; width: 10px; height: 2px; border-radius: 1px; background: var(--c); }
+.tt-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tt-num { text-align: right; font-size: 12px; font-weight: 700; color: #fff; }
 .tt-pct { text-align: right; font-weight: 600; }
 
@@ -670,7 +680,7 @@ th.is-sorted { color: var(--text); }
   .tabs { width: 100%; gap: 0; }
   .tab { flex: 1 1 0; min-width: 0; height: 40px; padding: 0 2px; }
   .ov { margin-top: 24px; }
-  .pc-main { height: 360px; }
+  .pc-main { height: calc(360px + var(--band-extra, 0px)); }
   .settings { gap: 10px 16px; }
   .bb-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
   .bb-ico { width: 32px; height: 32px; }

@@ -419,7 +419,7 @@
   var dfTo = new DateField($('dateTo'), function () { onDateChange(); }, function () { setRangeHint('Ungültiges Datum (TT.MM.JJJJ).'); });
 
   function ttRow(name, color, val, r) {
-    return '<span class="tt-name" style="--c:' + color + '"><i></i>' + esc(name) + '</span>' +
+    return '<span class="tt-name" style="--c:' + color + '"><i></i><span class="tt-nm">' + esc(name) + '</span></span>' +
       '<span class="tt-num">' + val + '</span><span class="tt-pct ' + sgn(r) + '">' + pct(r) + '</span>';
   }
 
@@ -434,7 +434,7 @@
       '<div class="tt-sub c3">' + colored(ret, pct(ret)) + '</div>' +
       '</div>';
   }
-  var REAL_ID = 'my_depot';                      // the benchmark that is the user's real depot
+  var REAL_ID = DEPOT_ID;                        // the benchmark that is the user's real depot
   function depotDefault() { return E.benchmarkValueNow ? E.benchmarkValueNow(ctx0, REAL_ID) : null; }
   function depotTarget() { return state.depotValue != null ? state.depotValue : depotDefault(); }
   /**
@@ -463,13 +463,13 @@
       '</div>';
   }
 
-  function intraHoverHTML(i) {
+  function intraHoverHTML(i, maxBench) {
     var I = cur.intra, pl = state.mode === 'pl', v = pl ? I.pl[i] : I.value[i];
     var main = '<div class="tt-date">' + esc(slotLabel(I, i)) + '</div>' +
       '<div class="tt-main ' + (pl ? sgn(v) : '') + '">' + (pl ? eurS(v) : eur(v)) + '</div>';
     var rows = '';
     if (I.orig) rows += ttRow('Original', 'var(--ghost)', pl ? eurS(I.orig.pl[i]) : eur(I.orig.value[i]), I.orig.ret[i]);
-    I.benches.forEach(function (o) { rows += ttRow(o.x.name, o.x.color, pl ? eurS(o.s.pl[i]) : eur(o.s.value[i]), o.s.ret[i]); });
+    I.benches.slice(0, maxBench).forEach(function (o) { rows += ttRow(o.x.name, o.x.color, pl ? eurS(o.s.pl[i]) : eur(o.s.value[i]), o.s.ret[i]); });
     return '<div class="tt-one">' + main + '</div>' + (rows ? '<div class="tt-h">' + rows + '</div>' : '');
   }
   /** 1T: measure box + "Mein Depot" box ({ main, side } for MainChart); a/b are intraday slots. */
@@ -484,18 +484,18 @@
     };
   }
 
-  function hoverHTML(i) {
+  /** Single-point hover box; maxBench (optional) caps the benchmark rows – MainChart sizes the band above the plot with it. */
+  function hoverHTML(i, maxBench) {
     var M = cur, p = M && M.p;
     if (!p) return '';
-    if (M.intra) return intraHoverHTML(i);
+    if (M.intra) return intraHoverHTML(i, maxBench);
     var pl = state.mode === 'pl';
     // as in the app: date, then the value (Gesamtrendite coloured by sign); benchmarks as small rows below
     var main = '<div class="tt-date">' + esc(dateLabel(M.R.start + i)) + '</div>' +
       '<div class="tt-main ' + (pl ? sgn(p.pl[i]) : '') + '">' + (pl ? eurS(p.pl[i]) : eur(p.value[i])) + '</div>';
     var rows = '';
     if (M.orig) rows += ttRow('Original', 'var(--ghost)', pl ? eurS(M.orig.pl[i]) : eur(M.orig.value[i]), i > 0 ? origWin(0, i) : 0);
-    M.selB.forEach(function (x) {
-      if (!x.s) return;
+    M.selB.filter(function (x) { return x.s; }).slice(0, maxBench).forEach(function (x) {
       rows += ttRow(x.name, x.color, pl ? eurS(x.s.pl[i]) : eur(x.s.value[i]), i > 0 ? benchWin(x, 0, i) : 0);
     });
     return '<div class="tt-one">' + main + '</div>' + (rows ? '<div class="tt-h">' + rows + '</div>' : '');
@@ -607,25 +607,30 @@
     models.dd.padR = mainChart.L ? mainChart.L.padR : 60;
     ddChart.render(models.dd);
   }
+  /** Resize: re-render both charts – not when the size change came from the main chart itself (its band, --band-extra). */
   function rerenderChartsOnly() {
-    if (!mainChart.model) return;
+    if (!mainChart.model || !mainChart.sizeChanged()) return;
     mainChart.render();
     if (ddChart.model) { ddChart.model.padR = mainChart.L ? mainChart.L.padR : 60; ddChart.render(); }
   }
 
+  var TOUCH = !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);   // phone / tablet wording
   function renderMeasureBar() {
     var pin = sync.pinned(), btn = $('applyMeasure'), help = $('chartHelp');
+    var end = TOUCH ? ' · Tippen in den Chart hebt sie auf' : ' · Klick in den Chart oder Esc hebt sie auf';
     btn.hidden = !pin || !!(cur && cur.intra);
     if (pin && cur && cur.intra) {
-      help.textContent = 'Messung ' + slotLabel(cur.intra, pin.a) + ' – ' + slotLabel(cur.intra, pin.b) + ' · Klick in den Chart oder Esc hebt sie auf';
+      help.textContent = 'Messung ' + slotLabel(cur.intra, pin.a) + ' – ' + slotLabel(cur.intra, pin.b) + end;
     } else if (pin && cur && cur.p) {
       var a = ctx.dates[cur.R.start + pin.a], b = ctx.dates[cur.R.start + pin.b];
       btn.title = 'Zeitraum auf ' + F.date(a, 'short') + ' – ' + F.date(b, 'short') + ' setzen';
-      help.textContent = 'Messung ' + F.date(a, 'short') + ' – ' + F.date(b, 'short') + ' · Klick in den Chart oder Esc hebt sie auf';
+      help.textContent = 'Messung ' + F.date(a, 'short') + ' – ' + F.date(b, 'short') + end;
     } else if (sync.following()) {
-      help.textContent = 'Startpunkt gesetzt – Maus bewegen zum Messen · erneuter Klick oder Esc beendet';
+      help.textContent = TOUCH ? 'Startpunkt gesetzt – ziehen zum Messen · erneutes Tippen beendet' :
+        'Startpunkt gesetzt – Maus bewegen zum Messen · erneuter Klick oder Esc beendet';
     } else {
-      help.textContent = cur && cur.p ? 'In den Chart klicken, um ab diesem Punkt zu messen (oder ziehen)' : '';
+      help.textContent = !(cur && cur.p) ? '' : TOUCH ? 'Zum Messen im Chart ziehen oder einen Startpunkt antippen' :
+        'In den Chart klicken, um ab diesem Punkt zu messen (oder ziehen)';
     }
   }
 
@@ -1152,10 +1157,11 @@
       (M.intra.missing.length ? ', ' + M.intra.missing.length + ' Werte ohne Intraday-Kurse' : '');
     var period = 'im Zeitraum ' + periodText(R) + (note ? ' <span class="weak">(' + esc(note) + ')</span>' : '');
     if (!M.p || !s) {
+      // actionable: the button switches „Einzelwerte“ on (also when hidden), scrolls to it and focuses the next step (openAssets)
       var zero = state.selected.size && ctx !== ctx0;
-      main.innerHTML = '<span class="weak">' + esc(zero ? 'Keine Bestände in der Auswahl' : 'Keine Position ausgewählt') + '</span>';
-      sub.innerHTML = (zero ? 'Was-wäre-wenn: alle ausgewählten Positionen stehen auf 0 Stück · ' :
-        'Positionen in „Einzelwerte“ auswählen (Liste unten einblenden) · ') + period;
+      main.innerHTML = '<span class="hl-empty"><span class="weak">' + esc(zero ? 'Keine Bestände in der Auswahl' : 'Keine Position ausgewählt') + '</span>' +
+        '<button type="button" class="hl-act" data-hl-act="assets">' + (zero ? 'Stück anpassen' : 'Positionen auswählen') + '</button></span>';
+      sub.innerHTML = (zero ? 'Was-wäre-wenn: alle ausgewählten Positionen stehen auf 0 Stück · ' : 'Auswahl über die Liste „Einzelwerte“ · ') + period;
       $('legend').innerHTML = '';
       return;
     }
@@ -1666,7 +1672,21 @@
     sec.classList.toggle('is-side', side);
     sec.classList.toggle('is-stack', hold && assets && !side);
   }
+  /**
+   * Button in the empty-selection headline: switches „Einzelwerte“ on (if hidden), scrolls it under the sticky bar and
+   * focuses the next step – the first changed Stück field (what-if, all at 0) or „Alle“.
+   */
+  function openAssets() {
+    if (!state.showAssets) { state.showAssets = true; if (cur) renderAssets(cur); }
+    layoutLists();
+    var blk = $('assetBlock'), bar = $('topBar'), calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var y = blk.getBoundingClientRect().top + window.pageYOffset - (bar ? bar.offsetHeight : 0) - 12;
+    window.scrollTo({ top: Math.max(0, Math.round(y)), behavior: calm ? 'auto' : 'smooth' });
+    var t = $('assetTable').querySelector('tr.is-changed .wi-inp') || $('selAll');
+    if (t) t.focus({ preventScroll: true });
+  }
   function bindLists() {
+    $('hlMain').addEventListener('click', function (ev) { if (ev.target.closest('[data-hl-act="assets"]')) openAssets(); });
     $('listToggles').addEventListener('click', function (ev) {
       var b = ev.target.closest('[data-list]');
       if (!b) return;
