@@ -140,7 +140,9 @@ async function depotBoxCheck(page) {
     let pv, dv, i, j;
     if (intra) { const d = M.intra.benches.find((o) => o.x.id === 'my_depot'); pv = M.intra.value; dv = d.s.value; i = a; j = b; }
     else { const d = M.selB.find((x) => x.id === 'my_depot'); pv = M.p.value; dv = d.s.value; i = M.R.start + a; j = M.R.start + b; }
-    const w = E.equalValueWindow(pv, dv, a, b), real = E.benchmarkRealPl(ctx0, 'my_depot', i, j, { intraday: intra, target });
+    // sub-daily chart (1T/1W/1M/custom): the real change is read on the same frame, rebuilt here from the fresh context
+    const frame = intra ? E.gridFrame(ctx0, M.intra.key, M.R.start, M.R.end, { context: !!M.intra.frame.context, trim: M.R.end - M.R.start > 1 }) : null;
+    const w = E.equalValueWindow(pv, dv, a, b), real = E.benchmarkRealPl(ctx0, 'my_depot', i, j, { frame, target });
     const rows = Array.from(tip2.querySelectorAll('.tt-dv')).map((n) => n.textContent.trim());
     const labels = tip2.textContent;
     return {
@@ -162,16 +164,18 @@ async function depotBoxCheck(page) {
     pages.push(page);
     const data = await page.evaluate(() => {
       const D = window.PORTFOLIO_DATA, ins = D.instruments.map((i) => i.isin);
+      const g = (k) => D.grids && D.grids[k] ? D.grids[k].dates[0] + '..' + D.grids[k].dates[D.grids[k].dates.length - 1] + ' (' + D.grids[k].dates.length + ')' : null;
       return {
         instruments: ins.length, prices: Object.keys(D.prices).length, dates: D.dates.length, first: D.dates[0], last: D.dates[D.dates.length - 1],
-        lastStatus: D.status[D.status.length - 1], intraday: D.intraday && D.intraday.dates, bloom: ins.filter((i) => i === 'US0937121079').length,
+        lastStatus: D.status[D.status.length - 1], m30: g('m30'), h2: g('h2'), bloom: ins.filter((i) => i === 'US0937121079').length,
         newOnes: ['US19247G1076', 'US55024U1097', 'US5949181045', 'US67066G1040'].every((i) => ins.indexOf(i) >= 0 && D.prices[i]),
         benchmarks: D.benchmarks.map((b) => b.id), positions: D.positions.length
       };
     });
-    check('data', '50 instruments and price series, 188 final rows to 2026-09-25, intraday 24/25.09.',
+    // data.intraday (last 2 sessions) was replaced by data.grids (chart interval, 27.09.): 30 min 18.–25.09., 2 h 25.08.–25.09.
+    check('data', '50 instruments and price series, 188 final rows to 2026-09-25, grids 30 min 18.–25.09. (6) and 2 h 25.08.–25.09. (24)',
       data.instruments === 50 && data.prices === 50 && data.dates === 188 && data.last === '2026-09-25' && data.lastStatus === 'final' &&
-      JSON.stringify(data.intraday) === JSON.stringify(['2026-09-24', '2026-09-25']), data);
+      data.m30 === '2026-09-18..2026-09-25 (6)' && data.h2 === '2026-08-25..2026-09-25 (24)', data);
     check('data', 'four new stocks present, Bloom once, only my_depot preset, 32 positions',
       data.newOnes && data.bloom === 1 && data.benchmarks.join() === 'my_depot' && data.positions === 32);
 
@@ -329,14 +333,15 @@ async function depotBoxCheck(page) {
     await page.click('#rangeTabs [data-preset="1T"]');
     await settle(page);
     const bh1 = await page.evaluate((id) => {
-      const E = window.PFEngine, ctx = E.prepare(window.PORTFOLIO_DATA), I = ctx.intraday, M = PFApp.model();
+      // prices read straight from the 30-min grid of the data (the 1T chart = previous session + last session)
+      const E = window.PFEngine, ctx = E.prepare(window.PORTFOLIO_DATA), G = ctx.grids.m30, M = PFApp.model();
       const o = M.intra && M.intra.benches.find((b) => b.x.id === id);
       if (!o) return { ok: false };
-      const bi = I.idx[I.D - 1] - 1, w = { US5949181045: 0.6, US67066G1040: 0.4 };
+      const bi = ctx.n - 2, w = { US5949181045: 0.6, US67066G1040: 0.4 }, from = (G.D - 2) * G.S;
       let maxErr = 0;
-      for (let k = 0; k <= I.last; k++) {
+      for (let k = 0; k <= M.intra.last; k++) {
         let v = 0;
-        for (const i in w) v += w[i] * I.px[i][k] / ctx.px[i][bi];
+        for (const i in w) v += w[i] * G.px[i][from + k] / ctx.px[i][bi];
         maxErr = Math.max(maxErr, Math.abs(M.intra.base * v - o.s.value[k]) / (M.intra.base * v));
       }
       return { ok: true, maxErr, legend: /Benchmark 1/.test(document.getElementById('legend').textContent), line: PFApp.charts.main.model.benches.some((b) => b.id === id) };
@@ -485,13 +490,13 @@ async function depotBoxCheck(page) {
       return bad;
     }
     const sweeps = {};
-    for (const [mode, preset] of [['value', 'YTD'], ['pl', 'YTD'], ['value', '1T'], ['pl', '1T']]) {
+    for (const [mode, preset] of [['value', 'YTD'], ['pl', 'YTD'], ['value', '1T'], ['pl', '1T'], ['value', '1W'], ['pl', '1W'], ['value', '1M'], ['pl', '1M']]) {
       await page.click('#rangeTabs [data-preset="' + preset + '"]');
       await page.click('#modeToggle [data-mode="' + mode + '"]');
       await settle(page);
       sweeps[mode + '/' + preset] = await hoverSweep(mode + preset);
     }
-    check('hover', 'desktop: hover box with 3 shown benchmarks never covers lines, y labels or the last-value box (YTD/1T, both modes)',
+    check('hover', 'desktop: hover box with 3 shown benchmarks never covers lines, y labels or the last-value box (YTD/1T/1W 30 min/1M 2 h, both modes)',
       shownNow === 3 && Object.values(sweeps).every((b) => b.length === 0), { shownNow, sweeps });
     await page.click('#modeToggle [data-mode="value"]');
     await page.click('#rangeTabs [data-preset="YTD"]');
@@ -603,6 +608,146 @@ async function depotBoxCheck(page) {
     const ddSync = await page.evaluate(() => ({ hover: PFApp.sync.hoverI, readout: document.getElementById('ddReadout').textContent, padR: [PFApp.charts.main.L.padR, PFApp.charts.dd.L && PFApp.charts.dd.L.padR] }));
     check('measure', 'drawdown chart follows the main chart hover; same padR', ddSync.hover != null && /\d{4}/.test(ddSync.readout) && ddSync.padR[0] === ddSync.padR[1], ddSync);
     await page.mouse.move(1, 1);
+
+    // ================================================================= chart interval (user, 27.09.): 1T/1W 30 min, 1M 2 h,
+    // longer daily; custom ranges by length (<= 7 days 30 min, <= 31 days 2 h), stepping down where the finer data is missing
+    const ivState = () => page.evaluate(() => {
+      const M = PFApp.model(), I = M.intra;
+      return { key: M.iv.key, want: M.iv.want, note: document.getElementById('chartIv').textContent, m: I ? I.m : null, dates: I ? I.dates : null,
+        x: Array.from(document.querySelectorAll('#mainChart .pc-xlabel')).map((n) => n.textContent),
+        ddLen: PFApp.charts.dd.model && PFApp.charts.dd.model.dd ? PFApp.charts.dd.model.dd.length : null,
+        endGap: I && M.ps ? Math.abs(I.value[I.last] - M.ps.endValue) : null, baseGap: I && M.p ? Math.abs(I.base - M.p.startValue) : null,
+        btn: !document.getElementById('applyMeasure').hidden, ranges: document.getElementById('dateRange').classList.contains('is-custom') };
+    });
+    /** Types a range into Von/Bis like a user (TT.MM.JJJJ digits, commit on the complete year); order keeps it valid. */
+    async function typeRange(from, to) {
+      const curTo = await page.evaluate(() => PFApp.state.custom ? PFApp.state.custom.to : null);
+      const iso = (s) => s.slice(6) + '-' + s.slice(3, 5) + '-' + s.slice(0, 2);
+      const toFirst = curTo && iso(from) > curTo;
+      for (const [sel, v] of toFirst ? [['#dateTo', to], ['#dateFrom', from]] : [['#dateFrom', from], ['#dateTo', to]]) {
+        await page.click(sel + ' .dseg >> nth=0');
+        await page.keyboard.type(v.replace(/\./g, ''));
+        await settle(page);
+      }
+      await page.evaluate(() => document.activeElement.blur());
+      await settle(page);
+    }
+    const iv = {};
+    for (const p of ['1T', '1W', '1M', '3M']) { await page.click('#rangeTabs [data-preset="' + p + '"]'); await settle(page); iv[p] = await ivState(); }
+    for (const [name, a, b] of [['week in 30 min', '18.09.2026', '25.09.2026'], ['week early Sept.', '01.09.2026', '07.09.2026'],
+      ['week in Aug.', '10.08.2026', '17.08.2026'], ['3 weeks', '01.09.2026', '21.09.2026']]) {
+      await typeRange(a, b);
+      iv[name] = Object.assign(await ivState(), { custom: await page.evaluate(() => PFApp.state.custom) });
+    }
+    const ivKeys = Object.fromEntries(Object.entries(iv).map(([k, v]) => [k, v.key]));
+    check('interval', 'interval per range: 1T/1W 30 min, 1M 2 h, 3M daily; custom week in the 30-min data 30 min, early-Sept. week 2 h, Aug. week daily, 3 weeks 2 h',
+      JSON.stringify(ivKeys) === JSON.stringify({ '1T': 'm30', '1W': 'm30', '1M': 'h2', '3M': 'day', 'week in 30 min': 'm30', 'week early Sept.': 'h2', 'week in Aug.': 'day', '3 weeks': 'h2' }) &&
+      iv['week early Sept.'].custom && iv['week early Sept.'].custom.from === '2026-09-01' && iv['week in Aug.'].custom.to === '2026-08-17', ivKeys);
+    check('interval', 'note under the chart: "Intervall: 30 Min." / "2 Std." / "1 Tag" and why it stepped down',
+      /^Intervall: 30 Min\.$/.test(iv['1W'].note) && /^Intervall: 2 Std\.$/.test(iv['1M'].note) && /^Intervall: 1 Tag$/.test(iv['3M'].note) &&
+      /^Intervall: 2 Std\. · keine 30-Min-Kurse für diesen Zeitraum$/.test(iv['week early Sept.'].note) &&
+      /^Intervall: 1 Tag · keine 30-Min- oder 2-Std-Kurse für diesen Zeitraum$/.test(iv['week in Aug.'].note) && /^Intervall: 2 Std\.$/.test(iv['3 weeks'].note),
+      Object.fromEntries(Object.entries(iv).map(([k, v]) => [k, v.note])));
+    check('interval', 'sub-daily charts start on the daily start value and end on the daily end value (headline = chart end); points per interval',
+      ['1W', '1M', 'week in 30 min', 'week early Sept.', '3 weeks'].every((k) => iv[k].endGap < 1e-6 && iv[k].baseGap < 1e-6) &&
+      iv['1W'].m === 161 && iv['1M'].m === 208 && iv['week early Sept.'].m === 37 && iv['1T'].m === 64 && iv['3M'].m === null,
+      Object.fromEntries(Object.entries(iv).map(([k, v]) => [k, { m: v.m, endGap: v.endGap, baseGap: v.baseGap }])));
+    check('interval', 'x axis: 1T unchanged (day words + 15:15), 1W one label per session "Mo 21.09.", 1M dates at week starts; drawdown on the same grid',
+      /^(Donnerstag|Gestern)$/.test(iv['1T'].x[0]) && iv['1T'].x.indexOf('15:15') > 0 &&
+      JSON.stringify(iv['1W'].x) === JSON.stringify(['Mo 21.09.', 'Di 22.09.', 'Mi 23.09.', 'Do 24.09.', 'Fr 25.09.']) &&
+      iv['1M'].x[0] === '26. Aug.' && iv['1M'].x.indexOf('7. Sept.') > 0 && ['1T', '1W', '1M', 'week early Sept.'].every((k) => iv[k].ddLen === iv[k].m),
+      { '1T': iv['1T'].x, '1W': iv['1W'].x, '1M': iv['1M'].x, earlySept: iv['week early Sept.'].x });
+    await shot(page, 'interval-2h-custom-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: 'custom 3-week range on the 2-h grid' });
+    // 1W: hover labels, drag both directions, click-follow-click, boxes, Esc, Gesamtrendite, Startwert, what-if, empty
+    await page.click('#rangeTabs [data-preset="1W"]');
+    await page.click('#modeToggle [data-mode="value"]');
+    await settle(page);
+    await hoverAt(page, 0);
+    const h0 = await page.evaluate(() => document.querySelector('#mainChart .pc-tip .tt-date').textContent);
+    await hoverAt(page, 0.47);
+    const h1 = await page.evaluate(() => ({ t: document.querySelector('#mainChart .pc-tip .tt-date').textContent, dd: document.getElementById('ddReadout').textContent }));
+    await page.mouse.move(1, 1);
+    check('interval', '1W hover: date + time ("Mi 23.09., 14:30"), the start point "Fr 18.09., Schluss"; drawdown read-out with the same label',
+      h0 === 'Fr 18.09., Schluss' && /^(Mo|Di|Mi|Do|Fr) \d\d\.\d\d\., \d\d:\d\d$/.test(h1.t) && h1.dd.indexOf(h1.t) === 0, { h0, h1 });
+    await drag(page, 0.3, 0.75);
+    const w1 = await page.evaluate(() => ({ pin: PFApp.sync.pinned(), btn: !document.getElementById('applyMeasure').hidden,
+      dates: Array.from(document.querySelectorAll('#mainChart .pc-tip--measure .tt-date')).map((n) => n.textContent), help: document.getElementById('chartHelp').textContent }));
+    const gw1 = await chartGeo(page), dw1 = await depotBoxCheck(page);
+    check('interval', '1W forward drag: pinned, both boxes with date + time labels, Mein Depot numbers match the engine on the 30-min grid, nothing covered, no "Zeitraum auf Auswahl setzen"',
+      !!w1.pin && w1.pin.b > w1.pin.a && !w1.btn && w1.dates.length === 2 && w1.dates.every((t) => /^(Mo|Di|Mi|Do|Fr) \d\d\.\d\d\., (\d\d:\d\d|Schluss)$/.test(t)) &&
+      gw1.tips.length === 2 && gw1.hits.length === 0 && gw1.inside && dw1.side && JSON.stringify(dw1.rows) === JSON.stringify(dw1.expect) && /^Messung .+, \d\d:\d\d – /.test(w1.help),
+      { w1, hits: gw1.hits, rows: dw1.rows, expect: dw1.expect });
+    await shot(page, 'measure-1w-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: '1W (30 min) measurement' });
+    await page.keyboard.press('Escape');
+    await drag(page, 0.9, 0.12);
+    const wrev = await page.evaluate(() => PFApp.sync.pinned()), dwrev = await depotBoxCheck(page);
+    await page.click('#modeToggle [data-mode="pl"]');
+    await settle(page);
+    const wpl = await page.evaluate(() => ({ pinned: !!PFApp.sync.pinned(), text: document.querySelector('#mainChart .pc-tip').textContent }));
+    const dwpl = await depotBoxCheck(page);
+    await page.click('#modeToggle [data-mode="value"]');
+    await page.keyboard.press('Escape');
+    await settle(page);
+    check('interval', '1W reverse drag (a < b, numbers match), Gesamtrendite keeps it with signed values and the same Mein Depot numbers, Esc clears',
+      !!wrev && wrev.a < wrev.b && JSON.stringify(dwrev.rows) === JSON.stringify(dwrev.expect) && wpl.pinned && /[+−-]\d/.test(wpl.text) &&
+      JSON.stringify(dwpl.rows) === JSON.stringify(dwrev.rows) && (await page.evaluate(() => PFApp.sync.measure === null)), { wrev, rows: dwrev.rows, pl: dwpl.rows });
+    const bw1 = await page.locator('#mainChart svg').boundingBox();
+    const Lw = await page.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
+    const yw = bw1.y + (Lw.top + Lw.bottom) / 2;
+    await page.mouse.click(bw1.x + Lw.padL + Lw.plotW * 0.7, yw);
+    await page.mouse.move(bw1.x + Lw.padL + Lw.plotW * 0.25, yw, { steps: 8 });
+    await settle(page);
+    const wf = await page.evaluate(() => ({ following: PFApp.sync.following(), m: PFApp.sync.measure, tips: Array.from(document.querySelectorAll('#mainChart .pc-tip')).filter((t) => !t.hidden).length }));
+    await page.mouse.click(bw1.x + Lw.padL + Lw.plotW * 0.25, yw);
+    await settle(page);
+    check('interval', '1W click-follow-click (leftwards): live boxes, the next click ends it',
+      wf.following && wf.m && wf.m.b < wf.m.a && wf.tips === 2 && (await page.evaluate(() => PFApp.sync.measure === null)), wf);
+    await page.mouse.move(1, 1);
+    await page.locator('#startValue').click();
+    await selectAllAndType(page, '100000');
+    await settle(page);
+    await drag(page, 0.2, 0.6);
+    const wsv = await page.evaluate(() => ({ base: PFApp.model().intra.base, end: PFApp.model().intra.value[PFApp.model().intra.last], ps: PFApp.model().ps.endValue }));
+    const dwsv = await depotBoxCheck(page);
+    await page.keyboard.press('Escape');
+    await page.locator('#startValue').click();
+    await selectAllAndType(page, '');
+    await settle(page);
+    check('interval', '1W with Startwert 100.000: grid scaled from 100.000 €, ends on the scaled daily end, measure numbers match',
+      Math.abs(wsv.base - 100000) < 1e-6 && Math.abs(wsv.end - wsv.ps) < 1e-6 && JSON.stringify(dwsv.rows) === JSON.stringify(dwsv.expect), { wsv, rows: dwsv.rows });
+    const wwi = await page.evaluate(() => {
+      const first = PFApp.model().assets[0].isin;
+      PFApp.state.overrides = { [first]: 0 };
+      PFApp.update();
+      const M = PFApp.model(), g = PFApp.charts.main.model.ghost;
+      const out = { ghost: !!g && g.values.length === M.intra.m, orig: !!M.intra.orig, legend: /Original/.test(document.getElementById('legend').textContent) };
+      PFApp.state.overrides = {};
+      PFApp.state.selected = new Set();
+      PFApp.update();
+      out.empty = document.querySelector('#mainChart .pc-msg').textContent;
+      out.intraNull = PFApp.model().intra === null;
+      out.note = document.getElementById('chartIv').textContent;
+      PFApp.state.selected = new Set(PFApp.model().assets.map((a) => a.isin));
+      PFApp.update();
+      return out;
+    });
+    const wbt = await badText(page);
+    check('interval', '1W what-if draws the dashed original on the same grid; empty selection shows the empty text (no NaN)',
+      wwi.ghost && wwi.orig && wwi.legend && /Keine Position/.test(wwi.empty) && wwi.intraNull && !wbt.nan && !wbt.undef, wwi);
+    // 1M: drag on the 2-h grid
+    await page.click('#rangeTabs [data-preset="1M"]');
+    await settle(page);
+    await drag(page, 0.15, 0.85);
+    const gm1 = await chartGeo(page), dm1 = await depotBoxCheck(page);
+    const lm1 = await page.evaluate(() => Array.from(document.querySelectorAll('#mainChart .pc-tip--measure .tt-date')).map((n) => n.textContent));
+    check('interval', '1M drag on the 2-h grid: boxes cover nothing, labels with time, Mein Depot numbers match',
+      gm1.tips.length === 2 && gm1.hits.length === 0 && gm1.inside && dm1.side && JSON.stringify(dm1.rows) === JSON.stringify(dm1.expect) &&
+      lm1.every((t) => /^(Mo|Di|Mi|Do|Fr) \d\d\.\d\d\., (\d\d:\d\d|Schluss)$/.test(t)), { lm1, hits: gm1.hits, rows: dm1.rows, expect: dm1.expect });
+    await shot(page, 'measure-1m-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: '1M (2 h) measurement' });
+    await page.keyboard.press('Escape');
+    await page.click('#rangeTabs [data-preset="YTD"]');
+    await settle(page);
+    check('interval', 'no console errors in the interval checks', page.errors.length === 0, page.errors.slice(0, 5));
 
     // ================================================================= periods
     const per = {};
@@ -740,6 +885,21 @@ async function depotBoxCheck(page) {
         for (const k of ['hold', 'assets']) { const b = pg.locator('#listToggles [data-list="' + k + '"]'); if ((await b.getAttribute('aria-pressed')) !== 'true') await b.click(); }
         await shot(pg, 'full-1400', { fullPage: true, note: 'full page at 1400 px, lists stacked' });
       }
+      // chart interval at this width: 1W (30 min) and 1M (2 h) measurements cover nothing, labels fit, no page overflow
+      await pg.evaluate(() => window.scrollTo(0, 0));
+      const ivw = {};
+      for (const [p, a, b] of [['1W', 0.2, 0.7], ['1M', 0.85, 0.1]]) {
+        await pg.click('#rangeTabs [data-preset="' + p + '"]');
+        await settle(pg);
+        await drag(pg, a, b);
+        const g = await chartGeo(pg), d = await depotBoxCheck(pg), o = await overflow(pg);
+        ivw[p] = { key: await pg.evaluate(() => PFApp.model().iv.key), tips: g.tips.length, hits: g.hits, inside: g.inside, rows: JSON.stringify(d.rows) === JSON.stringify(d.expect), ok: o.sw <= o.w,
+          x: await pg.evaluate(() => Array.from(document.querySelectorAll('#mainChart .pc-xlabel')).map((n) => n.textContent)) };
+        await pg.keyboard.press('Escape');
+      }
+      await pg.click('#rangeTabs [data-preset="YTD"]');
+      check('interval', w + ': 1W (30 min) and 1M (2 h) measurements cover nothing, Mein Depot numbers match, no page overflow',
+        ivw['1W'].key === 'm30' && ivw['1M'].key === 'h2' && Object.values(ivw).every((v) => v.tips === 2 && v.hits.length === 0 && v.inside && v.rows && v.ok && v.x.length >= 4), ivw);
       const btw = await badText(pg);
       check('general', w + ': no console errors, no NaN/undefined', pg.errors.length === 0 && !btw.nan && !btw.undef, { errors: pg.errors.slice(0, 5) });
     }
@@ -758,13 +918,26 @@ async function depotBoxCheck(page) {
     await addCard(mp, [['Nasdaq-100', '100']]);
     await mp.evaluate(() => window.scrollTo(0, 0));
     const sweepM = {};
-    for (const [mode, preset] of [['value', 'YTD'], ['value', '1T']]) {
+    for (const [mode, preset] of [['value', 'YTD'], ['value', '1T'], ['value', '1W'], ['pl', '1M']]) {
       await mp.click('#rangeTabs [data-preset="' + preset + '"]');
       await mp.click('#modeToggle [data-mode="' + mode + '"]');
       await settle(mp);
       sweepM[mode + '/' + preset] = await hoverSweep('m' + mode + preset);
     }
-    check('mobile', 'hover box with 3 shown benchmarks covers nothing (YTD/1T)', Object.values(sweepM).every((b) => b.length === 0), sweepM);
+    check('mobile', 'hover box with 3 shown benchmarks covers nothing (YTD/1T/1W/1M)', Object.values(sweepM).every((b) => b.length === 0), sweepM);
+    await mp.click('#modeToggle [data-mode="value"]');
+    await mp.click('#rangeTabs [data-preset="1W"]');
+    await settle(mp);
+    await drag(mp, 0.75, 0.2);
+    const gm1w = await chartGeo(mp), dm1w = await depotBoxCheck(mp);
+    const m1w = await mp.evaluate(() => ({ x: Array.from(document.querySelectorAll('#mainChart .pc-xlabel')).map((n) => n.textContent), note: document.getElementById('chartIv').textContent,
+      noteRight: document.getElementById('chartIv').getBoundingClientRect().right <= innerWidth }));
+    const o1w = await overflow(mp);
+    check('mobile', '375 1W (30 min): reverse drag, stacked boxes cover nothing, numbers match; session labels and interval note fit, no page overflow',
+      gm1w.tips.length === 2 && gm1w.tips[1].top >= gm1w.tips[0].bottom - 1 && gm1w.inside && gm1w.hits.length === 0 && JSON.stringify(dm1w.rows) === JSON.stringify(dm1w.expect) &&
+      m1w.x.length >= 3 && /Intervall: 30 Min\./.test(m1w.note) && m1w.noteRight && o1w.sw <= o1w.w, { gm1w: gm1w.hits, rows: dm1w.rows, m1w, o1w });
+    await shot(mp, 'measure-1w-375', { clip: { x: 0, y: 0, width: 375, height: 812 }, note: '1W measurement on a phone' });
+    await mp.keyboard.press('Escape');
     await mp.click('#rangeTabs [data-preset="YTD"]');
     const cw = await mp.evaluate(() => { const g = document.getElementById('benchCards').getBoundingClientRect(); return Array.from(document.querySelectorAll('#benchCards .bb-card')).map((c) => Math.round(c.getBoundingClientRect().width - g.width)); });
     check('mobile', 'cards full width', cw.every((d) => Math.abs(d) <= 1), cw);
@@ -811,6 +984,28 @@ async function depotBoxCheck(page) {
     const tclear = await tp.evaluate(() => PFApp.sync.measure === null);
     check('mobile', 'touch: drag pins a measurement (boxes cover nothing); a tap outside keeps it; a tap in the plot clears it',
       !!tpin && tpin.b > tpin.a && tgeo.tips.length === 2 && tgeo.hits.length === 0 && tkeep && tclear, { tpin, tips: tgeo.tips.length, hits: tgeo.hits, tkeep, tclear });
+    // touch on the 30-min week: tap sets a start point (label with time), drag pins, a tap in the plot clears
+    await tp.touchscreen.tap((await tp.locator('#rangeTabs [data-preset="1W"]').boundingBox()).x + 10, (await tp.locator('#rangeTabs [data-preset="1W"]').boundingBox()).y + 10);
+    await settle(tp);
+    const tb2 = await tp.locator('#mainChart svg').boundingBox();
+    const TL2 = await tp.evaluate(() => ({ key: PFApp.model().iv.key, padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
+    const ty2 = tb2.y + (TL2.top + TL2.bottom) / 2, tx2 = (f) => tb2.x + TL2.padL + TL2.plotW * f;
+    await tp.touchscreen.tap(tx2(0.4), ty2);
+    await settle(tp);
+    const wt1 = await tp.evaluate(() => ({ following: PFApp.sync.following(), help: document.getElementById('chartHelp').textContent }));
+    await tp.touchscreen.tap(tx2(0.4), ty2);
+    await settle(tp);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: tx2(0.2), y: ty2 }] });
+    for (let k = 1; k <= 10; k++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: tx2(0.2 + 0.6 * k / 10), y: ty2 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await settle(tp);
+    const wtpin = await tp.evaluate(() => PFApp.sync.pinned()), wtgeo = await chartGeo(tp), wtd = await depotBoxCheck(tp);
+    await tp.touchscreen.tap(tx2(0.5), ty2);
+    await settle(tp);
+    const wtclear = await tp.evaluate(() => PFApp.sync.measure === null);
+    check('mobile', 'touch 1W (30 min): tap = start point, drag pins (boxes cover nothing, numbers match), tap in the plot clears',
+      TL2.key === 'm30' && wt1.following && !!wtpin && wtpin.b > wtpin.a && wtgeo.tips.length === 2 && wtgeo.hits.length === 0 &&
+      JSON.stringify(wtd.rows) === JSON.stringify(wtd.expect) && wtclear, { key: TL2.key, wt1, wtpin, hits: wtgeo.hits, rows: wtd.rows, wtclear });
     check('general', 'touch page: no console errors', tp.errors.length === 0, tp.errors.slice(0, 5));
   } catch (e) {
     check('script', 'acceptance script ran to the end', false, String(e && e.stack || e).split('\n').slice(0, 4).join(' | '));
