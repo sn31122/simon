@@ -7,7 +7,7 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 27.09.2026 08:13 Berlin): 188 trading days 2026-01-02 … 2026-09-25; last row 2026-09-25 = final; 30-min (intraday.csv): 6 sessions 2026-09-18 … 2026-09-25; 2-h (intraday_2h.csv): 24 sessions 2026-08-25 … 2026-09-25; engine tests: 61 passed, 0 failed; crosscheck: 7729/7729 checks passed.
+- Data status (update 27.09.2026 07:03 Berlin): 188 trading days 2026-01-02 … 2026-09-25; last row 2026-09-25 = final; 30-min (intraday.csv): 6 sessions 2026-09-18 … 2026-09-25; 2-h (intraday_2h.csv): 24 sessions 2026-08-25 … 2026-09-25; engine tests: 57 passed, 0 failed; crosscheck: 7492/7492 checks passed.
 <!-- data-status:end -->
 (The block above is rewritten by `--finish` / `--finish-add`; do not edit it by hand.)
 
@@ -20,21 +20,6 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   hover band that keeps the plot height with up to 3 shown benchmarks, list toggles (Portfolio / Einzelwerte, side by side
   from ~1900 px), 3M/6M pills, section order Lists → Benchmark-Vergleich → Drawdown → Monatsrenditen → Kennzahlen → Risiko &
   Korrelation → Hinweise, touch: a tap outside the chart ends a tapped measurement. Details: `SPEC.md`.
-- **Second round of 27.09. (branch `claude/sharp-ride-7wdm2j`):** a measurement shows one box per shown benchmark (e.g.
-  Energie next to Mein Depot); "Mein Depot" is editable like the other cards (rows = today's value shares, starting as the
-  fetched allocation, ↺ restores it; edited shares = constant quantities); card rows show ~4 lines and scroll; the fields
-  are "Startwert (Yacht)" and "Benchmark (€)" (default: the real Mein Depot value). Browser acceptance: 94 of 94 checks.
-  Then: the overview shows "Yacht" + value and beside it one block per shown benchmark (value + € change over the period
-  in the amount of "Benchmark (€)", like "Echt"; engine `benchmarkRealValue`), the headline's big figure is gone and the
-  space between bar, overview and tabs is smaller. Checked with engine tests, crosscheck and screenshots at 1903/375 px;
-  `tools/acceptance-check.cjs` only adapted (no `#hlMain` tap target; 375 px checks scroll the chart into view), not rerun.
-- **Depot-Historie (27.09.):** a locked benchmark card (hidden by default, after Mein Depot) with the user's real depot history,
-  replayed from the Scalable transaction export (99 executed security trades 03.12.2025–24.09.2026, `data/transactions.csv`):
-  securities only (no cash: it does not reconcile from 11.08.), time-weighted return, "Echt" = real € gain without the
-  purchases/sales. YTD: +37,53 % / +63.442,26 € (Mein Depot backcast: +8,43 % / +23.223,54 €). The Broadcom call warrant
-  DE000PK3XT09 is not fetched (user) and counts at its trade price. "Mein Depot" is unchanged. **Newer export:**
-  `python data/import_transactions.py <ScalableCapital-Broker-Transactions.csv>` then `python data/build_data.py` (never
-  commit the raw export; build warnings name unpriced holdings and end holdings that differ from `my_depot`).
 - **Chart interval per range:** 1T and 1W 30 min, 1M 2 h, 3M and longer daily; custom ranges by length (≤ 7 days 30 min,
   ≤ 31 days 2 h, else daily), stepping down where finer data was not collected (a note under the chart shows the interval
   and why it stepped down). Main chart, hover, measurement boxes and drawdown follow the interval; Kennzahlen,
@@ -79,15 +64,6 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 - "Monatsrenditen" buys custom cards on the first data day (02.01.2026), not at the selected period start; the chart and
   tables use the period start.
 - Beyond 5 custom cards the colours of the palette get closer to each other.
-- With 3 or more shown benchmarks the benchmark boxes of a measurement no longer fit beside the Yacht box: they go under
-  it (one wrapping row), so the band gets taller and the plot shorter (decided without asking; change on request).
-- "Echt" for Energie / own cards = their € change had they been worth "Benchmark (€)" today (bought at the period start);
-  for an edited Mein Depot the same with its constant quantities (decided without asking).
-- Overview benchmark blocks, decided without asking (change on request): every benchmark is worth exactly "Benchmark (€)"
-  on the last day, so with a period ending today Mein Depot and Energie show the same value (298.811,25 €) and differ only
-  in their change; the "Yacht" label is always shown (also with no benchmark); "Seit Kauf" labels the benchmarks
-  "seit 02.01.2026" (MAX) instead of "seit Kauf"; with an empty selection the blocks stay (they do not depend on the
-  positions); on phones two blocks per row under the Yacht value, which pushes the chart further down with 3+ benchmarks.
 - Chart interval details decided without asking (change on request): a custom range's length counts from its first to its
   last trading day, not the typed dates (a Saturday-to-Saturday week = Mon–Fri, 30 min); the last point of a day reads
   "23:00" in hover/measurement (only a chart's start point reads "Schluss"); "Zeitraum auf Auswahl setzen" stays hidden on
