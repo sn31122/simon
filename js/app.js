@@ -33,9 +33,11 @@
   ctx0.positions.forEach(function (p) { ORIG_SHARES[p.isin] = Number(p.shares); });
 
   // ------------------------------------------------------------------ constants
-  // benchmark cards get the first free colour in this order (creation order); none close to --accent, --neg or the greys
-  var BENCH_COLORS = ['#6ea8ff', '#f5b041', '#b39ddb', '#f48fb1', '#aed581', '#fff176',
-    '#ea80fc', '#8c9eff', '#81c784', '#ffcc80', '#a1887f', '#e6ee9c'];
+  // benchmark cards get the first free colour in this order (creation order; a deleted card's colour is reused).
+  // Chosen by OKLab distance (ΔE × 100): the first five differ by ≥ 14 from each other and from --accent #28ebcf,
+  // --neg #e78e78 (the portfolio line below its start value) and the white "Mein Depot"; all twelve by ≥ 9.
+  var BENCH_COLORS = ['#6ea8ff', '#ffb300', '#ba68c8', '#aeea00', '#ec407a', '#81d4fa',
+    '#4caf50', '#a1887f', '#fff176', '#7986cb', '#e040fb', '#ff80ab'];
   var DEPOT_ID = 'my_depot', DEPOT_COLOR = '#f2f3f4';          // "Mein Depot" (the real depot) is always white
   var CONTEXT_DAYS = 21;                       // holdings list, period 1T: grey history shown before the last day
   var ALL = ctx.positions.map(function (p) { return p.isin; });
@@ -737,10 +739,15 @@
     for (var k = 0; k < BENCH_COLORS.length; k++) if (!used[BENCH_COLORS[k]]) return BENCH_COLORS[k];
     return BENCH_COLORS[cardSeq % BENCH_COLORS.length];          // more cards than colours
   }
-  function nextName() {
+  function nextName(except) {
     var taken = {};
-    state.cards.forEach(function (c) { taken[c.name.trim() || c.defName] = 1; });
+    state.cards.forEach(function (c) { if (c !== except) taken[c.name.trim() || c.defName] = 1; });
     for (var k = 1; ; k++) if (!taken['Benchmark ' + k]) return 'Benchmark ' + k;
+  }
+  /** Name emptied and left: its default name, or the next free "Benchmark N" when another card uses that meanwhile. */
+  function defaultName(c) {
+    var clash = state.cards.some(function (o) { return o !== c && cardName(o) === c.defName; });
+    return clash ? nextName(c) : c.defName;
   }
   function cardName(c) { return c.name.trim() || c.defName; }
   /** Percent field: German decimal ("12,5"), empty = 0; null = invalid. */
@@ -750,9 +757,9 @@
     var v = F.parseDE(t);
     return isNum(v) && v >= 0 ? v : null;
   }
-  /** 100 -> "100", 12.5 -> "12,5", 33.333 -> "33,33" */
+  /** 100 -> "100", 12.5 -> "12,5", 49.985 -> "49,985" (3 decimals, so a total just outside ± 0,01 never shows as valid) */
   function fmtShare(v) {
-    var s = (Math.round(v * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
+    var s = (Math.round(v * 1000) / 1000).toFixed(3).replace(/\.?0+$/, '');
     return F.num(+s, (s.split('.')[1] || '').length);
   }
   /** Bookkeeping of a card's inputs: total % (plain sum of the rows), weights {ISIN: %}, validity and the footer hint. */
@@ -765,7 +772,7 @@
       if (v > 0 && r.isin) { weights[r.isin] = (weights[r.isin] || 0) + v; nIns++; } else if (v > 0) orphan = true;
     });
     var ok100 = !bad && Math.abs(total - 100) <= 0.01 + 1e-9;
-    var hint = bad ? 'Ungültige Prozentzahl' :
+    var hint = bad ? 'Ungültige Prozentzahl (z. B. 12,5)' :
       !ok100 ? (total < 100 ? 'Noch ' + fmtShare(100 - total) + ' % verteilen' : fmtShare(total - 100) + ' % zu viel') :
       orphan ? 'Instrument fehlt' : !nIns ? 'Instrument wählen' : '';
     return { total: total, weights: weights, ok100: ok100, valid: !hint, hint: hint };
@@ -852,7 +859,10 @@
       makeEl('<button type="button" class="bb-add" data-act="new" title="Eigene Benchmark aus Instrumenten und Anteilen anlegen">' +
         '<span aria-hidden="true">+</span>Benchmark</button>');
     if (box.lastChild !== add) box.appendChild(add);
-    if (drop) { if (!drop.inp.isConnected) closeDrop(); else placeDrop(); }
+    if (drop) {
+      if (!drop.inp.isConnected) closeDrop();
+      else { placeDrop(); requestAnimationFrame(placeDrop); }     // again once the rest of update() (legend above the chart) may have moved the cards
+    }
   }
   function patchCard(el, o, M) {
     var c = o.c, x = M && M.byId[o.id], shown = c ? c.show : !!state.fixedOn[o.id], r = x ? get(x.st, 'totalReturn') : null;
@@ -879,7 +889,10 @@
     hint.textContent = info.valid ? 'Kauf am ' + F.date(ctx.dates[M.R.start], 'short') + ', dann gehalten' : info.hint;
     c.rows.forEach(function (rw) {
       var p = el.querySelector('[data-row="' + rw.id + '"] .bb-pct');
-      if (p) p.classList.toggle('is-invalid', pctVal(rw.pct) === null);
+      if (!p) return;
+      var bad = pctVal(rw.pct) === null;
+      p.classList.toggle('is-invalid', bad);
+      if (bad) p.setAttribute('aria-invalid', 'true'); else p.removeAttribute('aria-invalid');
     });
     var ni = el.querySelector('.bb-name');
     if (ni && document.activeElement !== ni && ni.value !== c.name) ni.value = c.name;
@@ -1021,16 +1034,17 @@
   }
   /** After a pick: on to the percent field of the same row. */
   function toPct(o) { if (o) focusCard(o.c.id, '[data-row="' + o.r.id + '"] .bb-pct', false, true); }
-  /** Below the field (above when there is more room there), at least 300 px wide, inside the window. */
+  /** Below the field (above when there is more room there), at least 340 px wide, inside the window. */
   function placeDrop() {
     if (!drop) return;
     var row = drop.inp.closest('.bb-row') || drop.inp, rr = row.getBoundingClientRect(), ir = drop.inp.getBoundingClientRect();
     if (!ir.width) { closeDrop(); return; }
-    var vw = document.documentElement.clientWidth, vh = window.innerHeight, bar = $('topBar');
-    var w = Math.min(Math.max(rr.width, 300), vw - 16), left = Math.max(8, Math.min(rr.left, vw - 8 - w));
+    var vv = window.visualViewport, bar = $('topBar');
+    var vw = document.documentElement.clientWidth, vh = vv ? Math.min(window.innerHeight, vv.offsetTop + vv.height) : window.innerHeight;  // above an on-screen keyboard
+    var w = Math.min(Math.max(rr.width, 340), vw - 16), left = Math.max(8, Math.min(rr.left, vw - 8 - w));
     dropEl.style.width = w + 'px';
     dropEl.style.maxHeight = 'none';
-    var need = Math.min(dropEl.scrollHeight, 320), below = vh - ir.bottom - 12;
+    var need = Math.min(dropEl.scrollHeight + dropEl.offsetHeight - dropEl.clientHeight, 320), below = vh - ir.bottom - 12;   // + borders
     var above = ir.top - (bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0) - 12;
     var up = below < need && above > below, h = Math.max(96, Math.min(need, up ? above : below));
     dropEl.style.maxHeight = h + 'px';
@@ -1116,7 +1130,7 @@
         }, 0);
       } else if (f === 'name') {
         o = ctxOf(t);
-        if (o.c && !o.c.name.trim()) { o.c.name = o.c.defName; t.value = o.c.name; benchChanged(); }
+        if (o.c && !o.c.name.trim()) { o.c.name = o.c.defName = defaultName(o.c); t.value = o.c.name; t.placeholder = o.c.defName; benchChanged(); }
       }
     });
     dropEl.addEventListener('mousedown', function (ev) { ev.preventDefault(); });          // the field keeps the focus
@@ -1129,6 +1143,7 @@
       if (it && drop && +it.getAttribute('data-k') !== drop.hi) setHi(+it.getAttribute('data-k'));
     });
     window.addEventListener('resize', placeDrop);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', placeDrop);
   }
 
   function renderHeadline(M) {
@@ -1205,7 +1220,7 @@
         label: 'Gesamtrendite', title: 'Endwert / Startwert − 1 · G/V = Endwert − Startwert',
         value: colored(get(s, 'totalReturn'), pct(get(s, 'totalReturn'))),
         extra: s ? colored(s.pl, eurS(s.pl)) : '',
-        bench: bench(pct(get(b, 'totalReturn')) + ' · ' + eurS(get(b, 'pl')))
+        bench: bench(pct(get(b, 'totalReturn')) + ' · ' + eurS(M.p ? get(b, 'pl') : null))   // € only relative to a portfolio
       }),
       card({
         label: 'Rendite p.a.', title: 'CAGR = (1 + Gesamtrendite)^(365 / Kalendertage) − 1', weak: weak,
