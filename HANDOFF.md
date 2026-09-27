@@ -28,6 +28,13 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   in the amount of "Benchmark (€)", like "Echt"; engine `benchmarkRealValue`), the headline's big figure is gone and the
   space between bar, overview and tabs is smaller. Checked with engine tests, crosscheck and screenshots at 1903/375 px;
   `tools/acceptance-check.cjs` only adapted (no `#hlMain` tap target; 375 px checks scroll the chart into view), not rerun.
+- **Depot-Historie (27.09.):** a locked benchmark card (hidden by default, after Mein Depot) with the user's real depot history,
+  replayed from the Scalable transaction export (99 executed security trades 03.12.2025–24.09.2026, `data/transactions.csv`):
+  securities only (no cash: it does not reconcile from 11.08.), time-weighted return, "Echt" = real € gain without the
+  purchases/sales. YTD: +37,53 % / +63.442,26 € (Mein Depot backcast: +8,43 % / +23.223,54 €). The Broadcom call warrant
+  DE000PK3XT09 is not fetched (user) and counts at its trade price. "Mein Depot" is unchanged. **Newer export:**
+  `python data/import_transactions.py <ScalableCapital-Broker-Transactions.csv>` then `python data/build_data.py` (never
+  commit the raw export; build warnings name unpriced holdings and end holdings that differ from `my_depot`).
 - **Chart interval per range:** 1T and 1W 30 min, 1M 2 h, 3M and longer daily; custom ranges by length (≤ 7 days 30 min,
   ≤ 31 days 2 h, else daily), stepping down where finer data was not collected (a note under the chart shows the interval
   and why it stepped down). Main chart, hover, measurement boxes and drawdown follow the interval; Kennzahlen,

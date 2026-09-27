@@ -13,7 +13,9 @@ Canonical folder: `<repository-root>`. Canonical page: `dashboard.html` (open di
 | Path | Role | Edit? |
 |---|---|---|
 | `data/positions.csv` | holdings: isin, name, short, group, shares, ref_date, ref_price, gv_ref (G/V seit Kauf at ref_date, from the app), cost_basis (= shares·ref_price − gv_ref), note | only on explicit user instruction (buy/sell/correction) |
-| `data/benchmarks.csv` | presets of the benchmark cards: id, name, holdings, description. `ISIN:qty|…` = locked card with fixed quantities (`my_depot` "Mein Depot"); `ISIN:20%|…` (total 100 %) = weighting preset that starts as an editable own card, hidden in the chart (`energie` "Energie", user 27.09.). Older rows are archived in `data/source/benchmarks_until_2026-09-27.csv` | only on user instruction; every holding ISIN must be a price column |
+| `data/benchmarks.csv` | presets of the benchmark cards: id, name, holdings, description. `ISIN:qty|…` = locked card with fixed quantities (`my_depot` "Mein Depot"); `ISIN:20%|…` (total 100 %) = weighting preset that starts as an editable own card, hidden in the chart (`energie` "Energie", user 27.09.). `transactions` = the real depot replayed from `data/transactions.csv` (`depot_historie` "Depot-Historie", locked, hidden in the chart; user 27.09.). Older rows are archived in `data/source/benchmarks_until_2026-09-27.csv` | only on user instruction; every holding ISIN must be a price column |
+| `data/transactions.csv` | the user's executed security trades from the Scalable transaction export (date,time (Berlin),isin,name,type Buy/Sell/Corporate action,shares signed + buy / − sell,price; no references, cash rows, fees or taxes) – the `depot_historie` preset "Depot-Historie" (`benchmarks.csv` holdings `transactions`) replays it (securities only, time-weighted; see SPEC.md) | only through `data/import_transactions.py` |
+| `data/import_transactions.py` | `python data/import_transactions.py <ScalableCapital-Broker-Transactions.csv>` → writes `data/transactions.csv`, then run `python data/build_data.py` (it warns about ISINs held at a close without a price column; the Broadcom warrant DE000PK3XT09 is known and valued at its trade price). Never commit the raw export | when the user gives a newer export |
 | `data/instruments.csv` | isin, name, short, type (Aktie/ETF/ETC/ETP) for **every** price column – the instruments the benchmark cards can pick | add a row for every new column (before `--finish-add`) |
 | `data/prices_daily.csv` | wide table: `date,status,asof_utc,<ISIN>…` – one row per trading day, EUR mid close; `status` final/intraday (only the last row may be intraday, `asof_utc` only there); empty cell = no quote | only through `data/update_prices.py` |
 | `data/intraday.csv` | long table `isin,timestamp_utc,price`: the 30-min points (seven_days) of **every collected session** (kept forever, user 27.09.) | only through `data/update_prices.py` |
@@ -63,6 +65,11 @@ New instrument (only on user instruction; UPDATE_PRICES.md "New instrument"): `s
 - Chart interval (user, 27.09.; `PFEngine.chartInterval` / `gridFrame`): 1T and 1W 30 min, 1M 2 h, 3M and longer daily; a custom Von/Bis range by its length (≤ 7 calendar days 30 min, ≤ 31 days 2 h, else daily). A finer interval is used only when every session of the range was collected, otherwise it steps down (30 min → 2 h → daily; a note under the chart says so). Main chart, hover, measurement boxes and the drawdown chart follow it; Kennzahlen, Monatsrenditen, tables and sparklines stay daily. Grid rules (`build_data.py`): Berlin slots 07:30–23:00 (30 min) / 07:30…21:30 + 23:00 (2 h), a point goes to the nearest slot (the latest wins), a final day's 23:00 slot is its daily close; per session the previous daily close until the first quote, then forward-fill. A sub-daily chart starts at the daily close of the range start (1T: the previous session as grey context) and benchmark cards are bought there.
 
 ## Tests and verification
+
+**Testing scope (user rule, 27.09.2026): tests only check functionality and the correctness of values – don't overdo it.** New
+calculations get focused engine unit tests (and the crosscheck stays green); UI changes get a quick look (renders, no console
+errors, desktop + 375 px). No exhaustive edge-case suites, no new browser-acceptance checks unless the user asks – the user
+checks the page themselves. `tools/acceptance-check.cjs` is optional, not part of every change.
 
 ```
 node tests/engine.test.cjs

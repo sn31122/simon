@@ -41,8 +41,10 @@
   var DEPOT_ID = 'my_depot', DEPOT_COLOR = '#f2f3f4';          // "Mein Depot" (the real depot) is always white
   var CONTEXT_DAYS = 21;                       // holdings list, period 1T: grey history shown before the last day
   var ALL = ctx.positions.map(function (p) { return p.isin; });
-  var BIDX = {};                               // locked benchmarks of data/benchmarks.csv other than Mein Depot -> colour slot
-  ctx.benchmarks.filter(function (b) { return b.id !== DEPOT_ID; }).forEach(function (b, k) { BIDX[b.id] = k; });
+  // locked benchmarks of data/benchmarks.csv other than Mein Depot (Depot-Historie) -> colour slot from the second palette
+  // entry on, so the first card (Energie) keeps the blue it had before Depot-Historie existed
+  var BIDX = {};
+  ctx.benchmarks.filter(function (b) { return b.id !== DEPOT_ID; }).forEach(function (b, k) { BIDX[b.id] = k + 1; });
   function colorOf(id) { return id === DEPOT_ID ? DEPOT_COLOR : BENCH_COLORS[(BIDX[id] || 0) % BENCH_COLORS.length]; }
   var ASOF = META.last_asof_utc ? F.asofBerlin(META.last_asof_utc) : '';
 
@@ -55,6 +57,7 @@
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
     selected: new Set(ALL), sort: { key: 'contrib', dir: -1 }, measure: null, hover: null,
     sinceBuy: false, holdSort: 'value-desc',   // sinceBuy: pill "Seit Kauf" (chart shows MAX)
+    mpPick: 'yacht',                           // Messung panel: whose holdings the list shows ('yacht' or a benchmark id)
     showHold: true, showAssets: false,         // list section toggles "Portfolio" / "Einzelwerte" (independent; not persisted)
     whatIf: HAS_WHATIF, overrides: {}                // Stück are always editable (what-if): {ISIN: shares}; not persisted
   };
@@ -223,7 +226,7 @@
     // every locked benchmark + every valid card (their returns show on the cards); selB = the ones shown in the chart
     var benches = benchDefs().map(function (d) {
       var s = E.benchmark(ctx, d.b, R.start, R.end, base);
-      return { b: d.b, id: d.id, name: d.name, color: d.color, show: d.show, hold: d.hold, real: d.real, s: s, st: s ? E.stats(s, { rf: rf }) : null };
+      return { b: d.b, id: d.id, name: d.name, color: d.color, show: d.show, hold: d.hold, tx: d.tx, real: d.real, s: s, st: s ? E.stats(s, { rf: rf }) : null };
     });
     var byId = {};
     benches.forEach(function (x) { byId[x.id] = x; });
@@ -504,6 +507,8 @@
         (get(w, 'base') !== null ? ' (' + eur(w.base) + ')' : '')) +
       row('<span class="tt-dl">Echt' + (tgtTxt ? ' (' + tgtTxt + ')' : '') + '</span>', real, eurS(real),
         (x.real ? 'Echt: tatsächliche Veränderung deines Depots, hochgerechnet auf den Wert aus „Benchmark (€)“' + tgtNote :
+          x.tx ? 'Echt: tatsächlicher Gewinn deines Depots laut Transaktionen (Wertänderung ohne die Käufe und Verkäufe), ' +
+            'hochgerechnet auf den Wert aus „Benchmark (€)“' + tgtNote :
           'Echt: Veränderung von „' + x.name + '“, wenn es heute (' + today + ') so viel wert wäre wie „Benchmark (€)“' + tgtNote +
           (x.hold ? '' : ' – gekauft am ' + F.date(ctx.dates[cur.R.start], 'short') + ', dann gehalten'))) +
       '</div>';
@@ -684,6 +689,96 @@
   }
 
   /**
+   * Messung panel (3-column layout, user 27.09.): the Yacht and every shown benchmark (return, € change, max. drawdown
+   * within the span) and every selected position (return, € change) over the measured span – live while measuring – or
+   * over the whole period while nothing is measured. Numbers: the chart's series (daily or the sub-daily frame), "Echt"
+   * like the benchmark boxes, positions from engine.assetsSpan. Registered with Sync, so it redraws with the overlays;
+   * skipped while the panel is hidden (< 1200px).
+   */
+  var mpKey = '', mpStamp = 0;
+  function renderMeasPanel(meas) {
+    var el = $('measPanel'), M = cur;
+    if (!el || !M) return;
+    if (el.offsetParent === null) { mpKey = ''; return; }
+    var I = M.intra, p = M.p, span = !!(meas && meas.a != null && meas.b != null && meas.a !== meas.b);
+    var first = I ? Math.max(0, I.ctxEnd) : 0, last = I ? I.last : (p ? p.value.length - 1 : 0);
+    var a = span ? Math.max(0, Math.min(meas.a, meas.b)) : first, b = span ? Math.min(last, Math.max(meas.a, meas.b)) : last;
+    var key = mpStamp + '|' + span + '|' + a + '|' + b + '|' + (meas && meas.live ? 1 : 0);
+    if (key === mpKey) return;
+    mpKey = key;
+    var lbl = function (k) { return I ? slotLabel(I, k) : F.date(ctx.dates[M.R.start + k], 'short'); };
+    var sub = $('mpSub');
+    sub.textContent = span ? lbl(a) + ' – ' + lbl(b) : 'Zeitraum ' + periodText(M.R);
+    sub.classList.toggle('is-live', span);
+    sub.title = span ? (meas.live ? 'Messung läuft' : 'Gemessener Zeitraum') + ' – ohne Messung zeigt das Panel den ganzen Zeitraum' :
+      'Ganzer Zeitraum – eine Messung im Chart zeigt hier den gemessenen Abschnitt';
+    if (!p || b <= a) {
+      $('mpTable').innerHTML = '<tbody><tr><td class="mp-empty">' + esc(!p ? emptyText() : 'Zeitraum zu kurz') + '</td></tr></tbody>';
+      $('mpList').innerHTML = '';
+      $('mpNote').textContent = '';
+      return;
+    }
+    var vals = I ? I.value : p.value, frame = I ? I.frame : null, i = I ? a : M.R.start + a, j = I ? b : M.R.start + b, tgt = depotTarget();
+    // the list below shows the holdings of the picked row (Yacht or a shown benchmark; user 27.09.: in the card's order)
+    var pick = state.mpPick;
+    function row(id, name, color, v, eur, eurTitle) {
+      var w = E.intradayWindow(v, a, b), dd = E.drawdown(v.slice(a, b + 1)), r = get(w, 'ret');
+      return '<tr data-mp="' + esc(id) + '" tabindex="0" class="' + (id === pick ? 'is-sel' : '') + '" title="Klicken: Positionen von „' + esc(name) + '“ unten anzeigen">' +
+        '<td><span class="mp-nm" style="--c:' + color + '"><i></i><span>' + esc(name) + '</span></span></td>' +
+        '<td class="' + sgn(r) + '">' + pct(r) + '</td><td class="' + sgn(eur) + '" title="' + esc(eurTitle) + '">' + eurS(eur, 0) + '</td>' +
+        '<td class="' + (dd && dd.maxDD < 0 ? 'neg' : '') + '">' + pctU(dd ? dd.maxDD : null, 1) + '</td></tr>';
+    }
+    var list = I ? I.benches.filter(function (o) { return o.s; }).map(function (o) { return { x: o.x, v: o.s.value }; }) :
+      M.selB.filter(function (x) { return x.s; }).map(function (x) { return { x: x, v: x.s.value }; });
+    var picked = null;
+    list.forEach(function (o) { if (o.x.id === pick) picked = o.x; });
+    if (!picked) pick = 'yacht';                  // the picked benchmark was hidden: back to the Yacht
+    var yw = E.intradayWindow(vals, a, b), html = row('yacht', 'Yacht', 'var(--accent)', vals, get(yw, 'pl'), 'Wertänderung des Portfolios (Startwert-skaliert)');
+    list.forEach(function (o) {
+      var real = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, o.x.b, i, j, { frame: frame, target: tgt, buyAt: M.R.start })) : null;
+      html += row(o.x.id, o.x.name, o.x.color, o.v, real, 'Echt: €-Veränderung bei einem Wert von ' + eur(tgt, { dec: 0 }) + ' („Benchmark (€)“) heute');
+    });
+    $('mpTable').innerHTML = '<thead><tr><th></th><th>Rendite</th><th title="Yacht: Wertänderung · Benchmarks: „Echt“ wie in der Messbox">G/V €</th>' +
+      '<th title="Größter Rückgang innerhalb des Zeitraums">Max. DD</th></tr></thead><tbody>' + html + '</tbody>';
+    var rows, note, SORTS = { 'name-asc': 'Name A–Z', 'name-desc': 'Name Z–A', 'ret-asc': 'niedrigste Rendite', 'ret-desc': 'höchste Rendite',
+      'value-asc': 'kleinste Position', 'value-desc': 'größte Position' };
+    if (!picked) {                                 // Yacht: sorted like the Portfolio list (its ⋮ menu)
+      rows = E.assetsSpan ? E.assetsSpan(ctx, { selected: state.selected, scale: I ? I.scale : p.scale, a: i, b: j, frame: frame }) : [];
+      rows = sortHoldRows(rows.filter(function (r) { return r.selected; }), false);
+      note = 'Yacht · ' + rows.length + ' · ' + (SORTS[state.holdSort] || SORTS['value-desc']);
+    } else {                                       // a benchmark: its holdings in the order of its card's rows, € = "Echt"
+      var bs = E.benchmarkSpan ? E.benchmarkSpan(ctx0, picked.b, { a: i, b: j, frame: frame, target: tgt, buyAt: M.R.start }) : null;
+      var card = cardById(picked.id), order = {};
+      (card ? card.rows : []).forEach(function (r, k) { if (r.isin && !(r.isin in order)) order[r.isin] = k; });
+      rows = (bs || []).map(function (r, k) {
+        var ins = INSTR_BY[r.isin] || { name: r.isin, short: r.isin };
+        return { isin: r.isin, name: ins.name, short: ins.short, ret: r.ret, pl: r.pl, k: r.isin in order ? order[r.isin] : 1e6 + k };
+      }).sort(function (x, y) { return x.k - y.k; });
+      note = picked.name + ' · ' + (!bs ? 'keine Einzelwerte' : rows.length + (card && card.rows.length ? ' · wie die Karte' : ' · nach Wert'));
+    }
+    $('mpNote').textContent = note;
+    $('mpList').innerHTML = rows.map(function (r) {
+      var tip = picked ? ' · € = Anteil an „Echt“' + (picked.b && picked.b.transactions ? ' (Käufe/Verkäufe im Zeitraum herausgerechnet; % = Gewinn auf eingesetztes Kapital)' : '') :
+        ' · Beitrag ' + pp(r.contrib) + ' %-Punkte';
+      return '<div class="mp-row" title="' + esc(r.name + ' · ' + r.isin + tip) + '">' + avatarHTML(r, 'av--sm') +
+        '<span class="mp-n">' + esc(r.short || r.name) + '</span>' +
+        '<span class="mp-v"><b class="' + sgn(r.ret) + '">' + pct(r.ret) + '</b><span>' + eurS(r.pl) + '</span></span></div>';
+    }).join('');
+  }
+  sync.add({ drawOverlay: function (S) { renderMeasPanel(S && S.measure); } });
+  function pickMeasPanel(ev) {
+    var tr = ev.target.closest && ev.target.closest('tr[data-mp]');
+    if (!tr || (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ')) return;
+    if (ev.type === 'keydown') ev.preventDefault();
+    state.mpPick = tr.getAttribute('data-mp');
+    mpStamp++;
+    renderMeasPanel(sync.measure);
+    var again = $('mpTable').querySelector('tr[data-mp="' + state.mpPick.replace(/["\\]/g, '\\$&') + '"]');
+    if (again && ev.type === 'keydown') again.focus();
+  }
+  if ($('mpTable')) { $('mpTable').addEventListener('click', pickMeasPanel); $('mpTable').addEventListener('keydown', pickMeasPanel); }
+
+  /**
    * Muted note under the chart: the chart's interval ("Intervall: 30 Min." / "2 Std." / "1 Tag") and, when the range
    * stepped down to a coarser grid, why ("keine 30-Min-Kurse für diesen Zeitraum"). The title lists what was collected.
    */
@@ -801,11 +896,19 @@
   // value shares on the last day and start as the fetched allocation; unedited the card uses the real quantities, edited
   // shares become constant quantities (engine.holdingsFromWeights, backcast like the positions). Not deletable.
   ctx0.benchmarks.forEach(function (b) {
+    if (b.transactions) return;                                  // Depot-Historie: its own locked card (below)
     var def = shareRows(E.benchmarkWeights ? E.benchmarkWeights(ctx0, b) : null);
     if (!def.length) return;
     var name = String(b.name || b.id);
     state.cards.push({ id: b.id, hold: true, base: b, name: name, defName: name, color: colorOf(b.id), show: b.id === DEPOT_ID,
       def: def, rows: def.map(function (r) { return newRow(r.isin, r.pct); }) });
+  });
+  // transactions preset (data/benchmarks.csv "transactions" = data/transactions.csv, "Depot-Historie"; user 27.09.): the real
+  // depot replayed from its trades, time-weighted. Locked: only the eye button, no rows; hidden in the chart; after Mein Depot.
+  ctx0.benchmarks.forEach(function (b) {
+    if (!b.transactions || !E.transactionHistory || !E.transactionHistory(ctx0, b)) return;
+    var name = String(b.name || b.id);
+    state.cards.push({ id: b.id, tx: true, base: b, name: name, defName: name, color: colorOf(b.id), show: false, rows: [] });
   });
   // weighting presets (data/benchmarks.csv "ISIN:20%|…", e.g. "Energie"; user 27.09.): start as own cards – editable,
   // deletable, hidden in the chart; a reload brings them back as defined
@@ -901,6 +1004,7 @@
   function benchDefs() {
     var out = [];
     state.cards.forEach(function (c) {
+      if (c.tx) { out.push({ b: c.base, id: c.id, name: cardName(c), color: c.color, show: c.show, hold: false, tx: true, real: false }); return; }
       var info = cardInfo(c);
       if (!info.valid) return;
       var desc = c.rows.filter(function (r) { return r.isin && pctVal(r.pct) > 0; }).map(function (r) {
@@ -940,6 +1044,25 @@
       '<div class="bb-rows">' + c.rows.map(rowHTML).join('') + '</div>' +
       '<div class="bb-foot"><span class="bb-hint" aria-live="polite"></span><span class="bb-total"></span></div></div>';
   }
+  /** "Depot-Historie" (transactions preset): locked – dot, kind, fixed name + period return, facts; only the eye button. */
+  function txCardHTML(c) {
+    var b = c.base, tx = b.transactions || [], trades = tx.filter(function (t) { return t.type === 'Buy' || t.type === 'Sell'; }).length;
+    var H = E.transactionHistory(ctx0, b), un = Object.keys((H && H.unpriced) || {}).map(function (i) { return (b.names && b.names[i]) || i; });
+    var span = tx.length ? F.date(tx[0].date, 'short') + '–' + F.date(tx[tx.length - 1].date, 'short') : '';
+    var how = 'Dein Depot aus dem Scalable-Transaktionsexport nachgespielt: Stückzahlen ändern sich mit jedem Kauf und Verkauf. ' +
+      'Nur Wertpapiere (ohne Cash, Gebühren, Steuern, Dividenden). Rendite zeitgewichtet (Käufe/Verkäufe zählen nicht als Gewinn); ' +
+      '„Echt“ = Wertänderung ohne die Käufe und Verkäufe.' + (un.length ? ' Ohne Kurse, zum letzten Handelspreis bewertet: ' + un.join(', ') + '.' : '');
+    return '<div class="bb-card bb-card--tx" role="group" data-card="' + esc(c.id) + '" style="--c:' + c.color + '">' +
+      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i><span class="bb-kind">Echte Transaktionen</span></span><span class="bb-icons">' +
+      showBtn() + '</span></div>' +
+      '<div class="bb-namerow"><span class="bb-fixname">' + esc(c.name) + '</span><b class="bb-ret"></b></div>' +
+      '<div class="bb-meta bb-meta--tx" title="' + esc(how) + '"><span>' + trades + ' Käufe/Verkäufe</span> · <span>' + esc(span) +
+      '</span> · <span>nur Wertpapiere, zeitgewichtet</span></div>' +
+      '<div class="bb-facts">' +
+      '<div class="bb-fact"><span>Wert am ' + esc(F.date(TODAY, 'short')) + '</span><b class="bb-tx-now"></b></div>' +
+      '<div class="bb-fact" title="Echter Gewinn im Zeitraum: Wertänderung ohne die Käufe und Verkäufe (nicht hochgerechnet)"><span class="bb-tx-per"></span><b class="bb-tx-pl"></b></div>' +
+      '</div></div>';
+  }
   function rowHTML(r, k) {
     var i = r.isin ? INSTR_BY[r.isin] : null;
     return '<div class="bb-row" data-row="' + r.id + '">' +
@@ -969,7 +1092,7 @@
     list.forEach(function (o) {
       var el = old[o.id], sig = cardSig(o.c);
       if (!el || el._sig !== sig) {
-        var nu = makeEl(o.c.hold ? holdCardHTML(o.c) : cardHTML(o.c));
+        var nu = makeEl(o.c.tx ? txCardHTML(o.c) : o.c.hold ? holdCardHTML(o.c) : cardHTML(o.c));
         nu._sig = sig;
         if (el) box.replaceChild(nu, el);
         el = nu;
@@ -1005,7 +1128,9 @@
     var rb = el.querySelector('.bb-ret');
     rb.className = 'bb-ret ' + sgn(r);
     rb.textContent = pct(r);
-    rb.title = x ? 'Rendite im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') : 'wird erst bei 100 % berechnet';
+    rb.title = x ? (c.tx ? 'Zeitgewichtete Rendite' : 'Rendite') + ' im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') :
+      'wird erst bei 100 % berechnet';
+    if (c.tx) { patchTx(el, c, M); return; }
     var info = cardInfo(c), tot = el.querySelector('.bb-total'), hint = el.querySelector('.bb-hint');
     el.classList.toggle('is-invalid', !info.valid);
     tot.textContent = fmtShare(info.total) + ' %';
@@ -1023,6 +1148,18 @@
     });
     var ni = el.querySelector('.bb-name');
     if (ni && document.activeElement !== ni && ni.value !== c.name) ni.value = c.name;
+  }
+  /** Depot-Historie card: its real value on the last day and its real € gain in the period (without purchases / sales). */
+  function patchTx(el, c, M) {
+    var now = E.benchmarkValueNow ? nv(E.benchmarkValueNow(ctx0, c.base)) : null;
+    var pl = M && E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, c.base, M.R.start, M.R.end)) : null;
+    el.querySelector('.bb-tx-now').textContent = eur(now);
+    var per = el.querySelector('.bb-tx-per');
+    per.textContent = 'Gewinn im Zeitraum';
+    per.title = M ? 'Zeitraum ' + periodText(M.R) : '';
+    var b = el.querySelector('.bb-tx-pl');
+    b.className = 'bb-tx-pl ' + sgn(pl);
+    b.textContent = eurS(pl);
   }
   /** Holdings card: kind label, value line and the reset button follow whether the fetched allocation was edited. */
   function patchHold(el, c, info) {
@@ -1182,8 +1319,11 @@
   function placeDrop() {
     if (!drop) return;
     var row = drop.inp.closest('.bb-row') || drop.inp, rr = row.getBoundingClientRect(), ir = drop.inp.getBoundingClientRect();
-    var sc = drop.inp.closest('.bb-rows'), sr = sc ? sc.getBoundingClientRect() : null;
-    if (!ir.width || (sr && (ir.bottom < sr.top + 4 || ir.top > sr.bottom - 4))) { closeDrop(); return; }   // scrolled out of its card
+    var out = [drop.inp.closest('.bb-rows'), drop.inp.closest('.rail-in')].some(function (sc) {
+      var sr = sc && sc.scrollHeight > sc.clientHeight ? sc.getBoundingClientRect() : null;
+      return sr && (ir.bottom < sr.top + 4 || ir.top > sr.bottom - 4);
+    });
+    if (!ir.width || out) { closeDrop(); return; }            // scrolled out of its card / the right column
     var vv = window.visualViewport, bar = $('topBar');
     var vw = document.documentElement.clientWidth, vh = vv ? Math.min(window.innerHeight, vv.offsetTop + vv.height) : window.innerHeight;  // above an on-screen keyboard
     var w = Math.min(Math.max(rr.width, 340), vw - 16), left = Math.max(8, Math.min(rr.left, vw - 8 - w));
@@ -1228,6 +1368,7 @@
       if (act === 'new') { addCard(); return; }
       if (!o.c) return;
       if (act === 'show') { o.c.show = !o.c.show; benchChanged(); return; }
+      if (o.c.tx) return;                                        // Depot-Historie: locked (only show / hide)
       if (act === 'reset') { resetCard(o.c); return; }
       if (act === 'dup' && !o.c.hold) dupCard(o.c);
       else if (act === 'del' && !o.c.hold) delCard(o.c);
@@ -1286,7 +1427,7 @@
     });
     window.addEventListener('resize', placeDrop);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', placeDrop);
-    box.addEventListener('scroll', function () { if (drop) placeDrop(); }, true);     // rows scroll inside a card: the list follows
+    document.addEventListener('scroll', function () { if (drop) placeDrop(); }, true);   // rows / the right column scroll: the list follows
   }
 
   function renderHeadline(M) {
@@ -1747,6 +1888,7 @@
       var ret = get(x.st, 'totalReturn');
       var basis = x.real && dflt ? 'Wert = echte Stückzahlen deines Depots × Kurs (ohne Guthaben), am ' + today + ' ' + eur(tgt) :
         (x.real ? 'echte Stückzahlen deines Depots' :
+          x.tx ? 'Stückzahlen laut Transaktionen (ohne Guthaben), Veränderung = Gewinn ohne die Käufe und Verkäufe, % zeitgewichtet' :
           x.hold ? 'Stückzahlen aus den Anteilen vom ' + today + ', konstant' :
             'gekauft am ' + F.date(ctx0.dates[R.start], 'short') + ', dann gehalten') +
         ' – hochgerechnet auf ' + tgtTxt + ' am ' + today + ' (Betrag aus „Benchmark (€)“' +
@@ -2035,6 +2177,8 @@
     renderAssets(cur);
     renderRisk(cur);
     renderMeasureBar();
+    mpStamp++;
+    renderMeasPanel(sync.measure);
   }
 
   /** What-if: a Stück input was committed (Enter / blur). */
@@ -2099,6 +2243,7 @@
     $('depotReset').hidden = !s;
     renderOvBench(holdPeriod());                  // benchmark values in the overview use the same amount
     mainChart.tipKey = '';                        // rebuild an open measure box with the new value
+    mpStamp++;                                    // and the "Echt" column of the Messung panel
     sync.draw();
   }
 
@@ -2212,6 +2357,8 @@
       state.holdSort = it.getAttribute('data-hsort');
       closeSortMenu(true);
       renderHoldings();
+      mpStamp++;                                 // the Messung panel's Yacht list uses the same order
+      renderMeasPanel(sync.measure);
     });
     $('holdSortMenu').addEventListener('keydown', function (ev) {
       var items = Array.prototype.slice.call(this.querySelectorAll('[data-hsort]'));
@@ -2251,6 +2398,7 @@
         var widthChanged = w !== lastW;
         lastW = w; lastH = h;
         rerenderChartsOnly();
+        renderMeasPanel(sync.measure);                         // shown again after the window got wide enough
         if (widthChanged && heat.model) heat.render();         // cell size follows the card width
       });
     }
