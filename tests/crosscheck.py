@@ -194,7 +194,11 @@ out['whatif'] = dict(overrides=WHATIF, stats=stats(v, dates), risk=risk({i: q fo
 print('risk MAX all: vol %.2f%%  DR %.2f  top pctr %s' % (out['risk_MAX_all']['volAnn'] * 100, out['risk_MAX_all']['diversificationRatio'],
       sorted(((r['isin'], round(r['pctr'] * 100, 1)) for r in out['risk_MAX_all']['rows']), key=lambda x: -x[1])[:5]))
 print('whatif MAX: TR %+.2f%%  end %.2f' % (out['whatif']['stats']['totalReturn'] * 100, out['whatif']['stats']['endValue']))
-# ---- intraday (1T 30-min grid), straight from data/intraday.csv
+# ---- sub-daily grids (chart interval: 1T/1W 30 min, 1M 2 h, custom by length), straight from data/intraday.csv and
+# data/intraday_2h.csv. Slots Europe/Berlin (a point goes to its nearest slot, a tie to the later one, the latest point
+# wins, +-15 min tolerance); per instrument and session the previous daily close until the first point, then forward-fill
+# (a session without any point: flat at the daily price); a final session ends on its daily close; an open session stops
+# after its latest point. A chart over the daily range [s, e]: point 0 = the close of s, then every session s+1 .. e.
 def berlin_offset_h(t):          # EU summer time: last Sunday of March 01:00 UTC .. last Sunday of October 01:00 UTC
     import calendar
     def last_sun(y, m):
@@ -204,53 +208,109 @@ def berlin_offset_h(t):          # EU summer time: last Sunday of March 01:00 UT
     b = datetime.datetime(t.year, 10, last_sun(t.year, 10), 1, tzinfo=datetime.timezone.utc)
     return 2 if a <= t < b else 1
 
-if (R/'data'/'intraday.csv').exists():
-    S, cells = 32, {}                                     # slots 07:30 .. 23:00 Berlin
-    for r in csv.DictReader(open(R/'data'/'intraday.csv', encoding='utf-8')):
+GRID_FILES = {'m30': ('intraday.csv', ['%02d:%02d' % divmod(m, 60) for m in range(450, 1381, 30)]),
+              'h2': ('intraday_2h.csv', ['%02d:%02d' % divmod(m, 60) for m in range(450, 1291, 120)] + ['23:00'])}
+raw_cell = {i: [r[3 + j] for r in rows] for j, i in enumerate(head[3:])}
+
+def load_grid(key):
+    fname, times = GRID_FILES[key]
+    if not (R/'data'/fname).exists(): return None
+    mins = [int(t[:2]) * 60 + int(t[3:]) for t in times]
+    S, cells = len(times), {}                                  # (isin, day) -> {slot: (utc, price)}
+    for r in csv.DictReader(open(R/'data'/fname, encoding='utf-8')):
         t = datetime.datetime.strptime(r['timestamp_utc'][:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=datetime.timezone.utc)
         b = t + datetime.timedelta(hours=berlin_offset_h(t))
-        k = int(math.floor((b.hour * 60 + b.minute + b.second / 60 - 450) / 30 + 0.5))
-        if 0 <= k < S:
-            key = (r['isin'], b.date().isoformat(), k)
-            if key not in cells or t > cells[key][0]: cells[key] = (t, float(r['price']))
-    days = sorted({d for _, d, _ in cells})[-2:]
-    di = [dates.index(d) for d in days]
-    raw = {i: [r[3 + j] for r in rows] for j, i in enumerate(head[3:])}
-    for i in raw:                                          # a final day ends on its daily close (build_data: 23:00 slot)
-        for j, d in enumerate(days):
-            if status[di[j]] == 'final' and raw[i][di[j]] and (i, d, S - 1) not in cells:
-                cells[i, d, S - 1] = (None, float(raw[i][di[j]]))
-    last = max(j * S + k for (_, d, k) in cells if d in days for j in [days.index(d)])
-    def ipx(i):
-        has = any((i, d, k) in cells for d in days for k in range(S))
-        o = []
-        for j, d in enumerate(days):
-            cur = px[i][di[j] - 1] if has else px[i][di[j]]
-            for k in range(S):
-                if j * S + k > last: break
-                if has and (i, d, k) in cells: cur = cells[i, d, k][1]
-                o.append(cur)
+        m, d = b.hour * 60 + b.minute + b.second / 60, b.date().isoformat()
+        if not (mins[0] - 15 <= m <= mins[-1] + 15) or d not in dates: continue
+        k = min(range(S), key=lambda j: (abs(mins[j] - m), -j))
+        c = cells.setdefault((r['isin'], d), {})
+        if k not in c or t > c[k][0]: c[k] = (t, float(r['price']))
+    sess = sorted({d for _, d in cells})
+    di = {d: dates.index(d) for d in sess}
+    last = {d: S - 1 if status[di[d]] == 'final' else max(k for (_, dd), c in cells.items() if dd == d for k in c) for d in sess}
+    memo = {}
+    def prices(i, d):                                          # filled slot prices of isin i in session d
+        if (i, d) in memo: return memo[i, d]
+        k0, c = di[d], {k: v[1] for k, v in cells.get((i, d), {}).items()}
+        final = status[k0] == 'final'
+        seen = bool(c) or (final and raw_cell[i][k0] != '')    # build_data writes the close into a final day's 23:00 slot
+        cur, o = (px[i][max(0, k0 - 1)] if seen else px[i][k0]), []
+        for k in range(last[d] + 1):
+            if seen and k in c: cur = c[k]
+            o.append(cur)
+        if final: o[S - 1] = px[i][k0]                         # a finished session ends on its daily close
+        memo[i, d] = o
         return o
-    allp = [(p['isin'], float(p['shares'])) for p in pos]
-    semis = [(p['isin'], float(p['shares'])) for p in pos if p['group'] == pos[0]['group']]
-    def ival(hold):
-        cols = [(ipx(i), q) for i, q in hold]
-        return [sum(c[k] * q for c, q in cols) for k in range(last + 1)]
-    base_all = sum(px[i][n - 2] * q for i, q in allp)
-    out['intraday'] = {'days': days, 'last': last, 'base_all': base_all, 'value_all': ival(allp),
-                       'sub_isins': [i for i, _ in semis], 'sub_base': sum(px[i][n - 2] * q for i, q in semis), 'value_sub': ival(semis), 'bench': {}}
-    out['intraday']['bench_defs'] = {}
-    for bid in ('msci_world', 'my_depot', 'mix_w'):
-        kind, hh = BENCH[bid]
-        if kind == 'weights':               # bought at the previous close (1T start), then held
-            tot = sum(hh.values())
-            h = [(i, w / tot / px[i][n - 2]) for i, w in hh.items()]
-        else:
-            h = list(hh.items())
-        r0 = sum(px[i][n - 2] * q for i, q in h)
-        out['intraday']['bench'][bid] = [base_all * v / r0 for v in ival(h)]
-        out['intraday']['bench_defs'][bid] = dict(kind=kind, h=hh)
-    print('intraday %s last slot %d: %.2f -> %.2f' % (days, last, base_all, out['intraday']['value_all'][-1]))
+    return dict(S=S, times=times, sess=set(sess), last=last, prices=prices)
+
+grids = {k: load_grid(k) for k in GRID_FILES}
+
+def frame(g, s, e, context=False):
+    """points over the daily range [s, e]: ('close', s) = daily close, (day, slot) = grid slot; None if a session is missing"""
+    if not g or e - s < 1 or any(dates[k] not in g['sess'] for k in range(s + 1, e + 1)): return None
+    pts = [(dates[s], j) for j in range(g['S'])] if context and dates[s] in g['sess'] else [('close', s)]
+    for k in range(s + 1, e + 1): pts += [(dates[k], j) for j in range(g['last'][dates[k]] + 1)]
+    return pts
+
+def fval(g, pts, hold):
+    p = lambda i, pt: px[i][pt[1]] if pt[0] == 'close' else g['prices'](i, pt[0])[pt[1]]
+    return [sum(q * p(i, pt) for i, q in hold) for pt in pts]
+
+def bench_hold(bid, s):          # weights: bought at the close of s (the chart's point 0), then held
+    kind, hh = BENCH[bid]
+    if kind == 'weights':
+        tot = sum(hh.values())
+        return [(i, w / tot / px[i][s]) for i, w in hh.items()]
+    return list(hh.items())
+
+def interval(s, e, p):
+    days = (D(dates[e]) - D(dates[s])).days
+    want = ('m30' if days <= 7 else 'h2' if days <= 31 else 'day') if p == 'custom' else {'1T': 'm30', '1W': 'm30', '1M': 'h2'}.get(p, 'day')
+    order = ['m30', 'h2', 'day']
+    return next(k for k in order[order.index(want):] if k == 'day' or frame(grids[k], s, e) is not None)
+
+allp = [(p['isin'], float(p['shares'])) for p in pos]
+semis = [(p['isin'], float(p['shares'])) for p in pos if p['group'] == pos[0]['group']]
+
+def grid_case(name, key, s, e, benches, context=False):
+    g = grids[key]
+    pts = frame(g, s, e, context)
+    if not pts: return None
+    base = sum(q * px[i][s] for i, q in allp)
+    res = dict(name=name, key=key, start=s, end=e, m=len(pts), last=len(pts) - 1, days=sorted({pt[0] for pt in pts if pt[0] != 'close'}),
+               base_all=base, value_all=fval(g, pts, allp), sub_isins=[i for i, _ in semis],
+               sub_base=sum(q * px[i][s] for i, q in semis), value_sub=fval(g, pts, semis), bench={}, bench_defs={}, realpl=[])
+    for bid in benches:
+        h = bench_hold(bid, s)
+        r0 = sum(q * px[i][s] for i, q in h)
+        res['bench'][bid] = [base * v / r0 for v in fval(g, pts, h)]
+        res['bench_defs'][bid] = dict(kind=BENCH[bid][0], h=BENCH[bid][1])
+    vd = fval(g, pts, list(BENCH['my_depot'][1].items()))     # real € change of the depot's own holdings
+    for a, b in [(0, len(pts) - 1), (10, len(pts) // 2), (len(pts) - 3, 3)]:
+        res['realpl'].append([a, b, vd[max(a, b)] - vd[min(a, b)]])
+    if status[e] == 'final' and not context:                   # finished sessions end exactly on the daily value
+        assert abs(res['value_all'][-1] / raw_value(dict(allp), s, e)[-1] - 1) < 1e-12, name
+    return res
+
+out['grid_cases'] = [c for c in [
+    grid_case('1W_m30', 'm30', *preset('1W'), ['my_depot', 'mix_w', 'msci_world']),
+    grid_case('1M_h2', 'h2', *preset('1M'), ['my_depot', 'mix_w', 'spacex_w']),
+    grid_case('custom_0901_0907_h2', 'h2', *custom('2026-09-01', '2026-09-07'), ['my_depot', 'mix_w']),
+] if c]
+CUSTOM_IV = [('2026-09-18', '2026-09-25'), ('2026-09-01', '2026-09-07'), ('2026-08-10', '2026-08-17'), ('2026-09-01', '2026-09-21'),
+             ('2026-09-24', '2026-09-25'), ('2026-08-25', '2026-09-01'), ('2026-08-20', '2026-08-27'), ('2026-07-01', '2026-09-25')]
+out['intervals'] = [dict(label=p, preset=p, start=preset(p)[0], end=preset(p)[1], key=interval(*preset(p), p))
+                    for p in ['1T', '1W', '1M', '3M', '6M', 'YTD', '1J', 'MAX']] + \
+                   [dict(label=a + '..' + b, preset='custom', frm=a, to=b, start=custom(a, b)[0], end=custom(a, b)[1], key=interval(*custom(a, b), 'custom'))
+                    for a, b in CUSTOM_IV]
+# 1T: the last session on the 30-min grid, the previous session as grey context (bought at the previous close)
+if grids['m30'] and dates[n - 1] in grids['m30']['sess']:
+    c = grid_case('1T_m30', 'm30', n - 2, n - 1, ['msci_world', 'my_depot', 'mix_w'], context=True)
+    out['intraday'] = {k: c[k] for k in ('days', 'last', 'base_all', 'value_all', 'sub_isins', 'sub_base', 'value_sub', 'bench', 'bench_defs')}
+    print('intraday %s last slot %d: %.2f -> %.2f' % (c['days'], c['last'], c['base_all'], c['value_all'][-1]))
+for c in out['grid_cases']:
+    print('grid %-22s %s %s..%s %3d points: %.2f -> %.2f' % (c['name'], c['key'], dates[c['start']], dates[c['end']], c['m'], c['base_all'], c['value_all'][-1]))
+print('intervals', [(x['label'], x['key']) for x in out['intervals']])
 
 (R/'tests'/'reference.json').write_text(json.dumps(out, indent=1), encoding='utf-8')
 for c in out['cases']:

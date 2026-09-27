@@ -126,82 +126,186 @@
       data, meta: data.meta || {}, dates, n, status, positions, benchmarks, groups, px, firstIdx, lastIdx: n - 1,
       day: dates.map(dayNumber),                                           // extra: day numbers for calendar math
     };
-    ctx.intraday = prepareIntraday(data.intraday, ctx);
+    ctx.grids = prepareGrids(data, ctx);                                 // sub-daily grids (30 min / 2 h) for the chart
     return ctx;
   }
 
-  // ------------------------------------------------------------------ intraday (1T chart, 30-min grid)
-  /**
-   * data.intraday = { dates: [iso…] (consecutive trading days, last = last daily date), times: ['07:30'…'23:00'],
-   *                   px: { ISIN: [price|null per (date, slot), date-major] }, asof_utc }
-   * -> { dates, times, D, S, m, idx (daily index per date), last (last slot index with any quote; later = future),
-   *      px: { ISIN: filled array | null after `last` }, has: { ISIN: bool }, ok, asof }
-   * Fill rule per session: before the first quote of the day the previous daily close, then forward-fill.
-   * An instrument without any intraday quote is flat at its daily price of that date.
-   */
-  function prepareIntraday(raw, ctx) {
-    if (!raw || !Array.isArray(raw.dates) || !Array.isArray(raw.times) || !raw.px) return null;
-    const dates = raw.dates, D = dates.length, S = raw.times.length, m = D * S;
-    if (D < 2 || S < 2) return null;
-    const idx = dates.map((d) => ctx.dates.indexOf(d));
-    const ok = idx.every((k, j) => k >= 0 && (j === 0 || k === idx[j - 1] + 1)) && idx[D - 1] === ctx.n - 1 && idx[0] >= 1;
-    let last = -1;
-    Object.keys(raw.px).forEach((i) => { const a = raw.px[i]; if (Array.isArray(a)) for (let k = 0; k < Math.min(m, a.length); k++) if (isNum(a[k]) && a[k] > 0 && k > last) last = k; });
-    const px = {}, has = {};
-    Object.keys(ctx.px).forEach((isin) => {
-      const r = raw.px[isin], out = new Array(m).fill(null), daily = ctx.px[isin];
-      has[isin] = Array.isArray(r) && r.some((v) => isNum(v) && v > 0);
-      for (let d = 0; d < D; d++) {
-        const di = idx[d];
-        if (di < 0) continue;
-        let cur = has[isin] ? (di > 0 ? daily[di - 1] : daily[di]) : daily[di];
-        for (let s = 0; s < S; s++) {
-          const k = d * S + s;
-          if (k > last) break;
-          const v = has[isin] ? r[k] : null;
-          if (isNum(v) && v > 0) cur = v;
-          out[k] = cur;
-        }
-      }
-      px[isin] = out;
-    });
-    return { dates, times: raw.times, D, S, m, idx, last, px, has, ok, asof: raw.asof_utc || null };
+  // ------------------------------------------------------------------ sub-daily grids (chart interval 30 min / 2 h)
+  const GRID_KEYS = ['m30', 'h2'];
+  const PRESET_INTERVAL = { '1T': 'm30', '1W': 'm30', '1M': 'h2' };       // every other preset: daily
+  const INTERVAL_STEPS = ['m30', 'h2', 'day'];                             // step-down order when data is missing
+
+  /** data.grids = { m30, h2 } -> ctx.grids = { m30: grid|null, h2: grid|null }; a legacy data.intraday counts as m30 */
+  function prepareGrids(data, ctx) {
+    const raw = data.grids && typeof data.grids === 'object' ? data.grids : (data.intraday ? { m30: data.intraday } : {});
+    const out = {};
+    GRID_KEYS.forEach((k) => { out[k] = prepareGrid(raw[k], ctx, k); });
+    return out;
   }
 
-  function intradayBaseIdx(ctx) { const I = ctx.intraday; return I && I.ok && I.last >= 0 ? I.idx[I.D - 1] - 1 : -1; }
+  /**
+   * raw = { dates: [iso…] (collected sessions, ascending daily dates, not necessarily consecutive), times: ['07:30'…'23:00'],
+   *         px: { ISIN: [price|null per (session, slot), session-major] }, asof_utc }
+   * -> { key, dates, times, S, D, idx (daily index per session), pos ({daily index: session}), last (last slot per session),
+   *      px: { ISIN: filled array, null only after the last point of an open session }, seen: { ISIN: [bool per session] }, asof }
+   * Fill rule per instrument and session: the previous daily close until the first point, then forward-fill; a session
+   * without any point of the instrument is flat at its daily price of that date. A final session is complete and ends on
+   * its daily close (last slot = ctx.px of that day); an open session (status intraday) ends at its latest point of any
+   * instrument. Dates that are not daily dates, out of order or without any point are dropped.
+   */
+  function prepareGrid(raw, ctx, key) {
+    if (!raw || !Array.isArray(raw.dates) || !Array.isArray(raw.times) || !raw.px || typeof raw.px !== 'object') return null;
+    const S = raw.times.length;
+    if (S < 2) return null;
+    const quoted = (a, k) => Array.isArray(a) && isNum(a[k]) && a[k] > 0;
+    const isins = Object.keys(raw.px), sess = [];
+    raw.dates.forEach((d, j) => {
+      const di = ctx.dates.indexOf(d);
+      if (di < 0 || (sess.length && di <= sess[sess.length - 1].di)) return;
+      let last = -1;
+      for (let x = 0; x < isins.length; x++) for (let s = S - 1; s > last; s--) if (quoted(raw.px[isins[x]], j * S + s)) { last = s; break; }
+      if (last >= 0) sess.push({ j, di, last: ctx.status[di] === 'final' ? S - 1 : last });
+    });
+    if (!sess.length) return null;
+    const D = sess.length, m = D * S, pos = {}, px = {}, seen = {};
+    sess.forEach((x, d) => { pos[x.di] = d; });
+    Object.keys(ctx.px).forEach((isin) => {
+      const r = raw.px[isin], daily = ctx.px[isin], out = new Array(m).fill(null), sn = new Array(D).fill(false);
+      sess.forEach((x, d) => {
+        for (let s = 0; s < S; s++) if (quoted(r, x.j * S + s)) { sn[d] = true; break; }
+        let cur = sn[d] ? daily[Math.max(0, x.di - 1)] : daily[x.di];
+        for (let s = 0; s <= x.last; s++) {
+          if (sn[d] && quoted(r, x.j * S + s)) cur = r[x.j * S + s];
+          out[d * S + s] = cur;
+        }
+        if (ctx.status[x.di] === 'final') out[d * S + S - 1] = daily[x.di];      // a finished session ends on its daily close
+      });
+      px[isin] = out;
+      seen[isin] = sn;
+    });
+    return { key, dates: sess.map((x) => ctx.dates[x.di]), times: raw.times.slice(), S, D, idx: sess.map((x) => x.di),
+      pos, last: sess.map((x) => x.last), px, seen, asof: raw.asof_utc || null };
+  }
+
+  /** gridCovers(ctx, key, start, end) -> true if every session start+1 … end (daily indices) was collected in that grid */
+  function gridCovers(ctx, key, start, end) {
+    const G = ctx.grids && ctx.grids[key];
+    if (!G || !isNum(start) || !isNum(end) || start < 0 || end > ctx.n - 1 || end - start < 1) return false;
+    for (let k = start + 1; k <= end; k++) if (G.pos[k] === undefined) return false;
+    return true;
+  }
 
   /**
-   * intraday(ctx, {selected, startValue}) -> 1T series on the 30-min grid | null (no/old intraday data, empty selection)
-   * { dates, times, S, m, last, ctxEnd (last slot of the earlier sessions = grey context), base (value at the previous
-   *   daily close = the 1T start value), scale, raw, value, pl (value - base), ret (value / base - 1), missing: [selected ISINs without quotes] }
-   * value/pl are null after `last` (the rest of today). base equals portfolio(1T).startValue, value[last] its end value.
+   * chartInterval(ctx, {start, end}, preset | 'custom') -> { key: 'm30'|'h2'|'day', want, stepped, skipped: [keys], days }
+   * The chart interval of a range: 1T and 1W 30 min, 1M 2 h, every other preset (3M … MAX, Seit Kauf = MAX) daily;
+   * 'custom' by the calendar days from the start date to the end date: <= 7 -> 30 min, <= 31 -> 2 h, else daily.
+   * An interval is usable only if every session start+1 … end is in its grid (gridCovers); otherwise it steps down
+   * 30 min -> 2 h -> daily. skipped = the finer grids that were wanted but not collected for the range.
+   */
+  function chartInterval(ctx, range, preset) {
+    const s = range && isNum(range.start) ? range.start : 0, e = range && isNum(range.end) ? range.end : ctx.n - 1;
+    const days = ctx.day && isNum(ctx.day[s]) && isNum(ctx.day[e]) ? ctx.day[e] - ctx.day[s] : null;
+    let p = String(preset == null ? '' : preset).toUpperCase();
+    p = PRESET_ALIAS[p] || p;
+    const want = p === 'CUSTOM' ? (days !== null && days <= 7 ? 'm30' : days !== null && days <= 31 ? 'h2' : 'day') : (PRESET_INTERVAL[p] || 'day');
+    const skipped = [];
+    let key = 'day';
+    for (let k = INTERVAL_STEPS.indexOf(want); k < INTERVAL_STEPS.length; k++) {
+      if (INTERVAL_STEPS[k] === 'day' || gridCovers(ctx, INTERVAL_STEPS[k], s, e)) { key = INTERVAL_STEPS[k]; break; }
+      skipped.push(INTERVAL_STEPS[k]);
+    }
+    return { key, want, stepped: key !== want, skipped, days };
+  }
+
+  /**
+   * gridFrame(ctx, key, start, end, {context, trim}) -> frame | null (null if gridCovers is false)
+   * The x layout of a sub-daily chart over the daily range [start, end]: point 0 = the daily close of `start` (the same
+   * start value as the daily series), then the slots of every session start+1 … end, concatenated without night/weekend gaps.
+   * context: the slots of the session `start` replace point 0 when that session was collected (1T: grey context line,
+   *   its last slot is the close of `start`); ctxEnd = its last point (-1 without context).
+   * trim: the frame ends at the last point (an open last session is cut after its latest point); without trim the rest
+   *   of that session stays as empty points, so the x axis spans the whole session (1T).
+   * Frame = { key, start, end, S, times, m, last, ctxEnd, context, src (grid index per point, -1 = daily close),
+   *           day (daily index per point), slot (slot per point, -1 = daily close), segs: [{date, di, from, to, context}],
+   *           sessions (segs without the context one), asof, G }
+   */
+  function gridFrame(ctx, key, start, end, opts) {
+    opts = opts || {};
+    if (!gridCovers(ctx, key, start, end)) return null;
+    const G = ctx.grids[key], S = G.S, src = [], day = [], slot = [], segs = [];
+    const add = (di, context) => {
+      const d = G.pos[di];
+      segs.push({ date: ctx.dates[di], di, from: src.length, to: src.length + S - 1, context });
+      for (let s = 0; s < S; s++) { src.push(d * S + s); day.push(di); slot.push(s); }
+    };
+    const context = !!opts.context && G.pos[start] !== undefined;
+    if (context) add(start, true); else { src.push(-1); day.push(start); slot.push(-1); }
+    for (let k = start + 1; k <= end; k++) add(k, false);
+    const last = src.length - S + G.last[G.pos[end]], m = opts.trim ? last + 1 : src.length;
+    if (m < src.length) { src.length = m; day.length = m; slot.length = m; segs[segs.length - 1].to = m - 1; }
+    return { key, start, end, S, times: G.times, m, last, ctxEnd: context ? S - 1 : -1, context, src, day, slot, segs,
+      sessions: segs.filter((x) => !x.context), asof: G.asof, G };
+  }
+
+  /** The default frame (1T): the last session on the 30-min grid, the previous session as context; null if not collected. */
+  function frameOf(ctx, frame) {
+    if (frame && Array.isArray(frame.src)) return frame;
+    return ctx.n >= 2 ? gridFrame(ctx, 'm30', ctx.n - 2, ctx.n - 1, { context: true }) : null;
+  }
+  function framePx(ctx, F, isin, k) {
+    const g = F.src[k];
+    if (g < 0) return ctx.px[isin] ? ctx.px[isin][F.day[k]] : null;
+    return F.G.px[isin] ? F.G.px[isin][g] : null;
+  }
+  /** Σ qty × price per point of the frame for [[isin, qty]] (null after the last point) */
+  function frameRaw(ctx, F, hold) {
+    const raw = new Array(F.m).fill(null), end = Math.min(F.last, F.m - 1);
+    for (let k = 0; k <= end; k++) {
+      let t = 0;
+      for (let j = 0; j < hold.length && t !== null; j++) {
+        const p = framePx(ctx, F, hold[j][0], k);
+        t = isNum(p) ? t + hold[j][1] * p : null;
+      }
+      raw[k] = t;
+    }
+    return raw;
+  }
+  /** true if the instrument has at least one point in the frame's sessions */
+  function frameSeen(F, isin) { const sn = F.G.seen[isin]; return !!sn && F.segs.some((x) => sn[F.G.pos[x.di]]); }
+  function frameInfo(F) {
+    return { frame: F, key: F.key, dates: F.segs.map((x) => x.date), times: F.times, S: F.S, m: F.m, last: F.last, ctxEnd: F.ctxEnd, asof: F.asof };
+  }
+  const minusBase = (a, base) => a.map((x) => (x === null ? null : x - base));
+  const relBase = (a, base) => a.map((x) => (x === null ? null : x / base - 1));
+
+  /**
+   * intraday(ctx, {selected, startValue, frame}) -> portfolio series on a sub-daily frame | null (no frame, empty selection)
+   * frame omitted = 1T (last session, 30 min, previous session as context).
+   * { frame, key, dates (sessions incl. context), times, S, m, last, ctxEnd, asof, base (value at the daily close of the
+   *   range start = the daily start value, Startwert-scaled), scale, raw, value, pl (value - base), ret (value / base - 1),
+   *   missing: [selected ISINs without any point in the frame] }; value/pl/ret are null after `last`.
+   * A range of final sessions ends exactly on the daily series' end value.
    */
   function intraday(ctx, opts) {
     opts = opts || {};
-    const I = ctx.intraday, bi = intradayBaseIdx(ctx);
-    if (bi < 0) return null;
+    const F = frameOf(ctx, opts.frame);
+    if (!F) return null;
     const sel = selectionSet(ctx, opts.selected);
     const list = ctx.positions.filter((p) => sel.has(p.isin));
     if (!list.length) return null;
+    const hold = list.map((p) => [p.isin, sharesOf(p)]);
     let baseRaw = 0;
-    list.forEach((p) => { baseRaw += sharesOf(p) * ctx.px[p.isin][bi]; });
+    hold.forEach((h) => { baseRaw += h[1] * ctx.px[h[0]][F.start]; });
     if (!(baseRaw > 0)) return null;
-    const raw = new Array(I.m).fill(null);
-    for (let k = 0; k <= I.last; k++) {
-      let t = 0;
-      for (let j = 0; j < list.length; j++) t += sharesOf(list[j]) * I.px[list[j].isin][k];
-      raw[k] = t;
-    }
+    const raw = frameRaw(ctx, F, hold);
     const sv = typeof opts.startValue === 'string' ? parseDE(opts.startValue) : opts.startValue;
     const scale = isNum(sv) && sv > 0 ? sv / baseRaw : 1;
     const base = baseRaw * scale;
     const value = raw.map((x) => (x === null ? null : x * scale));
-    return {
-      dates: I.dates, times: I.times, S: I.S, m: I.m, last: I.last, ctxEnd: (I.D - 1) * I.S - 1, asof: I.asof,
-      base, scale, raw, value, pl: value.map((x) => (x === null ? null : x - base)),
-      ret: value.map((x) => (x === null ? null : x / base - 1)),
-      missing: list.filter((p) => !I.has[p.isin]).map((p) => p.isin),
-    };
+    return Object.assign(frameInfo(F), {
+      base, scale, raw, value, pl: minusBase(value, base), ret: relBase(value, base),
+      missing: list.filter((p) => !frameSeen(F, p.isin)).map((p) => p.isin),
+    });
   }
 
   /**
@@ -224,36 +328,32 @@
   }
 
   /**
-   * intradayBenchmark(ctx, bench|id, baseValue) -> { id, name, value, pl, ret, base, missing } normalized to baseValue at the
-   * previous close (a weights benchmark is bought at that close, i.e. at the 1T start, then held)
+   * intradayBenchmark(ctx, bench|id, baseValue, frame) -> { id, name, value, pl, ret, base, missing, …frame info } | null
+   * on the frame (omitted = 1T), normalized to baseValue at the daily close of the range start; a weights benchmark is bought
+   * at that close and held (the same purchase as benchmark(ctx, bench, start, end, base)).
    */
-  function intradayBenchmark(ctx, bench, baseValue) {
+  function intradayBenchmark(ctx, bench, baseValue, frame) {
     if (typeof bench === 'string') bench = ctx.benchmarks.find((b) => b.id === bench);
-    const I = ctx.intraday, bi = intradayBaseIdx(ctx);
-    if (!bench || bi < 0) return null;
-    const q = benchQty(ctx, bench, bi);
+    const F = frameOf(ctx, frame);
+    if (!bench || !F) return null;
+    const q = benchQty(ctx, bench, F.start);
     if (!q) return null;
-    const hold = q.filter((h) => I.px[h[0]]);
     let r0 = 0;
-    hold.forEach((h) => { r0 += h[1] * ctx.px[h[0]][bi]; });
+    q.forEach((h) => { r0 += h[1] * ctx.px[h[0]][F.start]; });
     if (!(r0 > 0)) return null;
     const base = isNum(baseValue) ? baseValue : r0;
-    const value = new Array(I.m).fill(null);
-    for (let k = 0; k <= I.last; k++) {
-      let t = 0;
-      for (let j = 0; j < hold.length; j++) t += hold[j][1] * I.px[hold[j][0]][k];
-      value[k] = base * (t / r0);
-    }
-    return { id: bench.id, name: bench.name, value, pl: value.map((x) => (x === null ? null : x - base)), base,
-      ret: value.map((x) => (x === null ? null : x / base - 1)),
-      missing: hold.filter((h) => !I.has[h[0]]).map((h) => h[0]) };
+    const value = frameRaw(ctx, F, q).map((t) => (t === null ? null : base * (t / r0)));
+    return Object.assign(frameInfo(F), { id: bench.id, name: bench.name, value, pl: minusBase(value, base), base,
+      ret: relBase(value, base), missing: q.filter((h) => !frameSeen(F, h[0])).map((h) => h[0]) });
   }
 
-  /** intradayAsset(ctx, isin) -> { px (price per slot, null after last), prevClose, has } | null */
-  function intradayAsset(ctx, isin) {
-    const I = ctx.intraday, bi = intradayBaseIdx(ctx);
-    if (bi < 0 || !I.px[isin]) return null;
-    return { px: I.px[isin].slice(), prevClose: ctx.px[isin][bi], has: !!I.has[isin], ctxEnd: (I.D - 1) * I.S - 1, last: I.last };
+  /** intradayAsset(ctx, isin, frame) -> { px (price per point, null after last), prevClose (close of the range start), has, ctxEnd, last } | null */
+  function intradayAsset(ctx, isin, frame) {
+    const F = frameOf(ctx, frame);
+    if (!F || !ctx.px[isin]) return null;
+    const px = new Array(F.m).fill(null);
+    for (let k = 0; k <= Math.min(F.last, F.m - 1); k++) px[k] = framePx(ctx, F, isin, k);
+    return { px, prevClose: ctx.px[isin][F.start], has: frameSeen(F, isin), ctxEnd: F.ctxEnd, last: F.last };
   }
 
   function benchHoldings(ctx, bench) {
@@ -272,31 +372,33 @@
   }
 
   /**
-   * benchmarkRealPl(ctx, bench|id, a, b, {target, intraday}) -> real € change of the benchmark's own holdings between
-   * a and b (daily indices into ctx, or intraday slots with intraday: true), scaled by target / benchmarkValueNow
-   * (target omitted = the holdings as they are). Independent of the chart's normalization / Startwert.
+   * benchmarkRealPl(ctx, bench|id, a, b, {target, frame, intraday}) -> real € change of the benchmark's own holdings between
+   * a and b: daily indices into ctx, or points of a sub-daily frame (frame: gridFrame(…); intraday: true = the 1T frame),
+   * scaled by target / benchmarkValueNow (target omitted = the holdings as they are). Independent of the chart's
+   * normalization / Startwert.
    */
   function benchmarkRealPl(ctx, bench, a, b, opts) {
     opts = opts || {};
     const h = benchHoldings(ctx, bench), now = benchmarkValueNow(ctx, bench);
     if (!h || now === null) return null;
-    const i = Math.min(a, b), j = Math.max(a, b);
-    let src;
-    if (opts.intraday) {
-      const I = ctx.intraday;
-      if (!I || !I.ok || i < 0 || j > I.last) return null;
-      src = (isin) => I.px[isin];
+    const i = Math.min(a, b), j = Math.max(a, b), fr = opts.frame || opts.intraday;
+    if (!isNum(i) || !isNum(j) || i < 0) return null;
+    let price;
+    if (fr) {
+      const F = frameOf(ctx, fr);
+      if (!F || j > Math.min(F.last, F.m - 1)) return null;
+      price = (isin, k) => framePx(ctx, F, isin, k);
     } else {
-      if (!isNum(i) || i < 0 || j > ctx.n - 1) return null;
-      src = (isin) => ctx.px[isin];
+      if (j > ctx.n - 1) return null;
+      price = (isin, k) => ctx.px[isin][k];
     }
     let va = 0, vb = 0;
-    h.forEach((x) => { va += x[1] * src(x[0])[i]; vb += x[1] * src(x[0])[j]; });
+    h.forEach((x) => { va += x[1] * price(x[0], i); vb += x[1] * price(x[0], j); });
     const target = isNum(opts.target) && opts.target > 0 ? opts.target : now;
     return fin((vb - va) * target / now);
   }
 
-  /** intradayWindow(values, a, b) -> { pl, ret } between two slots (order-independent) | null */
+  /** intradayWindow(values, a, b) -> { pl, ret } between two points (order-independent) | null */
   function intradayWindow(values, a, b) {
     if (!Array.isArray(values)) return null;
     const i = Math.min(a, b), j = Math.max(a, b), va = fin(values[i]), vb = fin(values[j]);
@@ -308,7 +410,7 @@
   /**
    * equalValueWindow(portfolioValues, benchValues, a, b) -> { base, ret, pl } | null   ("Gleicher Wert" in the measure box)
    * The benchmark as if it had the portfolio's size at the start of the span: base = portfolio value at min(a, b),
-   * ret = benchmark return over the span, pl = base × ret. Works for daily series and intraday slots; order-independent.
+   * ret = benchmark return over the span, pl = base × ret. Works for daily series and sub-daily frames; order-independent.
    */
   function equalValueWindow(pValues, bValues, a, b) {
     if (!Array.isArray(pValues)) return null;
@@ -835,8 +937,9 @@
     month: { month: 'short', year: 'numeric', timeZone: 'UTC' },                         // "Apr." (format form, year stripped)
     monthYear: { month: 'short', year: 'numeric', timeZone: 'UTC' },                     // "Apr. 2026"
     dayMonthShort: { day: '2-digit', month: '2-digit', timeZone: 'UTC' },                // "21.04."
+    weekdayDayMonth: { weekday: 'short', timeZone: 'UTC' },                              // "Mi 23.09." (weekday without dot + dayMonthShort)
   };
-  /** date(iso, 'long'|'short'|'month'|'monthYear'|'dayMonthShort'), default 'short' */
+  /** date(iso, 'long'|'short'|'month'|'monthYear'|'dayMonthShort'|'weekdayDayMonth'), default 'short' */
   function date(iso, style) {
     style = Object.prototype.hasOwnProperty.call(DATE_STYLES, style) ? style : 'short';
     let t;
@@ -848,6 +951,7 @@
     if (s === undefined) {
       s = dtf(style, DATE_STYLES[style]).format(new Date(t));
       if (style === 'month') s = s.replace(/\s*\d{4}$/, '');
+      if (style === 'weekdayDayMonth') s = s.replace(/\.$/, '') + ' ' + dtf('dayMonthShort', DATE_STYLES.dayMonthShort).format(new Date(t));
       if (dateMemo.size > 5000) dateMemo.clear();
       dateMemo.set(key, s);
     }
@@ -907,11 +1011,12 @@
   }
 
   const PFEngine = {
-    version: '1.0.0',
+    version: '1.1.0',
     PRESETS, ANN, DEFAULT_RF,
     prepare, presetRange, customRange, portfolio, benchmark, drawdown, stats, relative, monthly, assets, groupSummary,
     withShares, correlationMatrix, riskContribution,
-    assetsTotal, intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
+    assetsTotal, chartInterval, gridCovers, gridFrame,
+    intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },
     util: { mean, sampleSd, sampleCov, quantile, returnsOf, minusMonths, daysBetween, dayNumber, isMonthComplete },
   };

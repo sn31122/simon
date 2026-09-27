@@ -115,5 +115,37 @@ if (ref.intraday && typeof E.intraday === 'function') {
   }
 } else console.log('SKIP intraday (no data/intraday.csv or engine without intraday)');
 
+// sub-daily frames of the chart interval (1W 30 min, 1M 2 h, a custom week on 2 h) + the interval choice
+if (ref.grid_cases && typeof E.gridFrame === 'function') {
+  const all = ctx.positions.map(p => p.isin);
+  for (const g of ref.grid_cases) {
+    const f = E.gridFrame(ctx, g.key, g.start, g.end, { trim: true });
+    cmp(`${g.name} frame available`, f ? 'yes' : 'no', 'yes');
+    if (!f) continue;
+    cmp(`${g.name} points`, f.m, g.m);
+    cmp(`${g.name} sessions`, f.sessions.map(x => x.date).join(','), g.days.join(','));
+    const s = E.intraday(ctx, { selected: all, frame: f });
+    cmp(`${g.name} base`, s.base, g.base_all);
+    g.value_all.forEach((v, k) => cmp(`${g.name} all point ${k}`, s.value[k], v));
+    const sub = E.intraday(ctx, { selected: g.sub_isins, frame: f });
+    cmp(`${g.name} sub base`, sub.base, g.sub_base);
+    g.value_sub.forEach((v, k) => cmp(`${g.name} sub point ${k}`, sub.value[k], v));
+    for (const [id, vals] of Object.entries(g.bench)) {
+      const b = E.intradayBenchmark(ctx, benchDef(id, g.bench_defs[id]), s.base, f);
+      vals.forEach((v, k) => cmp(`${g.name} ${id} point ${k}`, b.value[k], v));
+    }
+    for (const [a, b, v] of g.realpl) cmp(`${g.name} my_depot real pl ${a}..${b}`, E.benchmarkRealPl(ctx, 'my_depot', a, b, { frame: f }), v);
+    const daily = ref.cases.find(c => c.start === g.start && c.end === g.end && c.isins.length === all.length);
+    if (daily) cmp(`${g.name} end = daily reference end`, s.value[s.last], daily.stats.endValue);
+  }
+  for (const iv of ref.intervals || []) {
+    if (iv.preset === 'custom') {
+      const r = E.customRange(ctx, iv.frm, iv.to);
+      cmp(`interval ${iv.label} range`, r && r.start + '-' + r.end, iv.start + '-' + iv.end);
+    } else cmp(`interval ${iv.label} range`, Object.values(E.presetRange(ctx, iv.preset)).join('-'), iv.start + '-' + iv.end);
+    cmp(`interval ${iv.label}`, E.chartInterval(ctx, { start: iv.start, end: iv.end }, iv.preset).key, iv.key);
+  }
+} else console.log('SKIP grids (no sub-daily data or engine without gridFrame)');
+
 console.log(`crosscheck: ${checks - fails}/${checks} checks passed`);
 process.exit(fails ? 1 : 0);
