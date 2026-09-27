@@ -100,7 +100,7 @@
         <span class="dr-hint" id="rangeHint" role="status" aria-live="polite"></span>
       </div>
       <div class="set-field">
-        <label for="startValue">Startwert (€)</label>
+        <label for="startValue">Startwert (Yacht)</label>
         <span class="inp-wrap">
           <input type="text" id="startValue" inputmode="decimal" autocomplete="off" spellcheck="false"
                  title="Portfolio auf diesen Startwert skalieren (leer = tatsächlicher Wert)">
@@ -109,11 +109,11 @@
         <span class="set-hint" id="scaleHint" aria-live="polite"></span>
       </div>
       <div class="set-field">
-        <label for="depotValue">Mein Depot (€)</label>
+        <label for="depotValue">Benchmark (€)</label>
         <span class="inp-wrap">
           <input type="text" id="depotValue" inputmode="decimal" autocomplete="off" spellcheck="false"
-                 title="Aktueller Wert deines echten Depots (Positionen ohne Guthaben). Nur für den „echt“-Betrag in der Messung: echte €-Veränderung von „Mein Depot“ = Kursveränderung deiner Stückzahlen × (dieser Wert ÷ berechneter Depotwert heute). Chart und Startwert bleiben unverändert. Leer = berechneter Wert.">
-          <button type="button" class="inp-reset" id="depotReset" title="Depotwert zurücksetzen" aria-label="Depotwert zurücksetzen">×</button>
+                 title="Betrag für „Echt“ in den Benchmark-Boxen der Messung: €-Veränderung jeder Benchmark, wenn sie heute so viel wert wäre wie dieser Betrag (bei unverändertem „Mein Depot“: die echte Veränderung deines Depots). Chart und Startwert bleiben unverändert. Leer = aktueller Wert von „Mein Depot“ (echte Stückzahlen × letzter Kurs, ohne Guthaben).">
+          <button type="button" class="inp-reset" id="depotReset" title="Auf den Wert von „Mein Depot“ zurücksetzen" aria-label="Benchmark-Betrag zurücksetzen">×</button>
         </span>
         <span class="set-hint is-error" id="depotHint" aria-live="polite"></span>
       </div>
@@ -131,7 +131,7 @@
       <div class="set-bench">
         <div class="bb-head">
           <span class="set-label" id="benchLabel">Benchmarks</span>
-          <span class="bb-note">Anteile werden am ersten Tag des Zeitraums gekauft und gehalten (kein Rebalancing) · nur Karten mit 100 % zählen · nicht gespeichert</span>
+          <span class="bb-note">Eigene Karten: am ersten Tag des Zeitraums gekauft und gehalten (kein Rebalancing) · Mein Depot: Anteile von heute, Stückzahlen konstant · nur Karten mit 100 % zählen · nicht gespeichert</span>
         </div>
         <div class="bb-grid" id="benchCards" role="group" aria-labelledby="benchLabel"></div>
       </div>

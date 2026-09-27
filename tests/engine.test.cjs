@@ -694,7 +694,8 @@ test('UMD: classic script sets window.PFEngine without module', () => {
   assert.ok(ws && ws.raw.length === 4 && Math.abs(ws.raw[0] - 40) < 1e-12, 'cross-realm Set selection');
   for (const k of ['prepare', 'presetRange', 'customRange', 'portfolio', 'benchmark', 'drawdown', 'stats', 'relative', 'monthly', 'assets', 'groupSummary',
     'withShares', 'correlationMatrix', 'riskContribution', 'chartInterval', 'gridCovers', 'gridFrame', 'intraday', 'intradayBenchmark',
-    'intradayAsset', 'intradayWindow', 'equalValueWindow', 'benchmarkValueNow', 'benchmarkRealPl'])
+    'intradayAsset', 'intradayWindow', 'equalValueWindow', 'benchmarkValueNow', 'benchmarkRealPl',
+    'benchmarkWeights', 'holdingsFromWeights'])
     assert.strictEqual(typeof E[k], 'function', k);
   for (const k of ['eur', 'num', 'pct', 'ratio', 'date', 'asofBerlin', 'parseDE']) assert.strictEqual(typeof E.fmt[k], 'function', 'fmt.' + k);
 });
@@ -955,6 +956,42 @@ test('benchmarkValueNow / benchmarkRealPl: real € change of the holdings, scal
   approx(E.benchmarkRealPl(ctx, 'ab', 1, 4, { intraday: true }), 21.5 - 22.25, 1e-12, 'intraday real pl');
   assert.strictEqual(E.benchmarkRealPl(ctx, 'ab', 1, 5, { intraday: true }), null);
   assert.strictEqual(E.benchmarkRealPl(ctx, 'nope', 0, 1), null);
+});
+
+test('benchmarkWeights / holdingsFromWeights: today\'s value shares <-> constant quantities', () => {
+  const ctx = E.prepare(I_DATA());                              // ab = A:1 + B:0.5; daily A [10,11,12], B [20,21,19]
+  const w = E.benchmarkWeights(ctx, 'ab');                      // last day: 12 and 9.5 of 21.5
+  approx(w.A, 12 / 21.5, 1e-12, 'weight A today');
+  approx(w.B, 9.5 / 21.5, 1e-12, 'weight B today');
+  approx(E.benchmarkWeights(ctx, 'ab', 0).A, 10 / 20, 1e-12, 'weight A on day 0');
+  // round trip: the weights of today give the real quantities, scaled to a value of 1 today
+  const h = E.holdingsFromWeights(ctx, w);
+  approx(h.A, 1 / 21.5, 1e-12, 'qty A');
+  approx(h.B, 0.5 / 21.5, 1e-12, 'qty B');
+  approxArr(E.benchmark(ctx, { id: 'h', holdings: h }, 0, 2, 100).value, E.benchmark(ctx, 'ab', 0, 2, 100).value, 1e-12, 'same line as the real holdings');
+  approx(E.benchmarkRealPl(ctx, { id: 'h', holdings: h }, 0, 2, { target: 43 }), E.benchmarkRealPl(ctx, 'ab', 0, 2, { target: 43 }), 1e-12, 'same real pl');
+  // percent, ISINs without prices and weights <= 0 are ignored; at = the day whose shares they are
+  const p = E.holdingsFromWeights(ctx, { A: 60, B: 40, NOPRICE: 10, C: 0 }, 1);
+  approx(p.A, 0.6 / 11, 1e-12, 'qty A at day 1');
+  approx(p.B, 0.4 / 21, 1e-12, 'qty B at day 1');
+  assert.strictEqual('NOPRICE' in p || 'C' in p, false);
+  assert.strictEqual(E.holdingsFromWeights(ctx, { NOPRICE: 100 }), null);
+  assert.strictEqual(E.holdingsFromWeights(ctx, null), null);
+  assert.strictEqual(E.benchmarkWeights(ctx, 'nope'), null);
+});
+
+test('benchmarkRealPl / benchmarkValueNow with weights: bought at buyAt, then held', () => {
+  const ctx = E.prepare(I_DATA());                              // daily A [10,11,12], B [20,21,19]
+  const w = { id: 'w', weights: { A: 50, B: 50 } };
+  assert.strictEqual(E.benchmarkValueNow(ctx, w), null, 'needs buyAt');
+  assert.strictEqual(E.benchmarkRealPl(ctx, w, 0, 2), null, 'needs buyAt');
+  // bought at day 1: q_A = 0.5/11, q_B = 0.5/21 -> value today = 0.5·12/11 + 0.5·19/21
+  const now = 0.5 * 12 / 11 + 0.5 * 19 / 21, q = (a, b) => 0.5 * a / 11 + 0.5 * b / 21;
+  approx(E.benchmarkValueNow(ctx, w, 1), now, 1e-12, 'value now per 1 invested');
+  approx(E.benchmarkRealPl(ctx, w, 1, 2, { buyAt: 1 }), q(12, 19) - 1, 1e-12, 'untargeted');
+  approx(E.benchmarkRealPl(ctx, w, 2, 1, { buyAt: 1, target: 1000 }), (q(12, 19) - 1) * 1000 / now, 1e-12, 'scaled: worth 1000 today');
+  // on the 1T frame (bought at the previous close = day 1): A [10,11.5,11,12.5,12.5], B [21.5,21.5,21,21,18]
+  approx(E.benchmarkRealPl(ctx, w, 1, 4, { intraday: true, buyAt: 1 }), q(12.5, 18) - q(11.5, 21.5), 1e-12, 'intraday');
 });
 
 test('benchmark with weights: bought at the range start, then held (buy and hold, no rebalancing)', () => {

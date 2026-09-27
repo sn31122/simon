@@ -180,10 +180,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .bb-fixname { flex: 1 1 auto; min-width: 0; overflow: hidden; font-size: 15px; font-weight: 700; line-height: 30px; white-space: nowrap; text-overflow: ellipsis; }
 .bb-meta { margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .bb-meta b { color: var(--text); font-weight: 600; }
-.bb-hold {
-  display: -webkit-box; margin-top: 5px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  color: #6f757b; font-size: 11.5px; line-height: 1.4;
-}
+.bb-ico[hidden] { display: none; }
 .bb-name, .bb-ins, .bb-pct {
   height: 32px; min-width: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
   color: var(--text); font-size: 13px;
@@ -195,8 +192,14 @@ button { -webkit-tap-highlight-color: transparent; }
 .bb-name::placeholder, .bb-ins::placeholder, .bb-pct::placeholder { color: #6f757b; font-weight: 500; }
 .bb-bar { display: flex; align-items: center; justify-content: space-between; margin: 8px -2px 4px -3px; }
 .bb-mini { width: 26px; height: 22px; font-size: 18px; line-height: 1; }
-.bb-rows { display: grid; gap: 6px; }
-.bb-row, .bb-foot { display: grid; grid-template-columns: minmax(0, 1fr) 70px 22px; align-items: center; gap: 6px; }
+/* about 4 rows visible, longer cards (Mein Depot 9, Energie 11) scroll inside (user, 27.09.) */
+.bb-rows {
+  display: grid; gap: 6px; max-height: calc(4 * var(--bb-rowh) + 3 * 6px); overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: #3a3e42 transparent;
+  --bb-rowh: 32px;
+}
+.bb-rows:has(> :nth-child(5)) { padding-right: 4px; }
+.bb-row, .bb-foot { display: grid; grid-template-columns: minmax(0, 1fr) 80px 22px; align-items: center; gap: 6px; }
 .bb-pctw { position: relative; display: block; min-width: 0; }
 .bb-pct { width: 100%; padding: 0 25px 0 6px; font-weight: 600; text-align: right; }
 .bb-pct.is-invalid { border-color: var(--neg); }
@@ -329,7 +332,17 @@ button { -webkit-tap-highlight-color: transparent; }
 .tt-m .c2 { grid-area: 2 / 2; text-align: center; }
 .tt-m .r2 { grid-area: 2 / 3; text-align: right; }
 .tt-m .c3 { grid-area: 3 / 1 / 4 / 4; text-align: center; color: #fff; font-size: 11.5px; font-weight: 600; }
-.tt-d { display: grid; row-gap: 3px; }
+/* one box per shown benchmark (user, 27.09.): the side element is only a transparent row of boxes that wraps when it
+   is wider than the chart (MainChart then puts it under the measure box) */
+.pc-tip.pc-tip--side {
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 0; border: 0; background: none; box-shadow: none;
+}
+.pc-tip--side .tt-d {
+  flex: 1 0 auto; padding: 7px 12px 8px;
+  border: 1px solid var(--tooltip-border); border-radius: 4px; background: var(--tooltip);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+}
+.tt-d { display: grid; row-gap: 3px; align-content: start; }
 .tt-dr { display: flex; justify-content: space-between; align-items: center; column-gap: 16px; }   /* center: rows stay 16px */
 .tt-dn { color: #fff; font-weight: 600; }
 .tt-dn i { display: inline-block; width: 7px; height: 7px; margin: 0 6px 0 1px; border-radius: 50%; background: var(--c); }
@@ -339,7 +352,8 @@ button { -webkit-tap-highlight-color: transparent; }
 .tt-dv.pos { color: var(--accent); }
 .tt-dv.neg { color: var(--neg); }
 .pc-tip--side.is-pinned .tt-dr { pointer-events: auto; cursor: help; }   /* pinned: rows show their title */
-.pc--compact .pc-tip--measure, .pc--compact .pc-tip--side { padding: 5px 9px 6px; line-height: 14px; }
+.pc--compact .pc-tip--measure, .pc--compact .pc-tip--side .tt-d { padding: 5px 9px 6px; }
+.pc--compact .pc-tip--measure, .pc--compact .pc-tip--side { line-height: 14px; }
 .pc--compact .tt-m { column-gap: 10px; row-gap: 2px; }
 .pc--compact .tt-d { row-gap: 2px; }
 .pc--compact .tt-dr { column-gap: 12px; }
@@ -680,7 +694,7 @@ th.is-sorted { color: var(--text); }
   .bb-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
   .bb-ico { width: 32px; height: 32px; }
   .bb-mini { width: 32px; height: 28px; }
-  .bb-row, .bb-foot { grid-template-columns: minmax(0, 1fr) 72px 28px; }
+  .bb-row, .bb-foot { grid-template-columns: minmax(0, 1fr) 80px 28px; }
   .bb-x { width: 28px; height: 32px; }
   .bb-add { min-height: 64px; }
   .headline { margin-top: 12px; }

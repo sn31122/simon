@@ -20,6 +20,10 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   hover band that keeps the plot height with up to 3 shown benchmarks, list toggles (Portfolio / Einzelwerte, side by side
   from ~1900 px), 3M/6M pills, section order Lists → Benchmark-Vergleich → Drawdown → Monatsrenditen → Kennzahlen → Risiko &
   Korrelation → Hinweise, touch: a tap outside the chart ends a tapped measurement. Details: `SPEC.md`.
+- **Second round of 27.09. (branch `claude/sharp-ride-7wdm2j`):** a measurement shows one box per shown benchmark (e.g.
+  Energie next to Mein Depot); "Mein Depot" is editable like the other cards (rows = today's value shares, starting as the
+  fetched allocation, ↺ restores it; edited shares = constant quantities); card rows show ~4 lines and scroll; the fields
+  are "Startwert (Yacht)" and "Benchmark (€)" (default: the real Mein Depot value). Browser acceptance: 94 of 94 checks.
 - **Chart interval per range:** 1T and 1W 30 min, 1M 2 h, 3M and longer daily; custom ranges by length (≤ 7 days 30 min,
   ≤ 31 days 2 h, else daily), stepping down where finer data was not collected (a note under the chart shows the interval
   and why it stepped down). Main chart, hover, measurement boxes and drawdown follow the interval; Kennzahlen,
@@ -64,6 +68,10 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 - "Monatsrenditen" buys custom cards on the first data day (02.01.2026), not at the selected period start; the chart and
   tables use the period start.
 - Beyond 5 custom cards the colours of the palette get closer to each other.
+- With 3 or more shown benchmarks the benchmark boxes of a measurement no longer fit beside the Yacht box: they go under
+  it (one wrapping row), so the band gets taller and the plot shorter (decided without asking; change on request).
+- "Echt" for Energie / own cards = their € change had they been worth "Benchmark (€)" today (bought at the period start);
+  for an edited Mein Depot the same with its constant quantities (decided without asking).
 - Chart interval details decided without asking (change on request): a custom range's length counts from its first to its
   last trading day, not the typed dates (a Saturday-to-Saturday week = Mon–Fri, 30 min); the last point of a day reads
   "23:00" in hover/measurement (only a chart's start point reads "Schluss"); "Zeitraum auf Auswahl setzen" stays hidden on
