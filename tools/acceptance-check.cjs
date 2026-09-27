@@ -1,0 +1,775 @@
+// Browser acceptance checks for dashboard.html (docs/ACCEPTANCE_CHECKLIST.md) with real mouse and keyboard input.
+// Optional test dependency, not used by the page: Playwright (npm install --no-save --package-lock=false playwright,
+// or a global install via NODE_PATH). BROWSER_EXECUTABLE selects a browser binary (e.g. Edge on Windows).
+// Usage: python3 -m http.server 8770 --bind 127.0.0.1   then   node tools/acceptance-check.cjs [url] [outDir]
+// Writes results.json and screenshots to outDir (default artifacts/acceptance, gitignored); exit code 1 on any failure.
+// Without Segoe UI (Linux), set SEGOE_UI_FALLBACK_DIR to a folder with the Selawik TTFs (see segoe-fallback.cjs):
+// the list/box widths depend on the font, and DejaVu Sans is much wider than the Windows font.
+const { chromium } = require('playwright');
+const fs = require('node:fs');
+const path = require('node:path');
+const { addSegoeFallback, fontsReady } = require('./segoe-fallback.cjs');
+
+const URL = process.argv[2] || 'http://127.0.0.1:8770/dashboard.html';
+const OUT = path.resolve(process.argv[3] || 'artifacts/acceptance');
+const FONT_DIR = process.env.SEGOE_UI_FALLBACK_DIR || '';
+fs.mkdirSync(OUT, { recursive: true });
+const results = [];
+function check(area, name, pass, detail) {
+  results.push({ area, name, pass: !!pass, detail: detail === undefined ? null : detail });
+  console.log((pass ? 'PASS ' : 'FAIL ') + area + ' · ' + name + (detail === undefined ? '' : ' · ' + JSON.stringify(detail)));
+}
+const shots = [];
+async function shot(page, name, opts) {
+  const file = path.join(OUT, name + '.png');
+  await page.screenshot(Object.assign({ path: file }, opts || {}));
+  shots.push({ file: path.basename(file), viewport: page.viewportSize(), note: (opts && opts.note) || '' });
+}
+
+async function open(browser, width, height) {
+  const page = await browser.newPage({ viewport: { width, height: height || 1000 } });
+  page.errors = [];
+  page.on('pageerror', (e) => page.errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') page.errors.push('console: ' + m.text()); });
+  await page.route('**/favicon.ico', (r) => r.fulfill({ status: 204 }));
+  page.fallbackFont = FONT_DIR ? await addSegoeFallback(page, FONT_DIR) : false;
+  await page.goto(URL, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => window.PFApp && document.querySelector('#benchCards .bb-card'));
+  if (page.fallbackFont) await fontsReady(page);
+  await page.waitForTimeout(100);
+  return page;
+}
+const overflow = (page) => page.evaluate(() => ({ w: innerWidth, sw: document.documentElement.scrollWidth }));
+const badText = (page) => page.evaluate(() => {
+  const t = document.body.innerText;
+  return { nan: /\bNaN\b/.test(t), undef: /\bundefined\b/.test(t) };
+});
+async function settle(page) { await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); }
+async function selectAllAndType(page, text) { await page.keyboard.press('Control+A'); await page.keyboard.type(text); }
+
+/** Builds a card through the UI: rows = [[query, percent], ...]; returns the card id. */
+async function addCard(page, rows) {
+  await page.click('#benchCards [data-act="new"]');
+  for (let k = 0; k < rows.length; k++) {
+    await page.keyboard.type(rows[k][0]);
+    await page.keyboard.press('Enter');               // highlighted entry -> focus moves to the % field
+    await page.keyboard.type(rows[k][1]);
+    await page.keyboard.press(k < rows.length - 1 ? 'Enter' : 'Tab');   // Enter in the last row adds a row (< 100 %)
+  }
+  await settle(page);
+  return page.evaluate(() => PFApp.state.cards[PFApp.state.cards.length - 1].id);
+}
+async function cardEl(page, id) { return page.locator('#benchCards [data-card="' + id + '"]'); }
+
+/** Chart geometry in #mainChart coordinates: plot, tips, highest series point under each tip, y labels, last box. */
+async function chartGeo(page) {
+  return page.evaluate(() => {
+    const ch = PFApp.charts.main, L = ch.L, M = ch.model, el = document.getElementById('mainChart');
+    if (!L || !M) return null;
+    const tips = Array.from(el.querySelectorAll('.pc-tip')).filter((t) => !t.hidden).map((t) => ({
+      cls: t.className, left: t.offsetLeft, top: t.offsetTop, right: t.offsetLeft + t.offsetWidth, bottom: t.offsetTop + t.offsetHeight
+    }));
+    const series = [M.series && M.series.values].concat((M.benches || []).map((b) => b.values), [M.ghost && M.ghost.values]).filter(Boolean);
+    const last = typeof M.last === 'number' ? M.last : L.m - 1;
+    function minYUnder(t) {
+      let y = Infinity;
+      for (const vals of series) for (let i = 0; i <= last; i++) {
+        const v = vals[i];
+        if (typeof v !== 'number' || !isFinite(v)) continue;
+        const x = L.x(i);
+        if (x >= t.left - 2 && x <= t.right + 2) y = Math.min(y, L.y(v));
+      }
+      return y;
+    }
+    const boxes = Array.from(el.querySelectorAll('.pc-ylabel, .pc-lastbox')).map((n) => { const b = n.getBBox(); return { x: b.x, y: b.y, w: b.width, h: b.height, t: n.textContent }; });
+    const hits = [];
+    tips.forEach((t) => {
+      const my = minYUnder(t);
+      if (t.bottom > my - 1) hits.push({ tip: t.cls, bottom: t.bottom, lineTop: Math.round(my * 10) / 10 });
+      boxes.forEach((b) => {
+        if (t.left < b.x + b.w && t.right > b.x && t.top < b.y + b.h && t.bottom > b.y) hits.push({ tip: t.cls, label: b.t || 'lastbox' });
+      });
+    });
+    return { W: L.W, top: L.top, tips, hits, inside: tips.every((t) => t.left >= 0 && t.right <= L.W + 0.5) };
+  });
+}
+/** Real mouse drag inside the main chart between fractions fa and fb of the plot width. */
+async function drag(page, fa, fb) {
+  const box = await page.locator('#mainChart svg').boundingBox();
+  const L = await page.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
+  const y = box.y + (L.top + L.bottom) / 2, xa = box.x + L.padL + L.plotW * fa, xb = box.x + L.padL + L.plotW * fb;
+  await page.mouse.move(xa, y);
+  await page.mouse.down();
+  await page.mouse.move((xa + xb) / 2, y, { steps: 6 });
+  await page.mouse.move(xb, y, { steps: 6 });
+  await page.mouse.up();
+  await settle(page);
+}
+async function hoverAt(page, f) {
+  const box = await page.locator('#mainChart svg').boundingBox();
+  const L = await page.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
+  await page.mouse.move(box.x + L.padL + L.plotW * f, box.y + (L.top + L.bottom) / 2, { steps: 2 });
+  await settle(page);
+}
+/** Side box ("Mein Depot") numbers vs an independent engine computation for the pinned span. */
+async function depotBoxCheck(page) {
+  return page.evaluate(() => {
+    const E = window.PFEngine, F = E.fmt, S = PFApp.state, M = PFApp.model(), pin = PFApp.sync.pinned() || PFApp.sync.measure;
+    const tip2 = document.querySelectorAll('#mainChart .pc-tip')[1];
+    if (!pin || !tip2 || tip2.hidden) return { side: false };
+    const a = Math.min(pin.a, pin.b), b = Math.max(pin.a, pin.b), ctx0 = E.prepare(window.PORTFOLIO_DATA);
+    const intra = !!M.intra, target = S.depotValue != null ? S.depotValue : E.benchmarkValueNow(ctx0, 'my_depot');
+    let pv, dv, i, j;
+    if (intra) { const d = M.intra.benches.find((o) => o.x.id === 'my_depot'); pv = M.intra.value; dv = d.s.value; i = a; j = b; }
+    else { const d = M.selB.find((x) => x.id === 'my_depot'); pv = M.p.value; dv = d.s.value; i = M.R.start + a; j = M.R.start + b; }
+    const w = E.equalValueWindow(pv, dv, a, b), real = E.benchmarkRealPl(ctx0, 'my_depot', i, j, { intraday: intra, target });
+    const rows = Array.from(tip2.querySelectorAll('.tt-dv')).map((n) => n.textContent.trim());
+    const labels = tip2.textContent;
+    return {
+      side: true, rows,
+      expect: [F.pct(w.ret, { sign: true, dec: 2 }), F.eur(w.pl, { sign: true, dec: 2 }), F.eur(real, { sign: true, dec: 2 })],
+      targetLabel: F.eur(target, { dec: 0 }).replace(/\s/g, ' '), hasTarget: labels.indexOf(F.eur(target, { dec: 0 })) >= 0
+    };
+  });
+}
+
+(async () => {
+  const opts = { headless: true };
+  if (process.env.BROWSER_EXECUTABLE) opts.executablePath = process.env.BROWSER_EXECUTABLE;
+  const browser = await chromium.launch(opts);
+  const pages = [];
+  try {
+    // ================================================================= data + start (1903)
+    let page = await open(browser, 1903, 1000);
+    pages.push(page);
+    const data = await page.evaluate(() => {
+      const D = window.PORTFOLIO_DATA, ins = D.instruments.map((i) => i.isin);
+      return {
+        instruments: ins.length, prices: Object.keys(D.prices).length, dates: D.dates.length, first: D.dates[0], last: D.dates[D.dates.length - 1],
+        lastStatus: D.status[D.status.length - 1], intraday: D.intraday && D.intraday.dates, bloom: ins.filter((i) => i === 'US0937121079').length,
+        newOnes: ['US19247G1076', 'US55024U1097', 'US5949181045', 'US67066G1040'].every((i) => ins.indexOf(i) >= 0 && D.prices[i]),
+        benchmarks: D.benchmarks.map((b) => b.id), positions: D.positions.length
+      };
+    });
+    check('data', '50 instruments and price series, 188 final rows to 2026-09-25, intraday 24/25.09.',
+      data.instruments === 50 && data.prices === 50 && data.dates === 188 && data.last === '2026-09-25' && data.lastStatus === 'final' &&
+      JSON.stringify(data.intraday) === JSON.stringify(['2026-09-24', '2026-09-25']), data);
+    check('data', 'four new stocks present, Bloom once, only my_depot preset, 32 positions',
+      data.newOnes && data.bloom === 1 && data.benchmarks.join() === 'my_depot' && data.positions === 32);
+
+    // ================================================================= benchmark cards
+    const init = await page.evaluate(() => {
+      const cards = document.querySelectorAll('#benchCards .bb-card'), f = cards[0];
+      return { n: cards.length, fixed: f.classList.contains('bb-card--fixed'), acts: Array.from(f.querySelectorAll('[data-act]')).map((b) => b.getAttribute('data-act')),
+        inputs: f.querySelectorAll('input').length, shown: PFApp.state.benchmarks.join(), legend: document.getElementById('legend').textContent };
+    });
+    check('cards', 'initially only the locked Mein Depot card, shown, no edit/delete controls',
+      init.n === 1 && init.fixed && init.acts.join() === 'show' && init.inputs === 0 && init.shown === 'my_depot' && /Mein Depot/.test(init.legend), init);
+    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await settle(page);
+    const hidden = await page.evaluate(() => ({ shown: PFApp.state.benchmarks.length, legend: document.getElementById('legend').textContent,
+      lines: PFApp.charts.main.model.benches.length, table: document.querySelectorAll('#benchTable tbody tr').length }));
+    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await settle(page);
+    const reshown = await page.evaluate(() => PFApp.state.benchmarks.join());
+    check('cards', 'Mein Depot hide/show removes and restores it everywhere',
+      hidden.shown === 0 && !/Mein Depot/.test(hidden.legend) && hidden.lines === 0 && reshown === 'my_depot', hidden);
+
+    await page.click('#benchCards [data-act="new"]');
+    await settle(page);
+    const fresh = await page.evaluate(() => {
+      const a = document.activeElement, c = PFApp.state.cards[0], drop = document.getElementById('bbDrop');
+      return { focusIns: a && a.classList.contains('bb-ins'), inCard: !!(a && a.closest('[data-card="' + c.id + '"]')), rows: c.rows.length,
+        name: c.name, open: !drop.hidden, opts: drop.querySelectorAll('.bb-opt').length, color: c.color };
+    });
+    check('cards', 'new card: "Benchmark 1", one empty row, focus in its instrument field, list open with all 50 instruments',
+      fresh.focusIns && fresh.inCard && fresh.rows === 1 && fresh.name === 'Benchmark 1' && fresh.open && fresh.opts === 50, fresh);
+
+    async function searchTop(q) {
+      await selectAllAndType(page, q);
+      await settle(page);
+      return page.evaluate(() => Array.from(document.querySelectorAll('#bbDrop .bb-opt')).slice(0, 4).map((o) => o.querySelector('b').textContent + ' | ' + o.querySelector('span').textContent));
+    }
+    const s1 = await searchTop('micro'), s2 = await searchTop('US67'), s3 = await searchTop('nvidia'), s4 = await searchTop('halbleiter 3'),
+      s5 = await searchTop('coh'), s6 = await searchTop('IE00B4L5Y983'), s7 = await searchTop('NAS');
+    check('cards', 'search: prefix matches first (micro -> Micron, Microsoft, then AMD by word start)',
+      /^Micron \|/.test(s1[0]) && /^Microsoft \|/.test(s1[1]) && /^AMD \|/.test(s1[2]), s1);
+    check('cards', 'search by ISIN prefix, full name, case-insensitive; new stocks searchable',
+      /^NVIDIA \|/.test(s2[0]) && /^NVIDIA \|/.test(s3[0]) && /^Halbleiter 3x \|/.test(s4[0]) && /^Coherent \|/.test(s5[0]) && /^MSCI World \|/.test(s6[0]) && /^Nasdaq-100/.test(s7[0]),
+      { s2: s2[0], s3: s3[0], s4: s4[0], s5: s5[0], s6: s6[0], s7: s7.slice(0, 3) });
+    check('cards', 'entry subtitle = full name · ISIN · type', /^Coherent \| Coherent · US19247G1076 · Aktie$/.test(s5[0]), s5[0]);
+    // keyboard: arrows wrap, Enter picks -> % field
+    await selectAllAndType(page, 'nas');
+    await settle(page);
+    const nNas = await page.evaluate(() => document.querySelectorAll('#bbDrop .bb-opt').length);
+    await page.keyboard.press('ArrowUp');
+    const wrapUp = await page.evaluate(() => { const o = document.querySelectorAll('#bbDrop .bb-opt'); return o[o.length - 1].classList.contains('is-hi'); });
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    const hi2 = await page.evaluate(() => document.querySelector('#bbDrop .is-hi b').textContent);
+    await page.keyboard.press('Enter');
+    await settle(page);
+    const picked = await page.evaluate(() => { const c = PFApp.state.cards[0], a = document.activeElement; return { isin: c.rows[0].isin, q: c.rows[0].q, pctFocus: a.classList.contains('bb-pct'), closed: document.getElementById('bbDrop').hidden }; });
+    check('cards', 'arrows wrap, Enter picks the highlighted entry and moves to the % field',
+      nNas > 1 && wrapUp && picked.q === hi2 && picked.pctFocus && picked.closed, { nNas, wrapUp, hi2, picked });
+    // Esc on a changed instrument field reverts it
+    await page.keyboard.press('Shift+Tab');
+    await selectAllAndType(page, 'gold');
+    await page.keyboard.press('Escape');
+    await settle(page);
+    const esc1 = await page.evaluate(() => ({ val: document.activeElement.value, open: !document.getElementById('bbDrop').hidden, isin: PFApp.state.cards[0].rows[0].isin }));
+    check('cards', 'Esc closes the list and reverts the typed text', esc1.val === picked.q && !esc1.open && esc1.isin === picked.isin, esc1);
+    // Esc with nothing to revert reaches the page: clears a measurement
+    await page.evaluate(() => { PFApp.sync.measureStart(10); PFApp.sync.measureEnd(40); PFApp.sync.flush(); });
+    await page.keyboard.press('Escape');
+    await settle(page);
+    check('cards', 'Esc on an unchanged field still clears a chart measurement', await page.evaluate(() => PFApp.sync.pinned() === null));
+    // Tab with changed text picks the highlighted entry; exact ISIN on blur picks; partial text reverts
+    await selectAllAndType(page, 'micr');
+    await settle(page);
+    await page.keyboard.press('Tab');
+    await settle(page);
+    const tab1 = await page.evaluate(() => ({ q: PFApp.state.cards[0].rows[0].q, pct: document.activeElement.classList.contains('bb-pct') }));
+    check('cards', 'Tab with changed text picks the highlighted entry and moves to the % field', tab1.q === 'Micron' && tab1.pct, tab1);
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await settle(page);
+    check('cards', 'Tab on an unchanged field keeps the instrument', await page.evaluate(() => PFApp.state.cards[0].rows[0].q === 'Micron'));
+    await page.keyboard.press('Shift+Tab');
+    await selectAllAndType(page, 'us5949181045');
+    await page.evaluate(() => document.activeElement.blur());
+    await settle(page);
+    const blur1 = await page.evaluate(() => PFApp.state.cards[0].rows[0].q);
+    await page.locator('#benchCards .bb-card:not(.bb-card--fixed) .bb-ins').first().click();
+    await selectAllAndType(page, 'Micr');
+    await page.evaluate(() => document.activeElement.blur());
+    await settle(page);
+    const blur2 = await page.evaluate(() => PFApp.state.cards[0].rows[0].q);
+    check('cards', 'blur: exact ISIN picks it, partial text is reverted', blur1 === 'Microsoft' && blur2 === 'Microsoft', { blur1, blur2 });
+
+    // percentages and validity
+    const cid = await page.evaluate(() => PFApp.state.cards[0].id);
+    const pctSel = '#benchCards [data-card="' + cid + '"] .bb-pct';
+    async function pctState(text) {
+      await page.locator(pctSel).first().click();
+      await selectAllAndType(page, text);
+      await settle(page);
+      return page.evaluate((id) => {
+        const el = document.querySelector('[data-card="' + id + '"]');
+        return { valid: PFApp.model().benches.some((b) => b.id === id), total: el.querySelector('.bb-total').textContent, hint: el.querySelector('.bb-hint').textContent,
+          ret: el.querySelector('.bb-ret').textContent };
+      }, cid);
+    }
+    const P = {};
+    for (const t of ['99,98', '99,99', '100', '100,01', '100,02', '1.000', '-5', 'abc', '', '0', '100.0']) P[t || '(leer)'] = await pctState(t);
+    check('cards', 'total within 100 % ± 0,01 is valid (99,99 / 100 / 100,01), outside is not (99,98 / 100,02)',
+      !P['99,98'].valid && P['99,99'].valid && P['100'].valid && P['100,01'].valid && !P['100,02'].valid,
+      { '99,98': P['99,98'], '100,02': P['100,02'] });
+    check('cards', 'German input: "1.000" = 1000 %, "-5"/"abc" invalid ("Ungültige Prozentzahl"), empty/0 = 0 %, "100.0" = 100 %',
+      !P['1.000'].valid && /1\.000 %/.test(P['1.000'].total) && !P['-5'].valid && /Ungültige/.test(P['-5'].hint) && !P['abc'].valid &&
+      !P['(leer)'].valid && /^0 %$/.test(P['(leer)'].total) && !P['0'].valid && P['100.0'].valid,
+      { '1.000': P['1.000'].total, '-5': P['-5'].hint, leer: P['(leer)'], '100.0': P['100.0'].valid });
+    check('cards', 'invalid card shows "–" as return', P['100,02'].ret === '–' && P['100'].ret !== '–', { invalid: P['100,02'].ret, valid: P['100'].ret });
+    // a % without instrument -> invalid; instrument with 0 % ignored
+    await pctState('60');
+    await page.click('#benchCards [data-card="' + cid + '"] [data-act="addrow"]');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('40');
+    await settle(page);
+    const orphan = await page.evaluate((id) => { const el = document.querySelector('[data-card="' + id + '"]'); return { valid: PFApp.model().benches.some((b) => b.id === id), hint: el.querySelector('.bb-hint').textContent }; }, cid);
+    check('cards', 'a percentage without an instrument makes the card invalid ("Instrument fehlt")', !orphan.valid && /Instrument fehlt/.test(orphan.hint), orphan);
+    // duplicate exclusion inside a card
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.type('Microsoft');
+    await settle(page);
+    const dupEx = await page.evaluate(() => ({ items: Array.from(document.querySelectorAll('#bbDrop .bb-opt b')).map((b) => b.textContent), empty: (document.querySelector('#bbDrop .bb-empty') || {}).textContent || '' }));
+    check('cards', 'an instrument already in the card is not offered again', dupEx.items.indexOf('Microsoft') < 0 && /Schon in dieser Benchmark/.test(dupEx.empty), dupEx);
+    await selectAllAndType(page, 'NVIDIA');
+    await page.keyboard.press('Enter');
+    await settle(page);
+    const two = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); return { rows: c.rows.map((r) => [r.q, r.pct]), valid: PFApp.model().benches.some((b) => b.id === id) }; }, cid);
+    check('cards', '60 % Microsoft + 40 % NVIDIA is valid', two.valid && two.rows.length === 2, two);
+
+    // buy and hold (no rebalancing) vs an independent computation; 1T bought at the previous close
+    const bh = await page.evaluate((id) => {
+      const E = window.PFEngine, ctx = E.prepare(window.PORTFOLIO_DATA), M = PFApp.model(), x = M.byId[id], R = M.R, base = M.p.startValue;
+      const w = { US5949181045: 0.6, US67066G1040: 0.4 };
+      let maxErr = 0;
+      for (let k = R.start; k <= R.end; k++) {
+        let v = 0;
+        for (const i in w) v += w[i] * ctx.px[i][k] / ctx.px[i][R.start];
+        maxErr = Math.max(maxErr, Math.abs(base * v - x.s.value[k - R.start]) / (base * v));
+      }
+      // daily rebalanced alternative for contrast
+      let reb = base;
+      for (let k = R.start + 1; k <= R.end; k++) { let r = 0; for (const i in w) r += w[i] * (ctx.px[i][k] / ctx.px[i][k - 1] - 1); reb *= 1 + r; }
+      return { maxErr, bh: x.s.value[x.s.value.length - 1], reb, n: R.end - R.start + 1 };
+    }, cid);
+    check('cards', 'custom card = buy at period start and hold (matches Σ wᵢ·Pᵢ(t)/Pᵢ(start), differs from daily rebalancing)',
+      bh.maxErr < 1e-9 && Math.abs(bh.bh - bh.reb) / bh.bh > 1e-4, bh);
+    await page.click('#rangeTabs [data-preset="1T"]');
+    await settle(page);
+    const bh1 = await page.evaluate((id) => {
+      const E = window.PFEngine, ctx = E.prepare(window.PORTFOLIO_DATA), I = ctx.intraday, M = PFApp.model();
+      const o = M.intra && M.intra.benches.find((b) => b.x.id === id);
+      if (!o) return { ok: false };
+      const bi = I.idx[I.D - 1] - 1, w = { US5949181045: 0.6, US67066G1040: 0.4 };
+      let maxErr = 0;
+      for (let k = 0; k <= I.last; k++) {
+        let v = 0;
+        for (const i in w) v += w[i] * I.px[i][k] / ctx.px[i][bi];
+        maxErr = Math.max(maxErr, Math.abs(M.intra.base * v - o.s.value[k]) / (M.intra.base * v));
+      }
+      return { ok: true, maxErr, legend: /Benchmark 1/.test(document.getElementById('legend').textContent), line: PFApp.charts.main.model.benches.some((b) => b.id === id) };
+    }, cid);
+    check('cards', '1T: card bought at the previous close and held; line + legend in 1T', bh1.ok && bh1.maxErr < 1e-9 && bh1.legend && bh1.line, bh1);
+    await page.click('#rangeTabs [data-preset="YTD"]');
+    await settle(page);
+    // benchWin = period series, no re-buy at the sub-window start
+    const bw = await page.evaluate((id) => {
+      const M = PFApp.model(), x = M.selB.find((b) => b.id === id), a = 40, b = 120;
+      PFApp.sync.setHover(b);
+      PFApp.sync.flush();
+      const tipTxt = document.querySelector('#mainChart .pc-tip').textContent;
+      const E = window.PFEngine, ctx = E.prepare(window.PORTFOLIO_DATA);
+      const fromStart = x.s.value[b] / x.s.value[0] - 1;
+      const rebuy = E.benchmark(ctx, x.b, M.R.start + a, M.R.start + b, 1);
+      const win = x.s.value[b] / x.s.value[a] - 1;
+      PFApp.sync.setHover(null);
+      return { hoverHas: tipTxt.indexOf(E.fmt.pct(fromStart, { sign: true, dec: 2 })) >= 0, win, rebuy: rebuy.value[rebuy.value.length - 1] - 1 };
+    }, cid);
+    check('cards', 'hover % reads the period series (bought at the range start)', bw.hoverHas, bw);
+
+    // consumers agree for a custom card (hide Mein Depot so the card is the first shown benchmark)
+    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await settle(page);
+    const agree = await page.evaluate((id) => {
+      const el = document.querySelector('[data-card="' + id + '"]'), card = el.querySelector('.bb-ret').textContent;
+      const lg = Array.from(document.querySelectorAll('#legend .lg-item')).find((n) => /Benchmark 1/.test(n.textContent));
+      const row = Array.from(document.querySelectorAll('#benchTable tbody tr')).find((r) => /Benchmark 1/.test(r.textContent));
+      const kpi = document.querySelector('#kpis .kpi .kpi-bench'), month = Array.from(document.querySelectorAll('#monthTable tbody tr')).some((r) => /Benchmark 1/.test(r.textContent));
+      const dd = PFApp.charts.dd.model.benches.some((b) => b.id === id);
+      PFApp.sync.setHover(60); PFApp.sync.flush();
+      const readout = document.getElementById('ddReadout').textContent;
+      PFApp.sync.setHover(null);
+      return { card, legend: lg && lg.querySelector('b').textContent, table: row && row.children[1].textContent, kpi: kpi && kpi.textContent, month, dd, readout: /Benchmark 1/.test(readout) };
+    }, cid);
+    check('cards', 'card return = legend = Benchmark-Vergleich = Kennzahlen bench line; monthly row, drawdown line + readout',
+      agree.card === agree.legend && agree.card === agree.table && agree.kpi && agree.kpi.indexOf(agree.card) >= 0 && agree.month && agree.dd && agree.readout, agree);
+    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await settle(page);
+    // invalid card excluded everywhere
+    await page.locator(pctSel).first().click();
+    await selectAllAndType(page, '61');
+    await settle(page);
+    const excl = await page.evaluate((id) => ({
+      bench: PFApp.model().benches.some((b) => b.id === id), legend: /Benchmark 1/.test(document.getElementById('legend').textContent),
+      lines: PFApp.charts.main.model.benches.some((b) => b.id === id), dd: PFApp.charts.dd.model.benches.some((b) => b.id === id),
+      table: /Benchmark 1/.test(document.getElementById('benchTable').textContent), months: /Benchmark 1/.test(document.getElementById('monthTable').textContent)
+    }), cid);
+    check('cards', 'an invalid card is left out of chart, drawdown, legend, Benchmark-Vergleich, Monatsrenditen',
+      !excl.bench && !excl.legend && !excl.lines && !excl.dd && !excl.table && !excl.months, excl);
+    await selectAllAndType(page, '60');
+    await settle(page);
+
+    // focus + caret kept while typing in the middle of the name
+    const nameSel = '#benchCards [data-card="' + cid + '"] .bb-name';
+    await page.locator(nameSel).click();
+    await page.evaluate((s) => { const n = document.querySelector(s); n._probe = 1; n.setSelectionRange(3, 3); }, nameSel);
+    await page.keyboard.type('XY');
+    await settle(page);
+    const caret = await page.evaluate((s) => { const n = document.activeElement; return { same: n._probe === 1 && n.matches(s), val: n.value, pos: n.selectionStart, legend: document.getElementById('legend').textContent }; }, nameSel);
+    check('cards', 'name edit keeps focus and caret; legend follows', caret.same && caret.val === 'BenXYchmark 1' && caret.pos === 5 && /BenXYchmark 1/.test(caret.legend), caret);
+    await page.locator(pctSel).first().click();
+    await page.evaluate((s) => { const n = document.querySelector(s); n._probe = 2; n.setSelectionRange(1, 1); }, pctSel);
+    await page.keyboard.type('5');
+    await settle(page);
+    const caret2 = await page.evaluate(() => { const n = document.activeElement; return { same: n._probe === 2, val: n.value, pos: n.selectionStart }; });
+    check('cards', '% edit keeps focus and caret', caret2.same && caret2.val === '650' && caret2.pos === 2, caret2);
+    await selectAllAndType(page, '60');
+    // empty name -> default on blur
+    await page.locator(nameSel).click();
+    await selectAllAndType(page, '');
+    await page.keyboard.press('Backspace');
+    await page.evaluate(() => document.activeElement.blur());
+    await settle(page);
+    check('cards', 'emptied name falls back to the default on blur', await page.evaluate((s) => document.querySelector(s).value === 'Benchmark 1', nameSel));
+
+    // structure: duplicate, second card, colours, same instrument in another card, clear, delete row, delete card
+    await page.click('#benchCards [data-card="' + cid + '"] [data-act="dup"]');
+    await settle(page);
+    const dup = await page.evaluate(() => { const c = PFApp.state.cards; const a = document.activeElement; return { n: c.length, name: c[1].name, rows: c[1].rows.map((r) => [r.isin, r.pct]), colors: c.map((x) => x.color), focusName: a.classList.contains('bb-name') && a.value === c[1].name }; });
+    check('cards', 'duplicate: "… (Kopie)", same rows, new colour, focus on its name',
+      dup.n === 2 && dup.name === 'Benchmark 1 (Kopie)' && dup.rows.length === 2 && dup.colors[0] !== dup.colors[1] && dup.focusName, dup);
+    const cid3 = await addCard(page, [['Microsoft', '100']]);
+    const three = await page.evaluate((id) => { const c = PFApp.state.cards; return { valid: PFApp.model().benches.some((b) => b.id === id), colors: c.map((x) => x.color) }; }, cid3);
+    const palette = ['#28ebcf', '#e78e78', '#f2f3f4'];
+    check('cards', 'same instrument allowed in another card; colours distinct and away from accent/neg/white',
+      three.valid && new Set(three.colors).size === three.colors.length && three.colors.every((c) => palette.indexOf(c.toLowerCase()) < 0), three);
+    await page.click('#benchCards [data-card="' + cid3 + '"] [data-act="clear"]');
+    await settle(page);
+    const cleared = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, empty: !c.rows[0].isin && !c.rows[0].pct, focus: a.classList.contains('bb-ins') && !!a.closest('[data-card="' + id + '"]') }; }, cid3);
+    check('cards', 'clear leaves one empty row and focuses its instrument field', cleared.rows === 1 && cleared.empty && cleared.focus, cleared);
+    await page.keyboard.press('Escape');
+    const dupId = await page.evaluate(() => PFApp.state.cards[1].id);
+    await page.click('#benchCards [data-card="' + dupId + '"] [data-act="delrow"]');
+    await settle(page);
+    const delrow = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, focusInCard: !!a.closest('[data-card="' + id + '"]') }; }, dupId);
+    check('cards', 'remove row keeps focus inside the card', delrow.rows === 1 && delrow.focusInCard, delrow);
+    const freed = await page.evaluate((id) => PFApp.state.cards.find((x) => x.id === id).color, dupId);
+    await page.click('#benchCards [data-card="' + dupId + '"] [data-act="del"]');
+    await settle(page);
+    const del = await page.evaluate(() => { const a = document.activeElement; return { n: PFApp.state.cards.length, focus: a && (a.getAttribute('data-act') || a.className) }; });
+    const cid4 = await addCard(page, [['Gold', '100']]);
+    const reuse = await page.evaluate((id) => PFApp.state.cards.find((x) => x.id === id).color, cid4);
+    check('cards', 'delete card moves focus to a sensible control; freed colour is reused', del.n === 2 && !!del.focus && reuse === freed, { del, freed, reuse });
+    check('cards', 'no console errors while editing cards', page.errors.length === 0, page.errors.slice(0, 5));
+
+    // dropdown overlay: not clipped by the card, below the field, upward near the bottom of the window
+    await page.click('#benchCards [data-card="' + cid4 + '"] [data-act="addrow"]');
+    await page.evaluate(() => { const a = document.activeElement; window.scrollBy(0, a.getBoundingClientRect().top - 180); });
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('ArrowDown');                // re-open at the new scroll position
+    await settle(page);
+    const place = await page.evaluate(() => {
+      const d = document.getElementById('bbDrop').getBoundingClientRect(), i = document.activeElement.getBoundingClientRect(), card = document.activeElement.closest('.bb-card').getBoundingClientRect();
+      return { open: !document.getElementById('bbDrop').hidden, below: d.top >= i.bottom - 1, beyondCard: d.bottom > card.bottom || d.right > card.right, inWindow: d.left >= 0 && d.right <= innerWidth && d.bottom <= innerHeight + 1 };
+    });
+    await shot(page, 'cards-dropdown-1903', { note: 'benchmark cards with the search list open' });
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { const a = document.activeElement; window.scrollBy(0, a.getBoundingClientRect().bottom - innerHeight + 60); });
+    await page.keyboard.press('ArrowDown');
+    await settle(page);
+    const placeUp = await page.evaluate(() => { const d = document.getElementById('bbDrop').getBoundingClientRect(), i = document.activeElement.getBoundingClientRect(); return { above: d.bottom <= i.top + 1, top: d.top }; });
+    check('cards', 'search list is an overlay outside the card, inside the window, opens upward near the bottom', place.open && place.below && place.beyondCard && place.inWindow && placeUp.above, { place, placeUp });
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    // ================================================================= hover with 3 shown benchmarks (Mein Depot + 2 cards)
+    await page.click('#benchCards [data-card="' + cid4 + '"] [data-act="del"]');
+    await page.locator('#benchCards [data-card="' + cid3 + '"] .bb-ins').first().click();
+    await page.keyboard.type('MSCI World');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('100');
+    await page.keyboard.press('Tab');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await settle(page);
+    const shownNow = await page.evaluate(() => PFApp.state.benchmarks.length);
+    async function hoverSweep(tag) {
+      const bad = [];
+      for (let f = 0; f <= 1.0001; f += 0.05) {
+        await hoverAt(page, Math.min(f, 1));
+        const g = await chartGeo(page);
+        if (g && (g.hits.length || !g.inside)) bad.push({ f: Math.round(f * 100) / 100, hits: g.hits.slice(0, 2), inside: g.inside });
+      }
+      await page.mouse.move(1, 1);
+      return bad;
+    }
+    const sweeps = {};
+    for (const [mode, preset] of [['value', 'YTD'], ['pl', 'YTD'], ['value', '1T'], ['pl', '1T']]) {
+      await page.click('#rangeTabs [data-preset="' + preset + '"]');
+      await page.click('#modeToggle [data-mode="' + mode + '"]');
+      await settle(page);
+      sweeps[mode + '/' + preset] = await hoverSweep(mode + preset);
+    }
+    check('hover', 'desktop: hover box with 3 shown benchmarks never covers lines, y labels or the last-value box (YTD/1T, both modes)',
+      shownNow === 3 && Object.values(sweeps).every((b) => b.length === 0), { shownNow, sweeps });
+    await page.click('#modeToggle [data-mode="value"]');
+    await page.click('#rangeTabs [data-preset="YTD"]');
+    await hoverAt(page, 0.62);
+    await shot(page, 'hover-3-benchmarks-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: 'hover with Mein Depot + 2 cards' });
+    await page.mouse.move(1, 1);
+
+    // ================================================================= measurement (1903, YTD and 1T)
+    await drag(page, 0.55, 0.85);
+    const m1 = await page.evaluate(() => ({ pin: PFApp.sync.pinned(), btn: !document.getElementById('applyMeasure').hidden }));
+    const g1 = await chartGeo(page), d1 = await depotBoxCheck(page);
+    check('measure', 'forward drag pins a measurement; "Zeitraum auf Auswahl setzen" shown', !!m1.pin && m1.pin.b > m1.pin.a && m1.btn, m1);
+    check('measure', 'Yacht box + Mein Depot box beside it, inside the chart, not covering lines/labels',
+      g1.tips.length === 2 && g1.hits.length === 0 && g1.inside && Math.abs(g1.tips[0].top - g1.tips[1].top) < 1, g1);
+    check('measure', 'Mein Depot box: % / Gleicher Wert / Echt match an independent engine computation, label shows the real depot value',
+      d1.side && JSON.stringify(d1.rows) === JSON.stringify(d1.expect) && d1.hasTarget, d1);
+    await shot(page, 'measure-ytd-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: 'pinned YTD measurement with the Mein Depot box' });
+    await page.keyboard.press('Escape');
+    await settle(page);
+    const escd = await page.evaluate(() => PFApp.sync.measure === null);
+    await hoverAt(page, 0.3);
+    const hovAfter = await page.evaluate(() => { const t = document.querySelector('#mainChart .pc-tip'); return !t.hidden && t.classList.contains('pc-tip--hover'); });
+    check('measure', 'Esc clears the measurement and hover works again', escd && hovAfter, { escd, hovAfter });
+    await page.mouse.move(1, 1);
+    await drag(page, 0.8, 0.35);
+    const rev = await page.evaluate(() => PFApp.sync.pinned());
+    const drev = await depotBoxCheck(page);
+    check('measure', 'reverse drag pins the same kind of span (a < b) with correct numbers', !!rev && rev.a < rev.b && drev.side && JSON.stringify(drev.rows) === JSON.stringify(drev.expect), { rev, drev });
+    // click - follow - click
+    await page.keyboard.press('Escape');
+    const box = await page.locator('#mainChart svg').boundingBox();
+    const Lx = await page.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
+    const yM = box.y + (Lx.top + Lx.bottom) / 2;
+    await page.mouse.click(box.x + Lx.padL + Lx.plotW * 0.2, yM);
+    await page.mouse.move(box.x + Lx.padL + Lx.plotW * 0.5, yM, { steps: 8 });
+    await settle(page);
+    const follow = await page.evaluate(() => ({ following: PFApp.sync.following(), measure: PFApp.sync.measure, tips: Array.from(document.querySelectorAll('#mainChart .pc-tip')).filter((t) => !t.hidden).length }));
+    await page.mouse.click(box.x + Lx.padL + Lx.plotW * 0.5, yM);
+    await settle(page);
+    const ended = await page.evaluate(() => PFApp.sync.measure === null);
+    check('measure', 'click sets the start, the end follows the pointer (live boxes), the next click ends it',
+      follow.following && follow.measure && follow.measure.b > follow.measure.a && follow.tips === 2 && ended, { follow, ended });
+    await page.mouse.move(1, 1);
+    // edges and full range
+    const edges = {};
+    for (const [n, a, b] of [['left', 0.0, 0.08], ['right', 0.9, 1.0], ['full', 0.0, 1.0]]) {
+      await drag(page, a, b);
+      const g = await chartGeo(page);
+      edges[n] = { tips: g.tips.length, hits: g.hits, inside: g.inside };
+      await page.keyboard.press('Escape');
+    }
+    check('measure', 'left-edge, right-edge and full-range spans stay inside the chart and cover nothing',
+      Object.values(edges).every((e) => e.tips === 2 && e.hits.length === 0 && e.inside), edges);
+    // Gesamtrendite, Startwert, Mein Depot (€), hidden Mein Depot
+    await drag(page, 0.4, 0.9);
+    const base0 = await depotBoxCheck(page);
+    await page.click('#modeToggle [data-mode="pl"]');
+    await settle(page);
+    const plMode = await page.evaluate(() => { const t = document.querySelector('#mainChart .pc-tip'); return { pinned: !!PFApp.sync.pinned(), text: t.textContent }; });
+    const dpl = await depotBoxCheck(page);
+    check('measure', 'Gesamtrendite keeps the measurement, signed values, same Mein Depot numbers',
+      plMode.pinned && /[+−-]\d/.test(plMode.text) && JSON.stringify(dpl.rows) === JSON.stringify(base0.rows), { text: plMode.text.slice(0, 80), rows: dpl.rows });
+    await page.click('#modeToggle [data-mode="value"]');
+    const sv = {};
+    for (const v of ['10000', '1000000', '']) {
+      await page.locator('#startValue').click();
+      await selectAllAndType(page, v);
+      await settle(page);
+      sv[v || 'leer'] = await depotBoxCheck(page);
+    }
+    check('measure', 'Startwert 10.000 / 1.000.000 / empty: Gleicher Wert follows the scaled value, Echt unchanged, numbers match the engine',
+      Object.values(sv).every((d) => d.side && JSON.stringify(d.rows) === JSON.stringify(d.expect)) &&
+      sv['10000'].rows[2] === sv['leer'].rows[2] && sv['10000'].rows[1] !== sv['leer'].rows[1],
+      { s10k: sv['10000'].rows, s1m: sv['1000000'].rows, leer: sv['leer'].rows });
+    await page.locator('#depotValue').click();
+    await page.keyboard.type('150000');
+    await settle(page);
+    const dv = await depotBoxCheck(page);
+    check('measure', '"Mein Depot (€)" updates the open box (label + Echt), no hard-coded 298.811',
+      dv.side && dv.targetLabel === '150.000 €' && dv.hasTarget && JSON.stringify(dv.rows) === JSON.stringify(dv.expect), dv);
+    await selectAllAndType(page, '');
+    await page.keyboard.press('Backspace');
+    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await settle(page);
+    await drag(page, 0.4, 0.9);
+    const noDepot = await chartGeo(page);
+    check('measure', 'Mein Depot hidden: only the Yacht box', noDepot.tips.length === 1 && noDepot.hits.length === 0, noDepot.tips);
+    await page.keyboard.press('Escape');
+    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await settle(page);
+    // 1T
+    await page.click('#rangeTabs [data-preset="1T"]');
+    await settle(page);
+    const t1 = await page.evaluate(() => ({ x: Array.from(document.querySelectorAll('#mainChart .pc-xlabel')).map((n) => n.textContent),
+      note: document.getElementById('hlSub').textContent, intra: !!PFApp.model().intra, dates: PFApp.model().intra && PFApp.model().intra.dates }));
+    const dayWords = t1.x.filter((t) => /^(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag|Gestern|Heute)$/.test(t));
+    check('data', '1T shows the 30-min sessions of 24./25.09. (two day labels, note "30-Minuten-Kurse bis 22:59 Uhr")',
+      t1.intra && JSON.stringify(t1.dates) === JSON.stringify(['2026-09-24', '2026-09-25']) && dayWords.length === 2 && /30-Minuten-Kurse bis 22:59 Uhr/.test(t1.note), { x: t1.x, dates: t1.dates, note: t1.note.slice(0, 120) });
+    await drag(page, 0.35, 0.6);
+    const g1t = await chartGeo(page), d1t = await depotBoxCheck(page);
+    const lbl = await page.evaluate(() => document.querySelector('#mainChart .pc-tip .tt-date').textContent);
+    check('measure', '1T: slot labels, both boxes, intraday Echt/Gleicher Wert match the engine, nothing covered',
+      /, \d\d:\d\d$/.test(lbl) && g1t.tips.length === 2 && g1t.hits.length === 0 && d1t.side && JSON.stringify(d1t.rows) === JSON.stringify(d1t.expect), { lbl, g1t, d1t });
+    await shot(page, 'measure-1t-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: '1T measurement' });
+    await page.keyboard.press('Escape');
+    await page.click('#rangeTabs [data-preset="YTD"]');
+    // drawdown sync
+    await hoverAt(page, 0.5);
+    const ddSync = await page.evaluate(() => ({ hover: PFApp.sync.hoverI, readout: document.getElementById('ddReadout').textContent, padR: [PFApp.charts.main.L.padR, PFApp.charts.dd.L && PFApp.charts.dd.L.padR] }));
+    check('measure', 'drawdown chart follows the main chart hover; same padR', ddSync.hover != null && /\d{4}/.test(ddSync.readout) && ddSync.padR[0] === ddSync.padR[1], ddSync);
+    await page.mouse.move(1, 1);
+
+    // ================================================================= periods
+    const per = {};
+    for (const [src, key] of [['#holdPills [data-hp="3M"]', '3M'], ['#rangeTabs [data-preset="6M"]', '6M'], ['#holdPills [data-hp="1W"]', '1W'], ['#rangeTabs [data-preset="MAX"]', 'MAX'], ['#holdPills [data-hp="SK"]', 'SK'], ['#holdPills [data-hp="YTD"]', 'YTD']]) {
+      await page.click(src);
+      await settle(page);
+      per[key] = await page.evaluate(() => ({
+        pill: (document.querySelector('#holdPills .is-active') || {}).textContent || null,
+        tab: (document.querySelector('#rangeTabs .is-active') || {}).textContent || null,
+        label: document.querySelector('#holdChg .hold-per') && document.querySelector('#holdChg .hold-per').textContent
+      }));
+    }
+    check('periods', '3M/6M pills and tabs update each other and the labels; MAX = no pill; Seit Kauf = MAX tab',
+      per['3M'].pill === '3M' && per['3M'].tab === '3M' && per['3M'].label === '3 Monate' && per['6M'].pill === '6M' && per['6M'].tab === '6M' && per['6M'].label === '6 Monate' &&
+      per['1W'].tab === '1W' && per.MAX.pill === null && per.MAX.tab === 'MAX' && per.SK.pill === 'Seit Kauf' && per.SK.tab === 'MAX' && per.YTD.pill === 'YTD', per);
+
+    // ================================================================= lists and order (1903)
+    const lists0 = await page.evaluate(() => ({ hold: document.querySelector('#listToggles [data-list="hold"]').getAttribute('aria-pressed'), assets: document.querySelector('#listToggles [data-list="assets"]').getAttribute('aria-pressed'), assetHidden: document.getElementById('assetBlock').hidden }));
+    check('lists', 'defaults: Portfolio on, Einzelwerte off', lists0.hold === 'true' && lists0.assets === 'false' && lists0.assetHidden, lists0);
+    const order = await page.evaluate(() => {
+      const out = [], st = document.querySelector('.settings');
+      for (let n = st.nextElementSibling; n; n = n.nextElementSibling) {
+        const h = n.id === 'lists' ? 'Listen' : n.querySelector('h2') && n.querySelector('h2').textContent;
+        if (h) out.push(h.trim());
+      }
+      return out;
+    });
+    check('lists', 'order: lists, Benchmark-Vergleich, Drawdown, Monatsrenditen, Kennzahlen, Risiko & Korrelation, Hinweise',
+      order.join('|') === 'Listen|Benchmark-Vergleich|Drawdown|Monatsrenditen|Kennzahlen|Risiko & Korrelation|Hinweise', order);
+    async function combos(pg) {
+      const out = [];
+      for (const [h, a] of [[true, false], [true, true], [false, true], [false, false]]) {
+        for (const [k, want] of [['hold', h], ['assets', a]]) {
+          const b = pg.locator('#listToggles [data-list="' + k + '"]');
+          if ((await b.getAttribute('aria-pressed')) !== String(want)) await b.click();
+        }
+        await settle(pg);
+        const o = await overflow(pg);
+        out.push(Object.assign({ hold: h, assets: a }, await pg.evaluate(() => ({ side: document.getElementById('lists').classList.contains('is-side'), stack: document.getElementById('lists').classList.contains('is-stack'), hint: !document.getElementById('listsHint').hidden })), { ok: o.sw <= o.w }));
+      }
+      return out;
+    }
+    const c1903 = await combos(page);
+    check('lists', '1903: four combinations, both on = side by side, both off = hint, no page overflow',
+      c1903.every((c) => c.ok) && c1903[1].side && c1903[3].hint && !c1903[0].hint, c1903);
+    // both on for the rest
+    for (const k of ['hold', 'assets']) { const b = page.locator('#listToggles [data-list="' + k + '"]'); if ((await b.getAttribute('aria-pressed')) !== 'true') await b.click(); }
+    await page.locator('#lists').scrollIntoViewIfNeeded();
+    await shot(page, 'lists-side-1903', { note: 'Portfolio + Einzelwerte side by side' });
+    await page.setViewportSize({ width: 1400, height: 1000 });
+    await page.waitForTimeout(150);
+    const r1400 = await page.evaluate(() => document.getElementById('lists').classList.contains('is-stack'));
+    await page.setViewportSize({ width: 1903, height: 1000 });
+    await page.waitForTimeout(150);
+    const r1903 = await page.evaluate(() => document.getElementById('lists').classList.contains('is-side'));
+    check('lists', 'resize 1903 -> 1400 -> 1903 switches side by side / stacked', r1400 && r1903, { r1400, r1903 });
+    // sorting
+    await page.click('#assetTable th[data-sort="ret"] button');
+    const s1a = await page.evaluate(() => PFApp.state.sort);
+    await page.click('#assetTable th[data-sort="ret"] button');
+    const s1b = await page.evaluate(() => PFApp.state.sort);
+    await page.click('#holdSortBtn');
+    await page.click('#holdSortMenu [data-hsort="name-asc"]');
+    const hs = await page.evaluate(() => ({ key: PFApp.state.holdSort, first: document.querySelector('#holdList .hr-title').textContent }));
+    check('lists', 'sorting via table headers (toggle direction) and the ⋮ menu', s1a.key === 'ret' && s1b.dir === -s1a.dir && hs.key === 'name-asc' && /^Advanced|^Alphabet|^A/.test(hs.first), { s1a, s1b, hs });
+    // selection + what-if
+    const firstIsin = await page.evaluate(() => document.querySelector('#assetTable input[data-isin]').getAttribute('data-isin'));
+    await page.click('#assetTable input[data-isin="' + firstIsin + '"]');
+    await settle(page);
+    const sel31 = await page.evaluate(() => PFApp.state.selected.size);
+    await page.click('#selAll');
+    await settle(page);
+    const wi = page.locator('#assetTable input[data-wi]').first();
+    await wi.click();
+    await selectAllAndType(page, '1');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(120);
+    const wiState = await page.evaluate(() => ({ banner: !document.getElementById('wiBanner').hidden, changed: document.querySelectorAll('#assetTable tr.is-changed').length, focus: !!document.activeElement.closest('#assetTable'), ghost: !!PFApp.charts.main.model.ghost }));
+    await page.click('#wiReset');
+    await settle(page);
+    const wiOff = await page.evaluate(() => document.getElementById('wiBanner').hidden);
+    check('lists', 'checkbox selection, Alle; Stück what-if (banner, changed row, focus kept, Original line) and reset',
+      sel31 === 31 && wiState.banner && wiState.changed === 1 && wiState.focus && wiState.ghost && wiOff, { sel31, wiState, wiOff });
+    // empty selection hint while Einzelwerte is hidden
+    await page.click('#selNone');
+    await page.locator('#listToggles [data-list="assets"]').click();
+    await settle(page);
+    const empty = await page.evaluate(() => ({ main: document.getElementById('hlMain').textContent, sub: document.getElementById('hlSub').textContent, btn: !!document.querySelector('#hlSub button, #hlSub a, .headline button'), assetsHidden: document.getElementById('assetBlock').hidden }));
+    let emptyOk = false;
+    if (empty.btn) {
+      await page.click('#hlSub button, #hlSub a, .headline button');
+      await page.waitForTimeout(400);
+      emptyOk = await page.evaluate(() => { const b = document.getElementById('assetBlock'); const r = b.getBoundingClientRect(); return !b.hidden && r.top < innerHeight && r.bottom > 0 && PFApp.state.showAssets; });
+    }
+    check('lists', 'empty selection: hint is actionable while Einzelwerte is hidden (switches it on and brings it into view)', empty.assetsHidden && empty.btn && emptyOk, Object.assign(empty, { emptyOk }));
+    check('lists', 'empty selection shows no NaN/undefined', !(await badText(page)).nan && !(await badText(page)).undef);
+    if (!(await page.evaluate(() => PFApp.state.showAssets))) await page.locator('#listToggles [data-list="assets"]').click();
+    await page.click('#selAll');
+    await settle(page);
+    // hidden list refresh
+    await page.locator('#listToggles [data-list="assets"]').click();
+    await page.click('#holdPills [data-hp="1M"]');
+    await page.locator('#startValue').click();
+    await selectAllAndType(page, '10000');
+    await settle(page);
+    await page.locator('#listToggles [data-list="assets"]').click();
+    await settle(page);
+    const refresh = await page.evaluate(() => ({ sub: document.getElementById('assetSub').textContent, scaled: document.getElementById('assetTable').classList.contains('is-scaled') }));
+    check('lists', 'a hidden Einzelwerte list is current when switched on (period + Startwert)', /Sept/.test(refresh.sub) || /\d\d\.\d\d\./.test(refresh.sub), refresh);
+    await page.locator('#startValue').click();
+    await selectAllAndType(page, '');
+    await page.keyboard.press('Backspace');
+    await page.click('#holdPills [data-hp="YTD"]');
+    await settle(page);
+    const bt = await badText(page);
+    check('general', '1903: no console errors, no NaN/undefined on the page', page.errors.length === 0 && !bt.nan && !bt.undef, { errors: page.errors.slice(0, 5), bt });
+    await shot(page, 'full-1903', { fullPage: true, note: 'full page at 1903 px (both lists on, 3 benchmarks)' });
+
+    // reload resets
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.PFApp && document.querySelector('#benchCards .bb-card'));
+    if (page.fallbackFont) await fontsReady(page);
+    const reset = await page.evaluate(() => ({ cards: PFApp.state.cards.length, shown: PFApp.state.benchmarks.join(), dom: document.querySelectorAll('#benchCards .bb-card').length, assets: PFApp.state.showAssets, hold: PFApp.state.showHold }));
+    check('cards', 'reload resets to Mein Depot only (and list defaults); nothing persisted', reset.cards === 0 && reset.shown === 'my_depot' && reset.dom === 1 && !reset.assets && reset.hold, reset);
+
+    // ================================================================= 1920 and 1400
+    for (const w of [1920, 1400]) {
+      const pg = await open(browser, w, 1000);
+      pages.push(pg);
+      const c = await combos(pg);
+      const side = c[1].side, stack = c[1].stack;
+      check('lists', w + ': list layout (' + (w >= 1900 ? 'side by side' : 'stacked') + ') and no page overflow', c.every((x) => x.ok) && (w >= 1900 ? side : stack), c);
+      if (w === 1400) {
+        for (const k of ['hold', 'assets']) { const b = pg.locator('#listToggles [data-list="' + k + '"]'); if ((await b.getAttribute('aria-pressed')) !== 'true') await b.click(); }
+        await shot(pg, 'full-1400', { fullPage: true, note: 'full page at 1400 px, lists stacked' });
+      }
+      const btw = await badText(pg);
+      check('general', w + ': no console errors, no NaN/undefined', pg.errors.length === 0 && !btw.nan && !btw.undef, { errors: pg.errors.slice(0, 5) });
+    }
+
+    // ================================================================= mobile 375
+    const mp = await open(browser, 375, 812);
+    pages.push(mp);
+    page = mp;
+    await drag(mp, 0.3, 0.8);
+    const gm = await chartGeo(mp), dm = await depotBoxCheck(mp);
+    check('mobile', 'measurement boxes stack, stay inside the chart, cover nothing; numbers match',
+      gm.tips.length === 2 && gm.tips[1].top >= gm.tips[0].bottom - 1 && gm.inside && gm.hits.length === 0 && JSON.stringify(dm.rows) === JSON.stringify(dm.expect), { gm, dm: dm.rows });
+    await shot(mp, 'measure-375', { clip: { x: 0, y: 0, width: 375, height: 812 }, note: 'stacked measurement boxes on a phone' });
+    await mp.keyboard.press('Escape');
+    await addCard(mp, [['MSCI World', '100']]);
+    await addCard(mp, [['Nasdaq-100', '100']]);
+    await mp.evaluate(() => window.scrollTo(0, 0));
+    const sweepM = {};
+    for (const [mode, preset] of [['value', 'YTD'], ['value', '1T']]) {
+      await mp.click('#rangeTabs [data-preset="' + preset + '"]');
+      await mp.click('#modeToggle [data-mode="' + mode + '"]');
+      await settle(mp);
+      sweepM[mode + '/' + preset] = await hoverSweep('m' + mode + preset);
+    }
+    check('mobile', 'hover box with 3 shown benchmarks covers nothing (YTD/1T)', Object.values(sweepM).every((b) => b.length === 0), sweepM);
+    await mp.click('#rangeTabs [data-preset="YTD"]');
+    const cw = await mp.evaluate(() => { const g = document.getElementById('benchCards').getBoundingClientRect(); return Array.from(document.querySelectorAll('#benchCards .bb-card')).map((c) => Math.round(c.getBoundingClientRect().width - g.width)); });
+    check('mobile', 'cards full width', cw.every((d) => Math.abs(d) <= 1), cw);
+    await mp.locator('#benchCards').scrollIntoViewIfNeeded();
+    await shot(mp, 'cards-375', { note: 'benchmark cards on a phone' });
+    const cm = await combos(mp);
+    for (const k of ['hold', 'assets']) { const b = mp.locator('#listToggles [data-list="' + k + '"]'); if ((await b.getAttribute('aria-pressed')) !== 'true') await b.click(); }
+    await settle(mp);
+    const scroll = await mp.evaluate(() => { const s = document.querySelector('#assetBlock .tscroll'); const td = document.querySelector('#assetTable td.sticky'); return { inner: s.scrollWidth > s.clientWidth, sticky: td && getComputedStyle(td).position }; });
+    check('mobile', '375: list combinations stack, no page overflow; table scrolls inside its card with a sticky name column',
+      cm.every((c) => c.ok) && cm[1].stack && scroll.inner && scroll.sticky === 'sticky', { cm, scroll });
+    const pillsFit = await mp.evaluate(() => { const r = document.getElementById('holdPills').getBoundingClientRect(); return r.right <= innerWidth && r.left >= 0; });
+    check('mobile', 'period pills fit at 375 px', pillsFit);
+    await shot(mp, 'full-375', { fullPage: true, note: 'full page at 375 px, both lists on' });
+    const btm = await badText(mp);
+    check('general', '375: no console errors, no NaN/undefined', mp.errors.length === 0 && !btm.nan && !btm.undef, { errors: mp.errors.slice(0, 5) });
+  } catch (e) {
+    check('script', 'acceptance script ran to the end', false, String(e && e.stack || e).split('\n').slice(0, 4).join(' | '));
+  } finally {
+    const failed = results.filter((r) => !r.pass).length;
+    fs.writeFileSync(path.join(OUT, 'results.json'), JSON.stringify({ url: URL, at: new Date().toISOString(), browser: browser.version(),
+      fonts: FONT_DIR ? 'Selawik injected as "Segoe UI" (Segoe UI metrics)' : 'system fonts', passed: results.length - failed, failed, results, screenshots: shots }, null, 2));
+    console.log('\n' + (results.length - failed) + ' passed, ' + failed + ' failed · ' + path.join(OUT, 'results.json'));
+    await browser.close();
+    process.exitCode = failed ? 1 : 0;
+  }
+})();
