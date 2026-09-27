@@ -215,6 +215,11 @@ if (R/'data'/'intraday.csv').exists():
             if key not in cells or t > cells[key][0]: cells[key] = (t, float(r['price']))
     days = sorted({d for _, d, _ in cells})[-2:]
     di = [dates.index(d) for d in days]
+    raw = {i: [r[3 + j] for r in rows] for j, i in enumerate(head[3:])}
+    for i in raw:                                          # a final day ends on its daily close (build_data: 23:00 slot)
+        for j, d in enumerate(days):
+            if status[di[j]] == 'final' and raw[i][di[j]] and (i, d, S - 1) not in cells:
+                cells[i, d, S - 1] = (None, float(raw[i][di[j]]))
     last = max(j * S + k for (_, d, k) in cells if d in days for j in [days.index(d)])
     def ipx(i):
         has = any((i, d, k) in cells for d in days for k in range(S))

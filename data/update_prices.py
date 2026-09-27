@@ -1,31 +1,40 @@
-# Merges fetched Scalable quotes into prices_daily.csv (daily closes) and intraday.csv (30-min points for the 1T chart),
-# then rebuilds portfolio-data.js via build_data.py.  The step-by-step runbook for the fetch is UPDATE_PRICES.md.
+# Merges fetched Scalable quotes into prices_daily.csv (daily closes), intraday.csv (30-min points) and intraday_2h.csv
+# (2-hour points), then rebuilds portfolio-data.js via build_data.py.  The runbook for the fetch is UPDATE_PRICES.md.
 #
-# Input (either or both):
-#   incoming/<ISIN>.csv  header  timestamp_utc,price   – points of get_security_chart(ISIN, "seven_days") copied verbatim,
-#                        only dates >= the "copy from" date of --plan. Feeds intraday.csv and the closes of NEW days.
-#   incoming.csv         header  isin,timestamp_utc,price – legacy / backfills (e.g. year_to_date for a new column);
-#                        may also fill final rows. Not used for intraday.
-#   In both, several points per day are fine: the last one per Europe/Berlin date is that day's close / latest price.
+# Input: files written by the PostToolUse hook .claude/hooks/save-chart.cjs, which saves every get_security_chart result
+# (header timestamp_utc,price; values verbatim, ascending; nobody copies numbers by hand):
+#   incoming/<ISIN>.csv     seven_days   30-min points of ~6 sessions: the last point per Europe/Berlin date is that day's
+#                                        close / today's latest price (closes of NEW days only) + intraday.csv
+#   incoming/2h/<ISIN>.csv  one_month    2-hour points of ~1 month (the last point of a day, ~19:30 UTC, is NOT the close)
+#                                        -> intraday_2h.csv only
+#   incoming/3m/<ISIN>.csv  three_months daily closes; only fetched after a break of > 5 weekdays (--plan says so) and
+#                                        only used for new days that seven_days no longer covers
+#   incoming/ytd/<ISIN>.csv year_to_date daily closes since 1 January: new-instrument backfill (--plan-add/--finish-add)
+#   incoming.csv            legacy (isin,timestamp_utc,price; e.g. a hand-made year_to_date fill); may also fill final rows
+# intraday.csv / intraday_2h.csv keep every collected point (user, 27.09.): per ISIN and Berlin date the newest fetch
+# replaces the stored points of that date (a shorter, cut-off first session of a later fetch never replaces a full one).
 #
-# Usage (normal update = --plan, fetch agents, --finish; see UPDATE_PRICES.md):
-#         python update_prices.py --plan      empties incoming/, prints the "copy from" date and one ready agent prompt per batch
+# Usage (normal update = --plan, fetch agents, --finish; see UPDATE_PRICES.md or the update-quotes skill):
+#         python update_prices.py --plan      empties incoming/, prints one ready agent prompt per batch
 #         python update_prices.py --finish    check -> merge -> rebuild -> tests -> HANDOFF status block -> short report
 #   new instrument (only on user instruction; row in instruments.csv first):
-#         python update_prices.py --plan-add ISIN[,ISIN]    prints the backfill prompts (year_to_date + seven_days per ISIN)
+#         python update_prices.py --plan-add ISIN[,ISIN]    prints the backfill prompts (year_to_date + seven_days + one_month)
 #         python update_prices.py --finish-add ISIN[,ISIN]  checks the backfill files, adds the columns, merges, rebuilds, tests
 #   single steps (debugging):
 #         python update_prices.py --check     validates incoming/*.csv, lists the ISINs to fetch again (exit 1 if any)
 #         python update_prices.py --dry-run   prints what would change, writes nothing
-#         python update_prices.py             writes prices_daily.csv + intraday.csv, rebuilds, deletes the incoming files
+#         python update_prices.py             writes prices_daily.csv + intraday*.csv, rebuilds, deletes the incoming files
 #         python update_prices.py --add-column ISIN[,ISIN]  (legacy) adds empty price columns before a plain run
 import csv, datetime, math, pathlib, re, subprocess, sys
 
 D = pathlib.Path(__file__).resolve().parent
 INC = D / 'incoming'
+INC2H, INC3M = INC / '2h', INC / '3m'
+STORE_30M, STORE_2H = D / 'intraday.csv', D / 'intraday_2h.csv'
 CLOSE_HOUR_BERLIN = 23   # a day's last point counts as the close once Berlin time is past 23:00
-KEEP_INTRADAY_DAYS = 7   # intraday.csv keeps the points of the last 7 trading days
-BATCH = 10               # ISINs per fetch agent (Haiku: ~6k tokens per seven_days response)
+BATCH = 25               # ISINs per fetch agent (the hook shrinks every result to one line: ~2 x 25 short calls per agent)
+GAP_DAYS = 5             # more weekdays since the last final close: also fetch three_months (seven_days covers ~5 sessions)
+MAX_GAP_DAYS = 60        # three_months covers ~63 sessions; beyond that ask the user (year_to_date by hand, AGENTS.md)
 LINE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z,\d+(\.\d+)?$')
 
 
@@ -77,10 +86,26 @@ def last_price(isin):
     return None
 
 THINK = 'Thinking ON: think step by step before each tool call and before writing each file.'
-def agent_prompt(date, isins):
+def agent_prompt(tfs, isins):
     """The exact prompt for one price-fetcher agent (Haiku)."""
     return (f'{THINK}\nRead `UPDATE_PRICES.md` (section "Steps for a fetch agent") in `{D.parent}` and follow it exactly. '
-            f'COPY FROM DATE: `{date}`. Your ISINs: `{" ".join(isins)}`.')
+            f'TIMEFRAMES: `{" ".join(tfs)}`. Your ISINs: `{" ".join(isins)}`.')
+
+def planned_timeframes():
+    """Timeframes of the current plan (line 'TIMEFRAMES:' in incoming/_plan.txt); default seven_days + one_month."""
+    f = INC / '_plan.txt'
+    if f.exists():
+        m = re.search(r'^TIMEFRAMES: (.+)$', f.read_text(encoding='utf-8'), re.M)
+        if m: return m.group(1).split()
+    return ['seven_days', 'one_month']
+
+def clear_incoming():
+    """Removes the fetch files of the normal update (never incoming/ytd/: pending new-instrument backfills live there)."""
+    n = 0
+    for d in (INC, INC2H, INC3M):
+        for p in list(d.glob('*.csv')) + list(d.glob('*.tmp')) if d.exists() else []:
+            p.unlink(); n += p.suffix == '.csv'
+    return n
 
 def weekdays_between(a, b):   # weekdays after a up to and including b
     d, n = datetime.date.fromisoformat(a), 0
@@ -93,33 +118,33 @@ def weekdays_between(a, b):   # weekdays after a up to and including b
 # ------------------------------------------------------------------ --plan
 if '--plan' in sys.argv:
     INC.mkdir(exist_ok=True)
-    # leftovers of an earlier, unmerged fetch are removed: the agents must CREATE their files (the Write tool refuses
-    # to overwrite a file it has not read, which cost every agent a failed write + Read + retry per ISIN on 27.09.)
-    left = sorted(p.name for p in INC.glob('*.csv'))
-    for p in INC.glob('*.csv'): p.unlink()
+    left = clear_incoming()            # leftovers of an earlier, unmerged fetch: fetched again
     isins, nm = head[3:], names()
     k = math.ceil(len(isins) / BATCH)
     size = math.ceil(len(isins) / k)
     batches = [isins[j:j + size] for j in range(0, len(isins), size)]
+    gap = weekdays_between(last_final, today) if last_final else 99
+    tfs = ['seven_days', 'one_month'] + (['three_months'] if gap > GAP_DAYS else [])
     lines = [f'FETCH PLAN  (Berlin {now_berlin:%Y-%m-%d %H:%M}, last final close in prices_daily.csv: {last_final})',
-             f'COPY FROM DATE: {last_final}   -> copy every point whose timestampUtc starts with {last_final} or a later date',
-             'TOOL: get_security_chart(isin=<ISIN>, timeframe="seven_days")   (read-only; no portfolioId)',
-             'FILE: data/incoming/<ISIN>.csv   first line: timestamp_utc,price   then one line per point: <timestampUtc>,<midPrice>',
+             f'TIMEFRAMES: {" ".join(tfs)}',
+             'TOOL: get_security_chart(isin=<ISIN>, timeframe=<each timeframe>)   (read-only; no portfolioId)',
+             'FILES: written by the hook .claude/hooks/save-chart.cjs (data/incoming/<ISIN>.csv, 2h/, 3m/); the result is one line "SAVED ..."',
              f'{len(isins)} ISINs in {len(batches)} batches (one fetch agent per batch):']
     for j, b in enumerate(batches, 1):
         lines.append(f'BATCH {j}: ' + ' '.join(b))
         for i in b: lines.append(f'    {i}  {nm.get(i, "")}')
-    gap = weekdays_between(last_final, today) if last_final else 99
-    if gap > 5:
-        lines.append(f'WARNING: {gap} weekdays since {last_final} - seven_days only covers ~5 trading days. '
-                     'Fetch the missing closes with year_to_date first (AGENTS.md, legacy incoming.csv).')
+    if gap > GAP_DAYS:
+        lines.append(f'NOTE: {gap} weekdays since {last_final} - seven_days covers only ~5 sessions, so three_months fills the closes in between.')
+    if gap > MAX_GAP_DAYS:
+        lines.append(f'WARNING: {gap} weekdays since {last_final} - more than three_months covers. Ask the user before fetching '
+                     '(the older closes need year_to_date into the legacy data/incoming.csv, AGENTS.md).')
     if left:
-        lines.append(f'NOTE: removed {len(left)} files of an earlier, unmerged fetch from data/incoming/ (they are fetched again).')
+        lines.append(f'NOTE: removed {left} files of an earlier, unmerged fetch from data/incoming/ (they are fetched again).')
     lines.append('')
     lines.append(f'AGENT PROMPTS - start {len(batches)} agents at once: agent type price-fetcher, model haiku, one prompt each '
                  '(copy each block exactly):')
     for j, b in enumerate(batches, 1):
-        lines += [f'--- prompt {j}/{len(batches)} ---', agent_prompt(last_final, b)]
+        lines += [f'--- prompt {j}/{len(batches)} ---', agent_prompt(tfs, b)]
     lines.append('--- end of prompts --- then: python data/update_prices.py --finish')
     (INC/'_plan.txt').write_text('\n'.join(lines) + '\n', encoding='utf-8')
     print('\n'.join(lines))
@@ -149,12 +174,15 @@ def tests_status_report(alerts, step=''):
         allrows = [r for r in csv.reader(f) if r]
     hd, rr = allrows[0], allrows[1:]
     last = rr[-1]
-    idays = sorted({to_berlin(parse_ts(r['timestamp_utc'])).date().isoformat()
-                    for r in csv.DictReader(open(D/'intraday.csv', encoding='utf-8'))}) if (D/'intraday.csv').exists() else []
+    def sessions(f):
+        return sorted({to_berlin(parse_ts(r['timestamp_utc'])).date().isoformat()
+                       for r in csv.DictReader(open(f, encoding='utf-8'))}) if f.exists() else []
+    def span(ds): return f'{len(ds)} sessions {ds[0]} … {ds[-1]}' if ds else 'none'
+    idays, hdays = sessions(STORE_30M), sessions(STORE_2H)
     asof = f', asof {last[2]}' if last[2] else ''
     status = (f'<!-- data-status:start (written by update_prices.py --finish) -->\n'
               f'- Data status (update {now_berlin:%d.%m.%Y %H:%M} Berlin): {len(rr)} trading days {rr[0][0]} … {last[0]}; '
-              f'last row {last[0]} = {last[1]}{asof}; intraday sessions in intraday.csv: {", ".join(idays[-2:]) or "-"}; '
+              f'last row {last[0]} = {last[1]}{asof}; 30-min (intraday.csv): {span(idays)}; 2-h (intraday_2h.csv): {span(hdays)}; '
               f'{t1}; {t3}.\n<!-- data-status:end -->')
     hf = root/'HANDOFF.md'
     h = hf.read_text(encoding='utf-8')
@@ -165,7 +193,7 @@ def tests_status_report(alerts, step=''):
     hf.write_text(h, encoding='utf-8', newline='')
     ok = c1 == 0 and c3 == 0 and c2 == 0
     print('\n== REPORT (give this to the user) ==')
-    print(f'Prices up to {last[0]} ({last[1]}{asof}); {len(hd) - 3} ISINs; 1T sessions {", ".join(idays[-2:]) or "-"}.')
+    print(f'Prices up to {last[0]} ({last[1]}{asof}); {len(hd) - 3} ISINs; 30-min data: {span(idays)}; 2-h data: {span(hdays)}.')
     print('Tests: ' + ('OK - ' if ok else 'FAILED - ') + t1 + '; ' + t3)
     for a in alerts: print('CHECK WITH USER: ' + a)
     print('HANDOFF.md status updated. Hard-reload the dashboard (Ctrl+F5).')
@@ -181,7 +209,7 @@ if '--finish' in sys.argv:
         redo = [ln.split(':')[0].strip() for ln in out.splitlines() if re.match(r'^\s+[A-Z]{2}[A-Z0-9]{9}\d:', ln)]
         parts = [redo[j:j + BATCH] for j in range(0, len(redo), BATCH)] or [[]]
         print(f'\nFETCH AGAIN: start {len(parts)} agent(s) at once (price-fetcher, haiku), one prompt each:')
-        for j, b in enumerate(parts, 1): print(f'--- prompt {j}/{len(parts)} ---\n' + agent_prompt(last_final, b))
+        for j, b in enumerate(parts, 1): print(f'--- prompt {j}/{len(parts)} ---\n' + agent_prompt(planned_timeframes(), b))
         print('--- end of prompts --- then run: python data/update_prices.py --finish   '
               '(after 2 failed rounds for the same ISIN: ask the user)')
         sys.exit(1)
@@ -196,7 +224,7 @@ if '--finish' in sys.argv:
 # ------------------------------------------------------------------ new instruments: --plan-add / --finish-add (backfill)
 ISIN_RE = re.compile(r'^[A-Z]{2}[A-Z0-9]{9}\d$')
 YTD = INC / 'ytd'
-ADD_BATCH = 3            # new ISINs per backfill agent (two calls each: year_to_date ~7k tokens + seven_days ~6k tokens)
+ADD_BATCH = 10           # new ISINs per backfill agent (three calls each; the hook shrinks every result to one line)
 
 def add_prompt(isins):
     """The exact prompt for one backfill agent (price-fetcher, Haiku)."""
@@ -236,14 +264,47 @@ def last_per_day(points):
         if d.weekday() < 5: out[d.isoformat()] = p
     return out
 
+def read_store(f):
+    """intraday.csv / intraday_2h.csv (isin,timestamp_utc,price) -> {(isin, Berlin date): [(timestamp text, price)]}"""
+    out = {}
+    if f.exists():
+        for r in csv.DictReader(open(f, encoding='utf-8')):
+            day = to_berlin(parse_ts(r['timestamp_utc'])).date().isoformat()
+            out.setdefault((r['isin'], day), []).append((r['timestamp_utc'], float(r['price'])))
+    return out
+
+def merge_store(store, isin, points):
+    """The newest fetch replaces the stored points of each (isin, Berlin weekday); for a past day a shorter set is ignored
+    (the cut-off first session of a later fetch never replaces a full one). -> number of new/changed days"""
+    by_day, n = {}, 0
+    for ts, p in points:
+        d = to_berlin(ts).date()
+        if d.weekday() < 5: by_day.setdefault(d.isoformat(), []).append((fmt_ts(ts), p))
+    for d, lst in by_day.items():
+        old = store.get((isin, d))
+        if old is None or d >= today or len(lst) >= len(old):
+            n += old != lst
+            store[isin, d] = lst
+    return n
+
+def write_store(f, store):
+    with open(f, 'w', encoding='utf-8', newline='') as fh:
+        w = csv.writer(fh); w.writerow(['isin', 'timestamp_utc', 'price'])
+        for k in sorted(store):
+            for ts, p in sorted(store[k]): w.writerow([k[0], ts, '%.10g' % p])
+
+def store_info(store):
+    days = sorted({d for _, d in store})
+    return f'{sum(len(v) for v in store.values())} points, {len(days)} sessions' + (f' {days[0]} .. {days[-1]}' if days else '')
+
 
 if '--plan-add' in sys.argv:
     new, ins = arg_isins('--plan-add'), instruments()
     have = [i for i in new if i in col]
     if have: print('already price columns (they are fetched by the normal update):', ', '.join(have)); sys.exit(1)
     YTD.mkdir(parents=True, exist_ok=True)
-    for i in new:                           # leftovers of an earlier attempt: the agents must CREATE their files
-        for p in (YTD/f'{i}.csv', INC/f'{i}.csv'):
+    for i in new:                           # leftovers of an earlier attempt are fetched again
+        for p in (YTD/f'{i}.csv', INC/f'{i}.csv', INC2H/f'{i}.csv'):
             if p.exists(): p.unlink()
     k = math.ceil(len(new) / ADD_BATCH)
     size = math.ceil(len(new) / k)
@@ -267,7 +328,9 @@ if '--finish-add' in sys.argv:
         if i not in ins: errs.append(f'{i}: no row in data/instruments.csv (isin,name,short,type) - add it first')
         y, py = read_points(YTD/f'{i}.csv')
         s7, p7 = read_points(INC/f'{i}.csv')
-        prob = [f'incoming/ytd/{i}.csv: {x}' for x in py] + [f'incoming/{i}.csv: {x}' for x in p7]
+        s2, p2 = read_points(INC2H/f'{i}.csv')
+        prob = ([f'incoming/ytd/{i}.csv: {x}' for x in py] + [f'incoming/{i}.csv: {x}' for x in p7]
+                + [f'incoming/2h/{i}.csv: {x}' for x in p2])
         if prob: redo.append(i); errs.append(f'{i}: ' + '; '.join(prob[:3])); continue
         close, last7 = last_per_day(y), last_per_day(s7)
         for d, p in sorted(last7.items()):   # both calls come from the same source: the closes must agree
@@ -278,7 +341,7 @@ if '--finish-add' in sys.argv:
         gaps = [d for d in ref if d not in close and d not in last7]
         if len(gaps) > 5: errs.append(f'{i}: no close on {len(gaps)} trading days after its first quote (e.g. {", ".join(gaps[:4])}) - lines skipped?')
         close.update(last7)                  # an open day's latest price comes from seven_days
-        got[i] = (close, s7, y, gaps)
+        got[i] = (close, s7, y, gaps, s2)
     if errs:
         print('ERRORS (nothing written):', *errs, sep='\n  ')
         if redo:
@@ -287,7 +350,7 @@ if '--finish-add' in sys.argv:
         sys.exit(1)
     alerts = []
     for i in new:
-        close, s7, y, gaps = got[i]
+        close, s7, y, gaps, _ = got[i]
         head.append(i)
         for r in rows: r.append('%.10g' % close[r[0]] if r[0] in close else '')
         n_fill = sum(1 for r in rows if r[0] in close)
@@ -296,21 +359,13 @@ if '--finish-add' in sys.argv:
               + (f', {before} days before its first quote {min(close)} (flat in the engine)' if before else '')
               + (f', no close on {", ".join(gaps)} (forward-filled)' if gaps else '')
               + f'; {len(s7)} 30-min points {fmt_ts(s7[0][0])[:10]} .. {fmt_ts(s7[-1][0])[:10]}')
-    intra = {}
-    if (D/'intraday.csv').exists():
-        for r in csv.DictReader(open(D/'intraday.csv', encoding='utf-8')): intra[r['isin'], r['timestamp_utc']] = float(r['price'])
-    n_old = len(intra)
+    s30, s2h = read_store(STORE_30M), read_store(STORE_2H)
     for i in new:
-        for ts, p in got[i][1]:
-            if to_berlin(ts).date().weekday() < 5: intra[i, fmt_ts(ts)] = p
-    keep = sorted({to_berlin(parse_ts(ts)).date().isoformat() for _, ts in intra})[-KEEP_INTRADAY_DAYS:]
-    intra = {k: v for k, v in intra.items() if to_berlin(parse_ts(k[1])).date().isoformat() in keep}
+        merge_store(s30, i, got[i][1]); merge_store(s2h, i, got[i][4])
     with open(D/'prices_daily.csv', 'w', encoding='utf-8', newline='') as f:
         w = csv.writer(f); w.writerow(head); w.writerows(rows)
-    with open(D/'intraday.csv', 'w', encoding='utf-8', newline='') as f:
-        w = csv.writer(f); w.writerow(['isin', 'timestamp_utc', 'price'])
-        for (isin, ts), price in sorted(intra.items()): w.writerow([isin, ts, '%.10g' % price])
-    print(f'prices_daily.csv: {len(head) - 3} columns; intraday.csv: {n_old} -> {len(intra)} points')
+    write_store(STORE_30M, s30); write_store(STORE_2H, s2h)
+    print(f'prices_daily.csv: {len(head) - 3} columns; intraday.csv: {store_info(s30)}; intraday_2h.csv: {store_info(s2h)}')
     # the raw year_to_date files stay as history in source/ (like the earlier backfills), the seven_days files are temporary
     meta = D/'source'/'ytd_meta.csv'
     new_meta = not meta.exists()
@@ -323,63 +378,57 @@ if '--finish-add' in sys.argv:
             dst = D/'source'/f'ytd_{i}.csv'
             if dst.exists(): dst = D/'source'/f'ytd_{i}_{today}.csv'
             (YTD/f'{i}.csv').replace(dst)
-            (INC/f'{i}.csv').unlink()
+            (INC/f'{i}.csv').unlink(); (INC2H/f'{i}.csv').unlink()
     print('\n== rebuild ==')
     code, out = run_cmd([sys.executable, str(D/'build_data.py')])
-    if code: print('\nSTOP: build_data.py failed (prices_daily.csv / intraday.csv are already written). Show this to the user.'); sys.exit(1)
+    if code: print('\nSTOP: build_data.py failed (prices_daily.csv / intraday*.csv are already written). Show this to the user.'); sys.exit(1)
     alerts = [ln.strip() for ln in out.splitlines() if any(i in ln for i in new) and ('SPLIT' in ln or 'check value' in ln)]
     sys.exit(tests_status_report(alerts))
 
 
-# ------------------------------------------------------------------ read incoming/<ISIN>.csv (+ validation)
+# ------------------------------------------------------------------ read the hook's fetch files (+ validation)
+DIRS = {'seven_days': INC, 'one_month': INC2H, 'three_months': INC3M}
+
 def read_incoming(strict):
-    """-> (points {isin: [(ts, price)]}, problems {isin: [text]}, notes [text])"""
-    pts, problems, notes = {}, {}, []
-    files = {p.stem: p for p in INC.glob('*.csv')} if INC.exists() else {}
-    for stem in files:
-        if stem not in col: problems.setdefault(stem, []).append('file name is not an ISIN column of prices_daily.csv')
-    for isin in head[3:]:
-        f = files.get(isin)
-        if f is None:
-            if strict: problems.setdefault(isin, []).append('file missing')
-            continue
-        lines = [x.strip() for x in f.read_text(encoding='utf-8-sig').splitlines() if x.strip()]
-        bad = []
-        if not lines or lines[0].replace(' ', '') != 'timestamp_utc,price':
-            bad.append('first line must be: timestamp_utc,price')
-            lines = lines[1:] if lines and not LINE_RE.match(lines[0]) else lines
-        else:
-            lines = lines[1:]
-        out, prev = [], None
-        for n, x in enumerate(lines, 2):
-            if not LINE_RE.match(x): bad.append(f'line {n} not "<timestampUtc>,<midPrice>": {x[:60]}'); continue
-            ts, price = parse_ts(x.split(',')[0]), float(x.split(',')[1])
-            if price <= 0: bad.append(f'line {n}: price <= 0'); continue
-            if last_final and x[:10] < last_final: bad.append(f'line {n}: date {x[:10]} is before the copy-from date {last_final}'); continue
-            if prev and ts <= prev: bad.append(f'line {n}: timestamps not ascending'); continue
-            prev = ts
-            out.append((ts, price))
-        if not out: bad.append('no data points')
-        ref = last_price(isin)
-        if out and ref:
-            q = out[-1][1] / ref
-            if not 0.5 <= q <= 2: bad.append(f'latest price {out[-1][1]:g} vs last known {ref:g} ({(q - 1) * 100:+.0f} %) - wrong ISIN or typo?')
-        days = sorted({to_berlin(t).date().isoformat() for t, _ in out})
-        if out and last_final and last_final not in days:
-            notes.append(f'{isin}: no points on {last_final} (the previous session is missing in the 1T chart)')
-        for a, b in zip(out, out[1:]):
-            if to_berlin(a[0]).date() == to_berlin(b[0]).date() and (b[0] - a[0]).total_seconds() > 50 * 60:
-                notes.append(f'{isin}: gap {fmt_ts(a[0])[11:16]}-{fmt_ts(b[0])[11:16]} UTC on {fmt_ts(a[0])[:10]} (thinly traded: usually a gap in the source, no action needed)')
-                break
-        if bad: problems.setdefault(isin, []).extend(bad)
-        else: pts[isin] = out
+    """-> (points {timeframe: {isin: [(ts, price)]}}, problems {isin: [text]}, notes [text]).
+    strict: every ISIN needs a file for each planned timeframe (--check / --finish)."""
+    tfs = planned_timeframes()
+    pts, problems, notes = {tf: {} for tf in DIRS}, {}, []
+    for tf, d in DIRS.items():
+        where = 'incoming/' + ('' if d == INC else d.name + '/')
+        files = {p.stem: p for p in d.glob('*.csv')} if d.exists() else {}
+        for stem in files:
+            if stem not in col: problems.setdefault(stem, []).append(f'{where}{stem}.csv: file name is not an ISIN column of prices_daily.csv')
+        for isin in head[3:]:
+            f = files.get(isin)
+            if f is None:
+                if strict and tf in tfs: problems.setdefault(isin, []).append(f'{tf} missing ({where}{isin}.csv)')
+                continue
+            out, bad = read_points(f)
+            ref = last_price(isin)
+            if out and ref:
+                q = out[-1][1] / ref
+                if not 0.5 <= q <= 2: bad.append(f'latest price {out[-1][1]:g} vs last known {ref:g} ({(q - 1) * 100:+.0f} %) - wrong ISIN?')
+            if bad: problems.setdefault(isin, []).extend(f'{tf}: {x}' for x in bad)
+            else: pts[tf][isin] = out
+    short_gap = last_final and weekdays_between(last_final, today) <= GAP_DAYS
+    thin = []
+    for isin, out in pts['seven_days'].items():
+        days = {to_berlin(t).date().isoformat() for t, _ in out}
+        if short_gap and last_final not in days:
+            notes.append(f'{isin}: no 30-min points on {last_final}')
+        if any(to_berlin(a[0]).date() == to_berlin(b[0]).date() and (b[0] - a[0]).total_seconds() > 50 * 60
+               for a, b in zip(out, out[1:])): thin.append(isin)
+    if thin: notes.append(f'{len(thin)} ISINs have gaps > 50 min in their 30-min points (thinly traded; no action needed): ' + ' '.join(thin))
     return pts, problems, notes
 
 
 if '--check' in sys.argv:
     pts, problems, notes = read_incoming(strict=True)
-    n = sum(len(v) for v in pts.values())
-    print(f'{len(pts)} of {len(head) - 3} ISIN files OK ({n} points, copy-from date {last_final})')
+    print(f'planned timeframes: {" ".join(planned_timeframes())}; last final close {last_final}')
+    for tf, v in pts.items():
+        if v or tf in planned_timeframes():
+            print(f'  {tf}: {len(v)} of {len(head) - 3} ISIN files OK ({sum(len(x) for x in v.values())} points)')
     for x in notes: print('note:', x)
     if problems:
         print('FETCH AGAIN (then re-run --check):')
@@ -392,10 +441,11 @@ if '--check' in sys.argv:
 # ------------------------------------------------------------------ merge
 dry = '--dry-run' in sys.argv
 errors, changes, skipped = [], [], []
-inc_pts, problems, notes = read_incoming(strict=False)
-for isin, why in problems.items(): errors.append(f'incoming/{isin}.csv: ' + '; '.join(why[:3]))
+inc, problems, notes = read_incoming(strict=False)
+inc_pts, inc2h, inc3m = inc['seven_days'], inc['one_month'], inc['three_months']
+for isin, why in problems.items(): errors.append(f'{isin}: ' + '; '.join(why[:3]))
 has_legacy = (D/'incoming.csv').exists()
-if not inc_pts and not has_legacy and not problems:
+if not any(inc.values()) and not has_legacy and not problems:
     print('nothing to merge: data/incoming/ is empty and incoming.csv not found (run --plan first)'); sys.exit(1)
 
 latest = {}   # (isin, berlin_date) -> (ts, price)
@@ -407,6 +457,10 @@ def offer(isin, ts, price, source):
 
 for isin, lst in inc_pts.items():
     for ts, price in lst: offer(isin, ts, price, 'incoming/')
+for isin, lst in inc3m.items():          # gap fill: daily closes of new days that seven_days no longer covers
+    covered = {to_berlin(ts).date().isoformat() for ts, _ in inc_pts.get(isin, [])}
+    for ts, price in lst:
+        if to_berlin(ts).date().isoformat() not in covered: offer(isin, ts, price, 'incoming/')
 if has_legacy:
     for k, r in enumerate(csv.DictReader(open(D/'incoming.csv', encoding='utf-8'))):
         try:
@@ -446,21 +500,17 @@ out = [by_date[d] for d in sorted(by_date)]
 if [r[1] for r in out[:-1]].count('intraday'):
     errors.append('an intraday row is not the last row (a later day was added without closing the earlier one)')
 
-# intraday.csv: union of the stored and the new 30-min points, last KEEP_INTRADAY_DAYS trading days
-intra = {}
-if (D/'intraday.csv').exists():
-    for r in csv.DictReader(open(D/'intraday.csv', encoding='utf-8')):
-        intra[r['isin'], r['timestamp_utc']] = float(r['price'])
-n_old = len(intra)
-for isin, lst in inc_pts.items():
-    for ts, price in lst:
-        if to_berlin(ts).date().weekday() < 5: intra[isin, fmt_ts(ts)] = price
-keep = sorted({to_berlin(parse_ts(ts)).date().isoformat() for _, ts in intra})[-KEEP_INTRADAY_DAYS:]
-intra = {k: v for k, v in intra.items() if to_berlin(parse_ts(k[1])).date().isoformat() in keep}
+# intraday.csv (30-min) / intraday_2h.csv (2-h): everything collected so far + the new fetch (merge_store)
+s30, s2h = read_store(STORE_30M), read_store(STORE_2H)
+info30, info2h = store_info(s30), store_info(s2h)
+d30 = sum(merge_store(s30, isin, lst) for isin, lst in inc_pts.items())
+d2h = sum(merge_store(s2h, isin, lst) for isin, lst in inc2h.items())
 
-print(f'{len(latest)} (isin, day) closes/latest prices from {len(inc_pts)} incoming/ files'
-      + (' + incoming.csv' if has_legacy else '') + f'; now Berlin {now_berlin:%Y-%m-%d %H:%M}')
-print(f'intraday.csv: {n_old} -> {len(intra)} points, days {keep[0] if keep else "-"} .. {keep[-1] if keep else "-"}')
+print(f'{len(latest)} (isin, day) closes/latest prices from {len(inc_pts)} seven_days files'
+      + (f' + {len(inc3m)} three_months files' if inc3m else '') + (' + incoming.csv' if has_legacy else '')
+      + f'; now Berlin {now_berlin:%Y-%m-%d %H:%M}')
+print(f'intraday.csv: {info30} -> {store_info(s30)} ({d30} ISIN-days new/updated)')
+print(f'intraday_2h.csv: {info2h} -> {store_info(s2h)} ({d2h} ISIN-days new/updated)')
 for line in skipped[:10] + changes: print(line)
 for x in notes: print('note:', x)
 if errors:
@@ -469,13 +519,11 @@ if dry:
     print('dry run: nothing written - next: python data/update_prices.py'); sys.exit(0)
 with open(D/'prices_daily.csv', 'w', encoding='utf-8', newline='') as f:
     w = csv.writer(f); w.writerow(head); w.writerows(out)
-with open(D/'intraday.csv', 'w', encoding='utf-8', newline='') as f:
-    w = csv.writer(f); w.writerow(['isin', 'timestamp_utc', 'price'])
-    for (isin, ts), price in sorted(intra.items()): w.writerow([isin, ts, '%.10g' % price])
+write_store(STORE_30M, s30); write_store(STORE_2H, s2h)
 print(f'prices_daily.csv: {len(out)} rows, last {out[-1][0]} ({out[-1][1]} {out[-1][2]})')
 res = subprocess.run([sys.executable, str(D/'build_data.py')])
-if res.returncode == 0:   # temporary fetch files only – their content now lives in prices_daily.csv / intraday.csv
+if res.returncode == 0:   # temporary fetch files only – their content now lives in prices_daily.csv / intraday*.csv
     if has_legacy: (D/'incoming.csv').unlink()
-    for p in INC.glob('*.csv') if INC.exists() else []: p.unlink()
+    clear_incoming()
     if (INC/'_plan.txt').exists(): (INC/'_plan.txt').unlink()
 sys.exit(res.returncode)

@@ -4,7 +4,7 @@ Read **CLOUD_HANDOFF.md** for the complete continuation. UI changes await final 
 
 ## Data status
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 27.09.2026 05:03 Berlin): 188 trading days 2026-01-02 … 2026-09-25; last row 2026-09-25 = final; intraday sessions in intraday.csv: 2026-09-24, 2026-09-25; engine tests: 51 passed, 0 failed; crosscheck: 5441/5441 checks passed.
+- Data status (update 27.09.2026 06:18 Berlin): 188 trading days 2026-01-02 … 2026-09-25; last row 2026-09-25 = final; 30-min (intraday.csv): 6 sessions 2026-09-18 … 2026-09-25; 2-h (intraday_2h.csv): 24 sessions 2026-08-25 … 2026-09-25; engine tests: 51 passed, 0 failed; crosscheck: 5441/5441 checks passed.
 <!-- data-status:end -->
 
 This block predates the four-stock merge. Do not edit it manually; --finish-add/--finish updates it.

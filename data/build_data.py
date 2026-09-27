@@ -73,9 +73,16 @@ def logo_for(p):
     warns.append(f"{p['isin']} {p['name']}: no logo {LOGO_DIR}/{f} (initials are shown instead)")
     return None
 
-# ---- intraday grid for the 1T chart: 30-min slots 07:30 .. 23:00 Europe/Berlin (Scalable trading hours), last 2 sessions
-INTRADAY_DAYS, SLOT_MIN, FIRST_MIN, LAST_MIN = 2, 30, 7 * 60 + 30, 23 * 60
-TIMES = ['%02d:%02d' % divmod(m, 60) for m in range(FIRST_MIN, LAST_MIN + 1, SLOT_MIN)]
+# ---- sub-daily grids (Europe/Berlin slots, Scalable trading hours 07:30-23:00), every collected session -> data.grids:
+#   m30  30-min slots 07:30 .. 23:00 (32) from intraday.csv (seven_days)             -> charts 1T, 1W, custom <= 7 days
+#   h2   2-hour slots 07:30 .. 21:30 + 23:00 (9) from intraday_2h.csv (one_month)    -> chart 1M, custom <= 31 days
+# data.intraday = the last 2 sessions of m30 (the 1T chart of engine.prepareIntraday, tests/crosscheck.py).
+# A point goes to the nearest slot (the latest point wins a slot). On a final day the 23:00 slot of every instrument is its
+# daily close when no point landed there (one_month's last point of a day is ~21:30 Berlin, not the close), so every
+# finished session ends exactly on prices_daily.csv. Sessions need not be consecutive; they must be daily dates.
+TIMES = ['%02d:%02d' % divmod(m, 60) for m in range(7 * 60 + 30, 23 * 60 + 1, 30)]
+TIMES_2H = ['%02d:%02d' % divmod(m, 60) for m in range(7 * 60 + 30, 21 * 60 + 31, 120)] + ['23:00']
+SLOT_TOL = 15                                   # minutes a point may lie before the first / after the last slot
 
 def _last_sunday(y, m):
     d = datetime.date(y, m, 31)
@@ -87,36 +94,58 @@ def to_berlin(t):
     end = datetime.datetime.combine(_last_sunday(t.year, 10), datetime.time(1), datetime.timezone.utc)
     return (t + datetime.timedelta(hours=2 if start <= t < end else 1)).replace(tzinfo=None)
 
-def build_intraday(needed):
-    f = D/'intraday.csv'
+def build_grid(fname, times, needed):
+    f = D/fname
     if not f.exists(): return None
-    grid, asof, outside = {}, None, 0          # (isin, day) -> {slot: (ts, price)}
+    mins = [int(t[:2]) * 60 + int(t[3:]) for t in times]
+    grid, asof, outside, foreign = {}, None, 0, set()   # (isin, day) -> {slot: (ts, price)}
     for r in csv.DictReader(open(f, encoding='utf-8')):
         ts = datetime.datetime.fromisoformat(r['timestamp_utc'].replace('Z', '+00:00')).astimezone(datetime.timezone.utc)
         b = to_berlin(ts)
-        slot = round((b.hour * 60 + b.minute + b.second / 60 - FIRST_MIN) / SLOT_MIN)   # 05:59:39 UTC -> 08:00 Berlin
-        if not 0 <= slot < len(TIMES): outside += 1; continue
-        cell = grid.setdefault((r['isin'], b.date().isoformat()), {})
+        m = b.hour * 60 + b.minute + b.second / 60        # 05:59:39 UTC -> 07:59.65 Berlin -> slot 08:00
+        if not mins[0] - SLOT_TOL <= m <= mins[-1] + SLOT_TOL: outside += 1; continue
+        slot = min(range(len(mins)), key=lambda k: (abs(mins[k] - m), -k))   # a tie goes to the later slot
+        day = b.date().isoformat()
+        if day not in dates: foreign.add(day); continue
+        cell = grid.setdefault((r['isin'], day), {})
         if slot not in cell or ts > cell[slot][0]: cell[slot] = (ts, float(r['price']))
         asof = max(asof or ts, ts)
-    days = [d for d in sorted({d for _, d in grid}) if d in dates][-INTRADAY_DAYS:]
-    if len(days) < 2: warns.append('intraday.csv: fewer than 2 sessions - 1T uses daily prices'); return None
-    if days[-1] != dates[-1] or dates.index(days[-1]) - dates.index(days[0]) != len(days) - 1:
-        warns.append(f'intraday.csv sessions {days} do not match the last daily dates {dates[-2:]} - 1T uses daily prices')
-    px, missing = {}, []
+    days = sorted({d for _, d in grid})
+    if not days: return None
+    S, px, missing, off = len(times), {}, [], []
     for i in needed:
-        arr = [None] * (len(days) * len(TIMES))
+        arr = [None] * (len(days) * S)
         for k, d in enumerate(days):
-            for s, (_, p) in grid.get((i, d), {}).items(): arr[k * len(TIMES) + s] = p
-        if all(v is None for v in arr): missing.append(i); continue
+            for s, (_, p) in grid.get((i, d), {}).items(): arr[k * S + s] = p
+            di = dates.index(d)
+            close = prices[i][di]
+            if status[di] == 'final' and close is not None:
+                if arr[k * S + S - 1] is None: arr[k * S + S - 1] = close
+                elif abs(arr[k * S + S - 1] / close - 1) > 0.005: off.append(f'{i} {d}')
+        if not any((i, d) in grid for d in days): missing.append(i)
+        if all(v is None for v in arr): continue
         px[i] = arr
-        last = next((v for v in reversed(arr) if v is not None), None)
-        daily = prices[i][dates.index(days[-1])] if days[-1] in dates else None
-        if last and daily and abs(last / daily - 1) > 0.005:
-            warns.append(f'{i}: last intraday price {last:g} differs from the daily price {daily:g} on {days[-1]} by {(last / daily - 1) * 100:+.2f} %')
-    if missing: warns.append('no intraday prices (flat at the daily price in 1T): ' + ', '.join(missing))
-    if outside: warns.append(f'intraday.csv: {outside} points outside 07:30-23:00 Berlin ignored')
-    return {'dates': days, 'times': TIMES, 'asof_utc': asof.strftime('%Y-%m-%dT%H:%MZ'), 'px': px}
+    last_day, di = days[-1], dates.index(days[-1])
+    for i in px:                                        # the open session: latest point vs the daily price
+        last = next((v for v in reversed(px[i][-S:]) if v is not None), None)
+        daily = prices[i][di]
+        if status[di] != 'final' and last and daily and abs(last / daily - 1) > 0.005:
+            warns.append(f'{fname}: {i} last price {last:g} differs from the daily price {daily:g} on {last_day} by {(last / daily - 1) * 100:+.2f} %')
+    if missing: warns.append(f'{fname}: no points (flat at the previous close, then the close) for ' + ', '.join(missing))
+    if off: warns.append(f'{fname}: 23:00 point differs from the daily close by > 0.5 % on {len(off)} ISIN-days, e.g. ' + ', '.join(off[:4]))
+    if outside: warns.append(f'{fname}: {outside} points outside 07:30-23:00 Berlin ignored')
+    if foreign: warns.append(f'{fname}: points on dates without a daily row ignored: ' + ', '.join(sorted(foreign)))
+    return {'dates': days, 'times': times, 'asof_utc': asof.strftime('%Y-%m-%dT%H:%MZ'), 'px': px}
+
+def last_sessions(g, n=2):
+    """The 1T chart: the last n sessions of the 30-min grid (consecutive, ending on the last daily date)."""
+    if not g or len(g['dates']) < n: warns.append('intraday.csv: fewer than 2 sessions - 1T uses daily prices'); return None
+    days, S = g['dates'][-n:], len(g['times'])
+    if days[-1] != dates[-1] or dates.index(days[-1]) - dates.index(days[0]) != n - 1:
+        warns.append(f'intraday.csv sessions {days} do not match the last daily dates {dates[-n:]} - 1T uses daily prices')
+    off = (len(g['dates']) - n) * S
+    return {'dates': days, 'times': g['times'], 'asof_utc': g['asof_utc'],
+            'px': {i: a[off:] for i, a in g['px'].items() if any(v is not None for v in a[off:])}}
 
 positions = [{'isin': p['isin'], 'name': p['name'], 'short': p['short'], 'group': p['group'], 'shares': float(p['shares']),
               'ref_date': p['ref_date'], 'ref_price': float(p['ref_price']), 'gv_ref': float(p['gv_ref']),
@@ -138,16 +167,18 @@ data = {
                             'type': (inst.get(i) or {}).get('type') or '', 'position': i in {p['isin'] for p in pos}}
                            for i in isins), key=lambda x: x['short'].casefold()),
     'prices': {i: prices[i] for i in dict.fromkeys(needed)},
-    'intraday': build_intraday(list(dict.fromkeys(needed))),
+    'grids': {'m30': build_grid('intraday.csv', TIMES, list(dict.fromkeys(needed))),
+              'h2': build_grid('intraday_2h.csv', TIMES_2H, list(dict.fromkeys(needed)))},
 }
-js = ('// Generated by build_data.py from positions.csv, benchmarks.csv, instruments.csv, prices_daily.csv, intraday.csv. Do not edit by hand.\n'
+data['intraday'] = last_sessions(data['grids']['m30'])
+js = ('// Generated by build_data.py from positions.csv, benchmarks.csv, instruments.csv, prices_daily.csv, intraday.csv, intraday_2h.csv. Do not edit by hand.\n'
       '(typeof window !== "undefined" ? window : globalThis).PORTFOLIO_DATA = '
       + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n')
 (D/'portfolio-data.js').write_text(js, encoding='utf-8')
 print(f'portfolio-data.js: {len(dates)} dates {dates[0]} -> {dates[-1]} ({status[-1]}), '
       f'{len(positions)} positions, {len(benchmarks)} benchmarks, {len(data["instruments"])} instruments, {len(data["prices"])} price series'
-      + (f', intraday {data["intraday"]["dates"]} ({len(data["intraday"]["px"])} series, asof {data["intraday"]["asof_utc"]})'
-         if data['intraday'] else ', no intraday'))
+      + ''.join(f', {k} {len(g["dates"])} sessions {g["dates"][0]} .. {g["dates"][-1]} ({len(g["px"])} series, asof {g["asof_utc"]})'
+                if g else f', no {k}' for k, g in data['grids'].items()))
 gaps = {i: sum(v is None for v in prices[i]) for i in data['prices'] if any(v is None for v in prices[i])}
 if gaps: print('empty cells per ISIN:', gaps)
 if warns: print('WARNINGS:', *warns, sep='\n  ')

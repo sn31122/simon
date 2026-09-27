@@ -1,24 +1,51 @@
 # Price update runbook (written for a fast model such as Haiku)
 
-Project folder: `<repository-root>`. Run every command from there.
-One update fetches, for every ISIN, the 30-minute points of `get_security_chart(..., "seven_days")`. The scripts turn them
-into the daily closes (`data/prices_daily.csv`) and the 1T intraday chart (`data/intraday.csv`). The agents only copy numbers;
-the scripts do all checks, calculations, tests and the HANDOFF status.
+Project folder: `<repository-root>`. Run every command from there (`python`; use `python3` where `python` is missing).
+One update fetches, for every ISIN, `get_security_chart(..., "seven_days")` (30-minute points of ~6 sessions) and
+`get_security_chart(..., "one_month")` (2-hour points of ~1 month); after a break of more than 5 weekdays also
+`three_months` (daily closes). A hook saves every result to a file, so **nobody copies numbers**. The scripts turn the files
+into the daily closes (`data/prices_daily.csv`), the 30-minute history (`data/intraday.csv`) and the 2-hour history
+(`data/intraday_2h.csv`), and do all checks, tests and the HANDOFF status. Both histories keep every collected session.
+
+Shortcut: the skill `update-quotes` (`.claude/skills/update-quotes/SKILL.md`; the user says "update", "refresh",
+"check for new quotes", "Kurse aktualisieren" or "run UPDATE.md") runs the orchestrator steps below.
+
+## The hook (writes the files)
+`.claude/settings.json` runs `.claude/hooks/save-chart.cjs` (Node, no dependencies) after every `get_security_chart` call,
+also inside subagents. It writes the points verbatim (first line `timestamp_utc,price`, then `<timestampUtc>,<midPrice>`
+ascending; `closingReferencePoint` ignored):
+
+| timeframe | file | used for |
+|---|---|---|
+| `seven_days` | `data/incoming/<ISIN>.csv` | closes of new days (last point per Berlin date) + `intraday.csv` |
+| `one_month` | `data/incoming/2h/<ISIN>.csv` | `intraday_2h.csv` (its last point of a day, ~19:30 UTC, is not the close) |
+| `three_months` | `data/incoming/3m/<ISIN>.csv` | closes of new days that seven_days no longer covers |
+| `year_to_date` | `data/incoming/ytd/<ISIN>.csv` | new-instrument backfill |
+
+The model then sees one line instead of the chart:
+`SAVED <ISIN> <timeframe>: <n> points on <d> days, <first> .. <last> UTC, last <price> EUR -> <file>. Nothing to copy.`
+`NO DATA …` / `NOT SAVED …` = nothing written (report the line). Other timeframes (`one_day`, `six_months`, `one_year`,
+`max`) and error messages pass through unchanged. A chart call outside an update only leaves a file that the next `--plan`
+deletes. **If a call shows the raw chart JSON instead of such a line, the hook is not running** (Node missing from PATH,
+or Claude Code started before `.claude/settings.json` existed: restart it, check `/hooks`). Then stop; never copy by hand.
 
 ## Hard rules
 - Scalable MCP: use **only** `get_security_chart` (and `search_securities` only for a new instrument). Never call order,
   savings-plan, watchlist, price-alert or any other tool that changes something. Omit `portfolioId`.
-- Copy `timestampUtc` and `midPrice` **exactly** as returned: no rounding, no reformatting, no extra spaces, no invented points.
-- Do not edit `prices_daily.csv`, `intraday.csv`, `portfolio-data.js`, `positions.csv`, `benchmarks.csv` or any code.
+- Do not write or edit `data/incoming/` files, `prices_daily.csv`, `intraday*.csv`, `portfolio-data.js`, `positions.csv`,
+  `benchmarks.csv` or any code by hand. The hook writes the fetch files, the scripts everything else.
 - Fetch agents: always agent type `price-fetcher` / model **haiku** with **thinking ON** (Haiku has no effort setting; the
   prompts printed by `--plan` start with the line `Thinking ON: think step by step before each tool call and before writing each file.`).
 
 ## Steps for the orchestrator (the session the user talks to) – 3 steps
 1. `python data/update_prices.py --plan`
-   Empties `data/incoming/` and prints the COPY FROM DATE plus one ready prompt per batch (`--- prompt 1/5 ---` …).
-   If it prints `WARNING: ... weekdays since ...`, stop and tell the user (the gap needs the year_to_date procedure in AGENTS.md).
+   Empties `data/incoming/` (not `ytd/`) and prints `TIMEFRAMES:` plus one ready prompt per batch of ≤ 25 ISINs
+   (`--- prompt 1/2 ---` …).
+   - `NOTE: … three_months fills the closes in between` = longer break, handled automatically (the prompts include it).
+   - `WARNING: … more than three_months covers` → stop and ask the user.
 2. Start one agent per printed prompt, **all at once** (agent type `price-fetcher`, model `haiku`), copying each prompt exactly.
-   Wait until all of them have answered. (No subagents available? Do the fetch-agent steps yourself, batch by batch.)
+   Wait until all of them have answered. An answer `HOOK NOT ACTIVE` → stop and tell the user (see "The hook").
+   (No subagents available? Do the fetch-agent steps yourself.)
 3. `python data/update_prices.py --finish`
    It checks the files, merges, rebuilds `data/portfolio-data.js`, runs all tests and updates the status block in `HANDOFF.md`.
    - Ends with `== REPORT ==` and exit code 0 -> give the report lines to the user. Done.
@@ -33,51 +60,24 @@ the scripts do all checks, calculations, tests and the HANDOFF status.
 Every price column is fetched by every normal update and can be picked in the dashboard's benchmark cards.
 1. Find the exact ISIN with `search_securities` (several plausible hits → ask the user) and add a row to
    `data/instruments.csv`: `isin,name,short,type` (type = Aktie, ETF, ETC or ETP).
-2. `python data/update_prices.py --plan-add ISIN[,ISIN]` → prints one ready prompt per ≤ 3 ISINs.
+2. `python data/update_prices.py --plan-add ISIN[,ISIN]` → prints one ready prompt per ≤ 10 ISINs.
 3. Start one agent per prompt, all at once (agent type `price-fetcher`, model `haiku`), copying each prompt exactly.
-4. `python data/update_prices.py --finish-add ISIN[,ISIN]` → checks both files per ISIN (format, closes of year_to_date and
-   seven_days agree, no skipped days), adds the columns with the closes of all existing trading days, adds the 30-min points
-   to `intraday.csv`, archives the year_to_date file as `data/source/ytd_<ISIN>.csv`, rebuilds and runs the tests.
-   `FETCH AGAIN` → run the printed prompt, then `--finish-add` again. `CHECK WITH USER:` → show the line to the user.
+4. `python data/update_prices.py --finish-add ISIN[,ISIN]` → checks the three files per ISIN (format, closes of year_to_date
+   and seven_days agree, no skipped days), adds the columns with the closes of all existing trading days, adds the 30-min and
+   2-h points to `intraday.csv` / `intraday_2h.csv`, archives the year_to_date file as `data/source/ytd_<ISIN>.csv`, rebuilds
+   and runs the tests. `FETCH AGAIN` → run the printed prompt, then `--finish-add` again. `CHECK WITH USER:` → show the line.
 A new *position* also needs its row in `positions.csv` and a logo `company-logos/<ISIN>.png` (user instruction only).
 
-## Steps for a backfill agent (new ISIN)
-`--plan-add` removed old files of these ISINs, so every file you write is new.
-For **each** ISIN of your batch, one after the other:
-1. Call `get_security_chart` with `isin` = the ISIN and `timeframe` = `year_to_date`.
-   Create the file `data/incoming/ytd/<ISIN>.csv` with the Write tool (full path inside the project folder):
-   line 1 `timestamp_utc,price`, then one line per entry of `dataPoints`, in the returned order: `<timestampUtc>,<midPrice>`.
-   ALL entries (about 190 lines), no filtering. Ignore `closingReferencePoint`.
-2. Call `get_security_chart` with `isin` = the ISIN and `timeframe` = `seven_days`.
-   Create the file `data/incoming/<ISIN>.csv` the same way: line 1 `timestamp_utc,price`, then ALL entries of `dataPoints`
-   (about 190 lines, no date filter).
-Copy `timestampUtc` and `midPrice` exactly (see the hard rules). If Write refuses because the file already exists / was not
-read: Read that file once, then Write it again. If the chart tool returns an error: write no file for that step, note the
-error, continue.
-When the batch is done, answer with one line per file: `<file path> <number of data lines> <first timestamp> <last timestamp>`
-(or `<file path> ERROR <message>`). Do not run any scripts; the orchestrator does that.
-
 ## Steps for a fetch agent (one batch)
-`--plan` emptied `data/incoming/`, so every file you write is new.
-For **each** ISIN of your batch, one after the other:
-1. Call `get_security_chart` with `isin` = the ISIN and `timeframe` = `seven_days`.
-2. From `dataPoints`, keep the points whose `timestampUtc` begins with a date **equal to or later than** the COPY FROM DATE
-   (compare the first 10 characters, e.g. `2026-09-24`). Keep them in the returned order. Ignore `closingReferencePoint`.
-3. Create the file `data/incoming/<ISIN>.csv` with the Write tool (full path inside the project folder):
-   - line 1: `timestamp_utc,price`
-   - then one line per kept point: `<timestampUtc>,<midPrice>`
+Your task names the TIMEFRAMES and your ISINs. The hook saves every result; you only make the calls.
+1. For **each** ISIN and **each** timeframe, call `get_security_chart` with `isin` = the ISIN and `timeframe` = the timeframe.
+   You may put several calls into one message (e.g. both timeframes of 5 ISINs at once). Never skip a call.
+2. Each call answers with one line starting with `SAVED`, `NO DATA` or `NOT SAVED`. Do not write any file.
+   - If a call returns the raw chart data (JSON with `dataPoints`) instead: stop at once, make no further calls, write
+     nothing, and answer only `HOOK NOT ACTIVE`.
+   - If a call returns an error: call it once more; if it fails again, note the error and continue.
+3. When all calls are done, answer with one line `SAVED <number of SAVED lines> of <number of calls>`, followed by every line
+   that did not start with `SAVED` (ISIN, timeframe and the message). Do not run any scripts; the orchestrator does that.
 
-   Example (COPY FROM DATE 2026-09-24):
-   ```
-   timestamp_utc,price
-   2026-09-24T05:30:57.000Z,310.625
-   2026-09-24T05:59:39.000Z,310.15
-   ...
-   2026-09-25T20:59:57.529Z,310.075
-   ```
-   A full day has about 32 lines; today has fewer (up to the current time).
-   If Write refuses because the file already exists / was not read: Read that file once, then Write it again. Never skip an ISIN.
-4. If the chart tool returns an error for an ISIN: write no file for it, note the error, continue with the next ISIN.
-
-When the batch is done, answer with one line per ISIN: `<ISIN> <number of data lines> <first timestamp> <last timestamp>`
-(or `<ISIN> ERROR <message>`). Do not run any scripts; the orchestrator does that.
+## Steps for a backfill agent (new ISIN)
+Same as a fetch agent, with the three timeframes `year_to_date`, `seven_days` and `one_month` for each ISIN of your task.
