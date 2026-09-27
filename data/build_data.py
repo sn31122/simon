@@ -12,8 +12,6 @@ NOTES = [
 ]
 
 SPLIT_RATIOS = (2, 3, 4, 5, 8, 10, 20, 25, 50, 100, 200)   # day-to-day price ratios that usually mean a split
-TX_FILE = 'transactions.csv'   # the real depot's trades (python data/import_transactions.py <export.csv>) -> preset "transactions"
-TX_UNPRICED_OK = {'DE000PK3XT09': 'Broadcom call warrant, not fetched (user 27.09.2026)'}   # known: valued flat at the trade price
 
 def num(s):
     return float(s) if s.strip() else None
@@ -50,31 +48,10 @@ for j, i in enumerate(isins):
                              + (f' SPLIT 1:{split}? divide the history before {d} if confirmed' if split else ' check value'))
         last = v
     if last is None: errors.append(f'{i}: column has no prices')
-def load_transactions(bid):
-    """data/transactions.csv -> [{date, time, isin, type, shares (signed), price}] (names only for the build messages)"""
-    f = D/TX_FILE
-    if not f.exists():
-        errors.append(f'benchmarks.csv {bid}: {TX_FILE} missing - run python data/import_transactions.py <export.csv>'); return None
-    tx = []
-    for r in csv.DictReader(open(f, encoding='utf-8')):
-        try: q, p = float(r['shares']), float(r['price'])
-        except ValueError: errors.append(f"{TX_FILE}: unreadable row {r}"); continue
-        tx_names[r['isin']] = r['name']
-        tx.append({'date': r['date'], 'time': r['time'], 'isin': r['isin'], 'type': r['type'],
-                   'shares': int(q) if q == int(q) else q, 'price': int(p) if p == int(p) else p})
-    if not tx: errors.append(f'{TX_FILE}: no trades')
-    return sorted(tx, key=lambda t: (t['date'], t['time']))   # stable: the file is chronological already
-
 # holdings "ISIN:qty|…" = locked preset with fixed quantities (Mein Depot); "ISIN:20%|…" = weighting preset that starts as an
-# editable own card (hidden in the chart, reset on reload; user 27.09.2026), must total 100 %; "transactions" = the real depot
-# replayed from data/transactions.csv (Depot-Historie, locked, time-weighted; user 27.09.2026)
-benchmarks, card_presets, tx_names = [], [], {}
+# editable own card (hidden in the chart, reset on reload; user 27.09.2026), must total 100 %
+benchmarks, card_presets = [], []
 for b in bench:
-    if b['holdings'].strip() == 'transactions':
-        tx = load_transactions(b['id'])
-        if tx: benchmarks.append({'id': b['id'], 'name': b['name'], 'description': b['description'], 'transactions': tx,
-                                  'names': {t['isin']: tx_names[t['isin']] for t in tx}})
-        continue
     parts = [x.split(':') for x in b['holdings'].split('|') if x.strip()]
     pct = [v.strip().endswith('%') for _, v in parts]
     if any(pct) and not all(pct): errors.append(f"benchmarks.csv {b['id']}: mix of quantities and percentages"); continue
@@ -87,7 +64,7 @@ for b in bench:
     else:
         benchmarks.append({'id': b['id'], 'name': b['name'], 'description': b['description'],
                            'holdings': {i.strip(): float(v) for i, v in parts}})
-needed = [p['isin'] for p in pos] + [i for b in benchmarks for i in b.get('holdings', {})]
+needed = [p['isin'] for p in pos] + [i for b in benchmarks for i in b['holdings']]
 for i in dict.fromkeys(needed):
     if i not in prices: errors.append(f'missing price column {i}')
 needed += isins                          # every price column is an instrument the benchmark cards can pick
@@ -96,32 +73,6 @@ for i in isins:
 if errors:
     print('ERRORS (nothing written):', *errors, sep='\n  ')
     sys.exit(1)
-
-def check_transactions(b):
-    """Replays the trades on the daily dates like the engine (a trade on a non-trading day counts at the next close):
-    ISINs held at a close without a price column (valued flat at their last trade price), negative holdings, trades after
-    the last date, end holdings vs Mein Depot. Returns the info line."""
-    tx, q, j, unpriced, neg = b['transactions'], {}, 0, {}, set()
-    for d in dates:
-        while j < len(tx) and tx[j]['date'] <= d:
-            t = tx[j]; q[t['isin']] = round(q.get(t['isin'], 0) + t['shares'], 9); j += 1
-        for i, v in q.items():
-            if v and i not in prices: unpriced.setdefault(i, []).append(d)
-            if v < 0: neg.add(i)
-    for i, ds in unpriced.items():
-        msg = f"{b['id']}: {i} ({tx_names.get(i, '?')}) held at {len(ds)} closes {ds[0]} .. {ds[-1]} without a price column - valued flat at its last trade price"
-        (notes if i in TX_UNPRICED_OK else warns).append(msg + (f' ({TX_UNPRICED_OK[i]})' if i in TX_UNPRICED_OK else '; add the instrument to value it'))
-    if neg: warns.append(f"{b['id']}: negative holdings of {', '.join(sorted(neg))} - is the export complete?")
-    if j < len(tx): warns.append(f"{b['id']}: {len(tx) - j} trades after the last price date {dates[-1]} count once the prices reach that day")
-    depot = next((x['holdings'] for x in benchmarks if x['id'] == 'my_depot'), None)
-    end = {i: v for i, v in q.items() if v}
-    if depot is not None and any(abs(end.get(i, 0) - depot.get(i, 0)) > 1e-9 for i in set(end) | set(depot)):
-        warns.append(f"{b['id']}: holdings on {dates[-1]} differ from my_depot in benchmarks.csv (newer trades, or my_depot not updated)")
-    kinds = sum(t['type'] in ('Buy', 'Sell') for t in tx)
-    return f"{b['name']} {kinds} buys/sells {tx[0]['date']} .. {tx[-1]['date']}"
-
-notes = []
-tx_info = [check_transactions(b) for b in benchmarks if 'transactions' in b]
 
 def first_date(i):
     return next(d for d, v in zip(dates, prices[i]) if v is not None)
@@ -218,7 +169,7 @@ data = {
     'status': status,
     'groups': list(dict.fromkeys(p['group'] for p in pos)),
     'positions': positions,
-    'benchmarks': benchmarks,                 # locked presets (fixed quantities; transactions = Depot-Historie)
+    'benchmarks': benchmarks,                 # locked presets (fixed quantities)
     'card_presets': card_presets,             # weighting presets: start as editable own cards
     # instruments for the benchmark cards: every price column, sorted by short name
     'instruments': sorted(({'isin': i, 'name': (inst.get(i) or {}).get('name') or i, 'short': (inst.get(i) or {}).get('short') or i,
@@ -229,16 +180,14 @@ data = {
               'h2': build_grid('intraday_2h.csv', TIMES_2H, list(dict.fromkeys(needed)))},
 }
 check_latest(data['grids']['m30'], 'intraday.csv', '1T/1W'); check_latest(data['grids']['h2'], 'intraday_2h.csv', '1M')
-js = ('// Generated by build_data.py from positions.csv, benchmarks.csv, transactions.csv, instruments.csv, prices_daily.csv, intraday.csv, intraday_2h.csv. Do not edit by hand.\n'
+js = ('// Generated by build_data.py from positions.csv, benchmarks.csv, instruments.csv, prices_daily.csv, intraday.csv, intraday_2h.csv. Do not edit by hand.\n'
       '(typeof window !== "undefined" ? window : globalThis).PORTFOLIO_DATA = '
       + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n')
 (D/'portfolio-data.js').write_text(js, encoding='utf-8')
 print(f'portfolio-data.js: {len(dates)} dates {dates[0]} -> {dates[-1]} ({status[-1]}), '
       f'{len(positions)} positions, {len(benchmarks)} locked + {len(card_presets)} card presets, {len(data["instruments"])} instruments, {len(data["prices"])} price series'
       + ''.join(f', {k} {len(g["dates"])} sessions {g["dates"][0]} .. {g["dates"][-1]} ({len(g["px"])} series, asof {g["asof_utc"]})'
-                if g else f', no {k}' for k, g in data['grids'].items())
-      + ''.join(f', {x}' for x in tx_info))
+                if g else f', no {k}' for k, g in data['grids'].items()))
 gaps = {i: sum(v is None for v in prices[i]) for i in data['prices'] if any(v is None for v in prices[i])}
 if gaps: print('empty cells per ISIN:', gaps)
-if notes: print('notes:', *notes, sep='\n  ')
 if warns: print('WARNINGS:', *warns, sep='\n  ')

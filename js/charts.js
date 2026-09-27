@@ -351,8 +351,8 @@
    *   axisLabel(v, step), lastLabel(v), monthLabel(iso, withYear), dayLabel(iso),
    *   hoverHTML(i, maxBench), measureHTML(a, b) -> html | { main: html, side: html|'' }, emptyText
    * }
-   * measureHTML's `side` is optional content beside the measure box (same top, same height), or stacked under it on
-   * narrow charts / when it does not fit beside it: one box per shown benchmark (a row of boxes that wraps). hoverHTML's optional maxBench caps the benchmark rows (used to size
+   * measureHTML's `side` is an optional second box ("Mein Depot") placed beside the measure box (same top, same
+   * height), or stacked under it on narrow charts. hoverHTML's optional maxBench caps the benchmark rows (used to size
    * the band). The band above the plot is sized from the real box heights: the measure box(es) and the hover box with
    * up to BAND_BENCH_ROWS benchmarks. When the hover box needs more room than the measure boxes, the chart element
    * grows by the difference (CSS var --band-extra), so the plot keeps its height.
@@ -364,7 +364,6 @@
   function tipParts(h) {
     return h && typeof h === 'object' ? { main: h.main || '', side: h.side || '' } : { main: h || '', side: '' };
   }
-  function ceilW(el) { return Math.ceil(el.getBoundingClientRect().width - 0.01); }
   function fillTip(tip, cls, html) {
     tip.className = cls;
     tip.innerHTML = html;
@@ -382,7 +381,7 @@
     this.tip.className = 'pc-tip';
     this.tip.hidden = true;
     el.appendChild(this.tip);
-    this.tip2 = document.createElement('div');        // side boxes of a measurement (one per shown benchmark)
+    this.tip2 = document.createElement('div');        // side box of a measurement ("Mein Depot")
     this.tip2.className = 'pc-tip';
     this.tip2.hidden = true;
     el.appendChild(this.tip2);
@@ -528,7 +527,7 @@
     t1.style.visibility = t2.style.visibility = 'hidden';
     fillTip(t1, 'pc-tip pc-tip--measure', h.main);
     var w1 = t1.offsetWidth, h1 = t1.offsetHeight, w2 = 0, h2 = 0, hh = 0;
-    if (h.side) { fillTip(t2, 'pc-tip pc-tip--side', h.side); w2 = ceilW(t2); h2 = t2.offsetHeight; }
+    if (h.side) { fillTip(t2, 'pc-tip pc-tip--side', h.side); w2 = t2.offsetWidth; h2 = t2.offsetHeight; }
     if (M.hoverHTML) { fillTip(t1, 'pc-tip pc-tip--hover', tipParts(M.hoverHTML(lastI, BAND_BENCH_ROWS)).main); hh = t1.offsetHeight; }
     t1.style.visibility = t2.style.visibility = '';
     this.hideTip();
@@ -606,7 +605,7 @@
     this.sideOn = !!h.side;
     if (h.side) {
       fillTip(t2, 'pc-tip pc-tip--side', h.side);
-      this.tip2W = ceilW(t2);                // rounded up: a row of boxes set to a rounded-down width would wrap
+      this.tip2W = t2.offsetWidth;
       this.tip2H = t2.offsetHeight;
     } else {
       t2.hidden = true;
@@ -671,11 +670,7 @@
       }
       t2.style.left = Math.round(sl) + 'px';
       t2.style.top = top2 + 'px';
-      if (w2 !== this.tip2SetW) {
-        t2.style.width = w2 + 'px';
-        this.tip2SetW = w2;
-        if (stack) { t2.style.height = ''; this.tip2H = t2.offsetHeight; }   // several benchmark boxes may wrap differently
-      }
+      if (w2 !== this.tip2SetW) { t2.style.width = w2 + 'px'; this.tip2SetW = w2; }
       if (!stack) {                                                    // same height as the measure box
         var hh = Math.max(this.tipH, this.tip2H);
         tip.style.height = t2.style.height = hh + 'px';
