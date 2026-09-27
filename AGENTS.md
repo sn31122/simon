@@ -64,6 +64,11 @@ New instrument (only on user instruction; UPDATE_PRICES.md "New instrument"): `s
 
 ## Tests and verification
 
+**Testing scope (user rule, 27.09.2026): tests only check functionality and the correctness of values – don't overdo it.** New
+calculations get focused engine unit tests (and the crosscheck stays green); UI changes get a quick look (renders, no console
+errors, desktop + 375 px). No exhaustive edge-case suites, no new browser-acceptance checks unless the user asks – the user
+checks the page themselves. `tools/acceptance-check.cjs` is optional, not part of every change.
+
 ```
 node tests/engine.test.cjs
 python tests/crosscheck.py && node tests/crosscheck.cjs
