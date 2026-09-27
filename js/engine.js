@@ -356,15 +356,23 @@
     return { px, prevClose: ctx.px[isin][F.start], has: frameSeen(F, isin), ctxEnd: F.ctxEnd, last: F.last };
   }
 
-  function benchHoldings(ctx, bench) {
+  /**
+   * Quantities [[isin, qty]] of a benchmark: a holdings benchmark as it is; a weights benchmark bought at daily index
+   * `buyAt` (as benchmark(…, buyAt, …) buys it) – without `buyAt` a weights benchmark has no quantities (null).
+   */
+  function benchHoldings(ctx, bench, buyAt) {
     if (typeof bench === 'string') bench = ctx.benchmarks.find((b) => b.id === bench);
     if (!bench) return null;
+    if (bench.weights) return isNum(buyAt) && buyAt >= 0 && buyAt < ctx.n ? benchQty(ctx, bench, Math.round(buyAt)) : null;
     return Object.keys(bench.holdings || {}).map((i) => [i, Number(bench.holdings[i])]).filter((h) => ctx.px[h[0]] && isNum(h[1]));
   }
 
-  /** benchmarkValueNow(ctx, bench|id) -> Σ quantity × latest price (e.g. the real value of "Mein Depot" today) | null */
-  function benchmarkValueNow(ctx, bench) {
-    const h = benchHoldings(ctx, bench);
+  /**
+   * benchmarkValueNow(ctx, bench|id, buyAt) -> Σ quantity × latest price (e.g. the real value of "Mein Depot" today) | null.
+   * A weights benchmark needs its purchase index `buyAt` (daily index); its value then is per 1 unit invested there.
+   */
+  function benchmarkValueNow(ctx, bench, buyAt) {
+    const h = benchHoldings(ctx, bench, buyAt);
     if (!h || ctx.n < 1) return null;
     let t = 0;
     h.forEach((x) => { t += x[1] * ctx.px[x[0]][ctx.n - 1]; });
@@ -372,14 +380,48 @@
   }
 
   /**
-   * benchmarkRealPl(ctx, bench|id, a, b, {target, frame, intraday}) -> real € change of the benchmark's own holdings between
-   * a and b: daily indices into ctx, or points of a sub-daily frame (frame: gridFrame(…); intraday: true = the 1T frame),
-   * scaled by target / benchmarkValueNow (target omitted = the holdings as they are). Independent of the chart's
-   * normalization / Startwert.
+   * benchmarkWeights(ctx, bench|id, at) -> { ISIN: fraction } = each holding's share of the benchmark's value at daily
+   * index `at` (default: the last day), Σ = 1 | null (no value). For a holdings benchmark (e.g. "Mein Depot" today).
+   */
+  function benchmarkWeights(ctx, bench, at) {
+    const h = benchHoldings(ctx, bench);
+    if (!h || ctx.n < 1) return null;
+    const k = isNum(at) ? clamp(Math.round(at), 0, ctx.n - 1) : ctx.n - 1;
+    const v = h.map((x) => [x[0], x[1] * ctx.px[x[0]][k]]).filter((x) => x[1] > 0);
+    const tot = sum(v.map((x) => x[1]));
+    if (!(tot > 0)) return null;
+    const out = {};
+    v.forEach((x) => { out[x[0]] = (out[x[0]] || 0) + x[1] / tot; });
+    return out;
+  }
+
+  /**
+   * holdingsFromWeights(ctx, weights, at) -> { ISIN: qty } | null: the quantities whose value shares at daily index `at`
+   * (default: the last day) are `weights` (% or fractions, normalized like a benchmark card: only ISINs with prices and
+   * weights > 0), worth 1 in total there: q = w / Σw / px[at]. Held constant over the whole history like the positions
+   * ("Mein Depot" card with edited shares, user 27.09.); with benchmarkWeights(ctx, bench, at) it returns the benchmark's
+   * own quantities scaled to a value of 1 at `at`.
+   */
+  function holdingsFromWeights(ctx, weights, at) {
+    if (!weights || ctx.n < 1) return null;
+    const k = isNum(at) ? clamp(Math.round(at), 0, ctx.n - 1) : ctx.n - 1;
+    const q = benchQty(ctx, { weights }, k);
+    if (!q) return null;
+    const out = {};
+    q.forEach((h) => { out[h[0]] = h[1]; });
+    return out;
+  }
+
+  /**
+   * benchmarkRealPl(ctx, bench|id, a, b, {target, frame, intraday, buyAt}) -> real € change of the benchmark's own holdings
+   * between a and b: daily indices into ctx, or points of a sub-daily frame (frame: gridFrame(…); intraday: true = the 1T
+   * frame), scaled by target / benchmarkValueNow (target omitted = the holdings as they are): the change had the benchmark
+   * been worth `target` on the last day. A weights benchmark is bought at daily index `buyAt` (the range start) and held
+   * (without buyAt: null). Independent of the chart's normalization / Startwert.
    */
   function benchmarkRealPl(ctx, bench, a, b, opts) {
     opts = opts || {};
-    const h = benchHoldings(ctx, bench), now = benchmarkValueNow(ctx, bench);
+    const h = benchHoldings(ctx, bench, opts.buyAt), now = benchmarkValueNow(ctx, bench, opts.buyAt);
     if (!h || now === null) return null;
     const i = Math.min(a, b), j = Math.max(a, b), fr = opts.frame || opts.intraday;
     if (!isNum(i) || !isNum(j) || i < 0) return null;
@@ -396,6 +438,25 @@
     h.forEach((x) => { va += x[1] * price(x[0], i); vb += x[1] * price(x[0], j); });
     const target = isNum(opts.target) && opts.target > 0 ? opts.target : now;
     return fin((vb - va) * target / now);
+  }
+
+  /**
+   * benchmarkRealValue(ctx, bench|id, k, {target, buyAt}) -> the benchmark's holdings value at daily index k, scaled by
+   * target / benchmarkValueNow (target omitted = the holdings as they are): its value on day k had it been worth `target`
+   * on the last day (overview block, user 27.09.; unedited "Mein Depot" without target = the real depot value). A weights
+   * benchmark is bought at daily index `buyAt` (the period start) and held (without buyAt: null). The same scaling as
+   * benchmarkRealPl, so value(b) − value(a) = benchmarkRealPl(a, b) for a <= b. null for an index outside the data.
+   */
+  function benchmarkRealValue(ctx, bench, k, opts) {
+    opts = opts || {};
+    const h = benchHoldings(ctx, bench, opts.buyAt), now = benchmarkValueNow(ctx, bench, opts.buyAt);
+    if (!h || now === null || !isNum(k)) return null;
+    const i = Math.round(k);
+    if (i < 0 || i > ctx.n - 1) return null;
+    let v = 0;
+    h.forEach((x) => { v += x[1] * ctx.px[x[0]][i]; });
+    const target = isNum(opts.target) && opts.target > 0 ? opts.target : now;
+    return fin(v * target / now);
   }
 
   /** intradayWindow(values, a, b) -> { pl, ret } between two points (order-independent) | null */
@@ -1017,6 +1078,7 @@
     withShares, correlationMatrix, riskContribution,
     assetsTotal, chartInterval, gridCovers, gridFrame,
     intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
+    benchmarkRealValue, benchmarkWeights, holdingsFromWeights,
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },
     util: { mean, sampleSd, sampleCov, quantile, returnsOf, minusMonths, daysBetween, dayNumber, isMonthComplete },
   };
