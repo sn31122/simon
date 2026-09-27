@@ -1001,7 +1001,7 @@ async function benchBoxesCheck(page) {
       sub: document.getElementById('hlSub').textContent, legend: document.querySelectorAll('#legend .lg-item').length }));
     check('overview', 'start: "Yacht" label, one block (Mein Depot) = the real depot value 298.811,25 € and its YTD change (independent recomputation); no headline figure, the line below it and the legend stay; spacing 22/28/12 px',
       ov0.yLabel === 'Yacht' && ov0.n === 1 && ov0.same && ov0.got[0].val === '298.811,25' && ov0.per[0] === ov0.yPer && space.hlMain &&
-      /\(\+[\d,]+ %\) im Zeitraum 02\.01\.–25\.09\.2026/.test(space.sub) && space.legend === 2 && space.ov === '22px' && space.rb === '28px' && space.hl === '12px', { ov0, space });
+      /\(\+[\d.,]+\s%\) im Zeitraum 02\.01\.–25\.09\.2026/.test(space.sub) && space.legend === 2 && space.ov === '22px' && space.rb === '28px' && space.hl === '12px', { ov0, space });
     const eid2 = await page.evaluate(() => PFApp.state.cards.filter((x) => !x.hold)[0].id);
     await page.click('#benchCards [data-card="' + eid2 + '"] [data-act="show"]');
     await settle(page);
@@ -1142,17 +1142,23 @@ async function benchBoxesCheck(page) {
     await addCard(mp, [['MSCI World', '100']]);
     await addCard(mp, [['Nasdaq-100', '100']]);
     await mp.evaluate(() => window.scrollTo(0, 0));
+    // with 3 shown benchmarks the overview has two rows of benchmark blocks (27.09.), so the plot starts below the
+    // 812px window: scroll the chart under the sticky bar before hovering / dragging (the mouse must reach the plot)
+    const chartIntoView = (pg) => pg.evaluate(() => { const r = document.getElementById('mainChart').getBoundingClientRect(); window.scrollTo(0, Math.max(0, r.top + scrollY - 120)); });
     const sweepM = {};
     for (const [mode, preset] of [['value', 'YTD'], ['value', '1T'], ['value', '1W'], ['pl', '1M']]) {
       await mp.click('#rangeTabs [data-preset="' + preset + '"]');
       await mp.click('#modeToggle [data-mode="' + mode + '"]');
       await settle(mp);
-      sweepM[mode + '/' + preset] = await hoverSweep('m' + mode + preset);
+      await chartIntoView(mp);
+      const reach = await mp.evaluate(() => { const r = document.querySelector('#mainChart svg').getBoundingClientRect(), L = PFApp.charts.main.L; return r.top + (L.top + L.bottom) / 2 < innerHeight; });
+      sweepM[mode + '/' + preset] = reach ? await hoverSweep('m' + mode + preset) : ['plot out of view'];
     }
     check('mobile', 'hover box with 3 shown benchmarks covers nothing (YTD/1T/1W/1M)', Object.values(sweepM).every((b) => b.length === 0), sweepM);
     await mp.click('#modeToggle [data-mode="value"]');
     await mp.click('#rangeTabs [data-preset="1W"]');
     await settle(mp);
+    await chartIntoView(mp);
     await drag(mp, 0.75, 0.2);
     const gm1w = await chartGeo(mp), dm1w = await depotBoxCheck(mp);
     const m1w = await mp.evaluate(() => ({ x: Array.from(document.querySelectorAll('#mainChart .pc-xlabel')).map((n) => n.textContent), note: document.getElementById('chartIv').textContent,
