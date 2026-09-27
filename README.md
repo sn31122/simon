@@ -1,6 +1,6 @@
 # Yacht portfolio dashboard
 
-Private repository containing financial portfolio data: **sn31122/simon**, branch `cloud-handoff-2026-09-27` (the local **Yacht scalable** project, continued and finished in a Claude Code cloud session on 27 September 2026).
+Private repository containing financial portfolio data: **sn31122/simon**, branch `main` (the local **Yacht scalable** project, continued and finished in a Claude Code cloud session on 27 September 2026).
 
 **Start with [HANDOFF.md](HANDOFF.md)** (state, open points, first steps on the local machine). **New quotes:** say "update" (or "refresh", "check for new quotes", "Kurse aktualisieren", "run UPDATE.md") in Claude Code in this folder, see [UPDATE.md](UPDATE.md).
 

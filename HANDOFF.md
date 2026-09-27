@@ -1,7 +1,8 @@
 # Handoff — 27 September 2026 (cloud session finished)
 
-Branch `cloud-handoff-2026-09-27` of the private repo `sn31122/simon`. From 27.09.2026 the user works only here, in Claude
-Code cloud sessions (claude.ai/code, the Desktop app's Cloud mode or the Claude app → repo `sn31122/simon`, this branch).
+Branch `main` of the private repo `sn31122/simon` (the work of 27.09.2026 came in via a pull request from branch
+`cloud-handoff-2026-09-27`; until that is merged, the same content is on that branch). From 27.09.2026 the user works only
+here, in Claude Code cloud sessions (claude.ai/code, the Desktop app's Cloud mode or the Claude app → repo `sn31122/simon`).
 The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboard permanent` is no longer updated.
 
 ## State
@@ -30,16 +31,17 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   100k). 30-min and 2-h points are kept forever (`data/intraday.csv`, `data/intraday_2h.csv`). Runbook: `UPDATE_PRICES.md`.
 
 ## Working on it
-- Start a cloud session on this repo and branch; Claude reads `CLAUDE.md` → `AGENTS.md` + this file by itself. Say "update"
-  for new quotes. Every session commits and pushes to this branch, so the next session continues from there.
+- Start a cloud session on this repo (branch `main`); Claude reads `CLAUDE.md` → `AGENTS.md` + this file by itself. Say
+  "update" for new quotes. Work that a session pushes to its own branch reaches `main` through a pull request, so the next
+  session continues from there.
 - To look at the dashboard: ask Claude for screenshots, or download the branch (GitHub → Code → Download ZIP) and open
   `dashboard.html` (works offline, no install).
 
 ## Going local again (optional)
 1. Install Claude Code (CLI or Desktop app) on the PC and sign in with the same claude.ai account; Node.js and Python must
    be on PATH, and the Scalable connector must be available there (it was in the original local session).
-2. Clone the repo (e.g. into the old folder): `git clone https://github.com/sn31122/simon` and `git checkout
-   cloud-handoff-2026-09-27`, or `git pull` in an existing clone.
+2. Clone the repo (e.g. into the old folder): `git clone https://github.com/sn31122/simon` (branch `main`), or `git pull`
+   in an existing clone.
 3. Either continue a specific cloud chat with its full history: `claude --teleport` in that folder (picker) or
    `claude --teleport <session-id>` (claude.ai/code → session menu → Open in → Terminal copies the command). The local copy
    then continues on its own; later cloud chats only see what was pushed. Or simply start `claude` there: the repo files
@@ -66,5 +68,5 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   last trading day, not the typed dates (a Saturday-to-Saturday week = Mon–Fri, 30 min); the last point of a day reads
   "23:00" in hover/measurement (only a chart's start point reads "Schluss"); "Zeitraum auf Auswahl setzen" stays hidden on
   30-min / 2-h charts, as it already was for 1T.
-- All work is on branch `cloud-handoff-2026-09-27`; `main` still holds only the original README. Merging the branch into
-  `main` (via a pull request) would let new sessions start on the default branch.
+- Branches: `main` is the dashboard. Cloud sessions may push to a branch of their own; merge those back into `main` with a
+  pull request so the work stays in one place. A different project belongs in its own repository, not in a branch.
