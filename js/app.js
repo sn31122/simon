@@ -41,23 +41,20 @@
   var DEPOT_ID = 'my_depot', DEPOT_COLOR = '#f2f3f4';          // "Mein Depot" (the real depot) is always white
   var CONTEXT_DAYS = 21;                       // holdings list, period 1T: grey history shown before the last day
   var ALL = ctx.positions.map(function (p) { return p.isin; });
-  // locked benchmarks of data/benchmarks.csv other than Mein Depot (Depot-Historie) -> colour slot from the second palette
-  // entry on, so the first card (Energie) keeps the blue it had before Depot-Historie existed
-  var BIDX = {};
-  ctx.benchmarks.filter(function (b) { return b.id !== DEPOT_ID; }).forEach(function (b, k) { BIDX[b.id] = k + 1; });
+  var BIDX = {};                               // locked benchmarks of data/benchmarks.csv other than Mein Depot -> colour slot
+  ctx.benchmarks.filter(function (b) { return b.id !== DEPOT_ID; }).forEach(function (b, k) { BIDX[b.id] = k; });
   function colorOf(id) { return id === DEPOT_ID ? DEPOT_COLOR : BENCH_COLORS[(BIDX[id] || 0) % BENCH_COLORS.length]; }
   var ASOF = META.last_asof_utc ? F.asofBerlin(META.last_asof_utc) : '';
 
   // ------------------------------------------------------------------ state
   var state = {
     preset: 'YTD', custom: null, mode: 'value', startValue: null, rf: 0.02,
-    depotValue: null,                          // "Benchmark (€)" field: € value behind "Echt" in every benchmark box (null = real Mein Depot value)
-    cards: [],                                 // benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]} – first the holdings
-                                               // presets (hold: true, "Mein Depot": base, def), then the own cards; not persisted
+    depotValue: null,                          // "Mein Depot (€)" field: real depot value for the "echt" € in the measure box (null = computed)
+    fixedOn: (function () { var o = {}; o[DEPOT_ID] = true; return o; })(),   // locked cards (benchmarks.csv) shown in the chart
+    cards: [],                                 // own benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]}; not persisted
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
     selected: new Set(ALL), sort: { key: 'contrib', dir: -1 }, measure: null, hover: null,
     sinceBuy: false, holdSort: 'value-desc',   // sinceBuy: pill "Seit Kauf" (chart shows MAX)
-    mpPick: 'yacht',                           // Messung panel: whose holdings the list shows ('yacht' or a benchmark id)
     showHold: true, showAssets: false,         // list section toggles "Portfolio" / "Einzelwerte" (independent; not persisted)
     whatIf: HAS_WHATIF, overrides: {}                // Stück are always editable (what-if): {ISIN: shares}; not persisted
   };
@@ -226,7 +223,7 @@
     // every locked benchmark + every valid card (their returns show on the cards); selB = the ones shown in the chart
     var benches = benchDefs().map(function (d) {
       var s = E.benchmark(ctx, d.b, R.start, R.end, base);
-      return { b: d.b, id: d.id, name: d.name, color: d.color, show: d.show, hold: d.hold, tx: d.tx, real: d.real, s: s, st: s ? E.stats(s, { rf: rf }) : null };
+      return { b: d.b, id: d.id, name: d.name, color: d.color, show: d.show, s: s, st: s ? E.stats(s, { rf: rf }) : null };
     });
     var byId = {};
     benches.forEach(function (x) { byId[x.id] = x; });
@@ -480,22 +477,19 @@
       '</div>';
   }
   var REAL_ID = DEPOT_ID;                        // the benchmark that is the user's real depot
-  /** Default of „Benchmark (€)“: the real value of "Mein Depot" today (its fetched quantities, also while its card is edited). */
   function depotDefault() { return E.benchmarkValueNow ? E.benchmarkValueNow(ctx0, REAL_ID) : null; }
   function depotTarget() { return state.depotValue != null ? state.depotValue : depotDefault(); }
   /**
-   * One box per shown benchmark beside the measure box (user, 27.09.: every shown benchmark, not only "Mein Depot").
-   * x: its selB entry; pValues/bValues: portfolio and benchmark VALUE series (also in Gesamtrendite); a/b: chart indices;
-   * i/j: daily indices into ctx, or points of the sub-daily frame `frame`, for the real change. % and "Gleicher Wert" =
-   * the benchmark at the portfolio's size at the start of the span; "Echt" = its € change had it been worth
-   * „Benchmark (€)“ today (unedited "Mein Depot": your real depot's change); cards are bought at the period start.
+   * "Mein Depot" box beside the measure box (only while `my_depot` is selected and has a series). x: its selB entry;
+   * pValues/dValues: portfolio and depot VALUE series (also in Gesamtrendite); a/b: chart indices; i/j: daily indices
+   * into ctx, or points of the sub-daily frame `frame`, for the real change. % and "Gleicher Wert" = the depot at the
+   * portfolio's size at the start of the span; "Echt" = the real depot's € change, scaled to „Mein Depot (€)“.
    */
-  function benchBoxHTML(x, pValues, bValues, a, b, i, j, frame) {
-    var w = E.equalValueWindow ? E.equalValueWindow(pValues, bValues, a, b) : null;
+  function depotBoxHTML(x, pValues, dValues, a, b, i, j, frame) {
+    var w = E.equalValueWindow ? E.equalValueWindow(pValues, dValues, a, b) : null;
     var ret = get(w, 'ret'), eq = get(w, 'pl'), tgt = depotTarget();
-    var real = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, x.b, i, j, { frame: frame || null, target: tgt, buyAt: cur.R.start })) : null;
-    var tgtTxt = isNum(tgt) ? eur(tgt, { dec: 0 }) : '', tgtNote = tgtTxt ? ' (' + tgtTxt + (state.depotValue == null ? ' = Wert von „Mein Depot“ heute' : '') + ')' : '';
-    var today = F.date(ctx0.dates[ctx0.n - 1], 'short');
+    var real = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, REAL_ID, i, j, { frame: frame || null, target: tgt })) : null;
+    var tgtTxt = isNum(tgt) ? eur(tgt, { dec: 0 }) : '';
     function row(label, v, text, title) {
       return '<div class="tt-dr" title="' + esc(title) + '">' + label + '<span class="tt-dv ' + sgn(v) + '">' + text + '</span></div>';
     }
@@ -506,11 +500,8 @@
         'Gleicher Wert: Veränderung von „' + x.name + '“, wenn es zu Beginn der Messung genauso groß gewesen wäre wie das Portfolio' +
         (get(w, 'base') !== null ? ' (' + eur(w.base) + ')' : '')) +
       row('<span class="tt-dl">Echt' + (tgtTxt ? ' (' + tgtTxt + ')' : '') + '</span>', real, eurS(real),
-        (x.real ? 'Echt: tatsächliche Veränderung deines Depots, hochgerechnet auf den Wert aus „Benchmark (€)“' + tgtNote :
-          x.tx ? 'Echt: tatsächlicher Gewinn deines Depots laut Transaktionen (Wertänderung ohne die Käufe und Verkäufe), ' +
-            'hochgerechnet auf den Wert aus „Benchmark (€)“' + tgtNote :
-          'Echt: Veränderung von „' + x.name + '“, wenn es heute (' + today + ') so viel wert wäre wie „Benchmark (€)“' + tgtNote +
-          (x.hold ? '' : ' – gekauft am ' + F.date(ctx.dates[cur.R.start], 'short') + ', dann gehalten'))) +
+        'Echt: tatsächliche Veränderung deines Depots, hochgerechnet auf den Wert aus „Mein Depot (€)“' +
+        (tgtTxt ? ' (' + tgtTxt + (state.depotValue == null ? ' = aktueller Depotwert' : '') + ')' : '')) +
       '</div>';
   }
 
@@ -523,16 +514,15 @@
     I.benches.slice(0, maxBench).forEach(function (o) { rows += ttRow(o.x.name, o.x.color, pl ? eurS(o.s.pl[i]) : eur(o.s.value[i]), o.s.ret[i]); });
     return '<div class="tt-one">' + main + '</div>' + (rows ? '<div class="tt-h">' + rows + '</div>' : '');
   }
-  /** Sub-daily chart: measure box + one box per shown benchmark ({ main, side } for MainChart); a/b are points of the frame. */
+  /** Sub-daily chart: measure box + "Mein Depot" box ({ main, side } for MainChart); a/b are points of the frame. */
   function intraMeasureHTML(a, b) {
     var I = cur.intra, pl = state.mode === 'pl';
     var w = E.intradayWindow(I.value, a, b);
+    var d = I.benches.filter(function (o) { return o.x.id === REAL_ID && o.s; })[0];
     return {
       main: measureBox(slotLabel(I, a), slotLabel(I, b), pl ? eurS(I.pl[a]) : eur(I.value[a]), pl ? eurS(I.pl[b]) : eur(I.value[b]),
         get(w, 'pl'), get(w, 'ret')),
-      side: I.benches.filter(function (o) { return o.s; }).map(function (o) {
-        return benchBoxHTML(o.x, I.value, o.s.value, a, b, Math.min(a, b), Math.max(a, b), I.frame);
-      }).join('')
+      side: d ? depotBoxHTML(d.x, I.value, d.s.value, a, b, Math.min(a, b), Math.max(a, b), I.frame) : ''
     };
   }
 
@@ -553,19 +543,17 @@
     return '<div class="tt-one">' + main + '</div>' + (rows ? '<div class="tt-h">' + rows + '</div>' : '');
   }
 
-  /** Measurement over [a, b] (indices into the range): { main: measure box, side: one box per shown benchmark, or '' }. */
+  /** Measurement over [a, b] (indices into the range): { main: measure box, side: "Mein Depot" box or '' }. */
   function measureHTML(a, b) {
     var M = cur, p = M && M.p;
     if (!p) return '';
     if (M.intra) return intraMeasureHTML(a, b);
     var pl = state.mode === 'pl';
-    var w = win(a, b);
+    var w = win(a, b), d = M.selB.filter(function (x) { return x.id === REAL_ID && x.s; })[0];
     return {
       main: measureBox(dateLabel(M.R.start + a), dateLabel(M.R.start + b), pl ? eurS(p.pl[a]) : eur(p.value[a]), pl ? eurS(p.pl[b]) : eur(p.value[b]),
         get(w, 'pl'), get(w, 'totalReturn')),
-      side: M.selB.filter(function (x) { return x.s; }).map(function (x) {
-        return benchBoxHTML(x, p.value, x.s.value, a, b, M.R.start + Math.min(a, b), M.R.start + Math.max(a, b), null);
-      }).join('')
+      side: d ? depotBoxHTML(d, p.value, d.s.value, a, b, M.R.start + Math.min(a, b), M.R.start + Math.max(a, b), null) : ''
     };
   }
 
@@ -689,96 +677,6 @@
   }
 
   /**
-   * Messung panel (3-column layout, user 27.09.): the Yacht and every shown benchmark (return, € change, max. drawdown
-   * within the span) and every selected position (return, € change) over the measured span – live while measuring – or
-   * over the whole period while nothing is measured. Numbers: the chart's series (daily or the sub-daily frame), "Echt"
-   * like the benchmark boxes, positions from engine.assetsSpan. Registered with Sync, so it redraws with the overlays;
-   * skipped while the panel is hidden (< 1200px).
-   */
-  var mpKey = '', mpStamp = 0;
-  function renderMeasPanel(meas) {
-    var el = $('measPanel'), M = cur;
-    if (!el || !M) return;
-    if (el.offsetParent === null) { mpKey = ''; return; }
-    var I = M.intra, p = M.p, span = !!(meas && meas.a != null && meas.b != null && meas.a !== meas.b);
-    var first = I ? Math.max(0, I.ctxEnd) : 0, last = I ? I.last : (p ? p.value.length - 1 : 0);
-    var a = span ? Math.max(0, Math.min(meas.a, meas.b)) : first, b = span ? Math.min(last, Math.max(meas.a, meas.b)) : last;
-    var key = mpStamp + '|' + span + '|' + a + '|' + b + '|' + (meas && meas.live ? 1 : 0);
-    if (key === mpKey) return;
-    mpKey = key;
-    var lbl = function (k) { return I ? slotLabel(I, k) : F.date(ctx.dates[M.R.start + k], 'short'); };
-    var sub = $('mpSub');
-    sub.textContent = span ? lbl(a) + ' – ' + lbl(b) : 'Zeitraum ' + periodText(M.R);
-    sub.classList.toggle('is-live', span);
-    sub.title = span ? (meas.live ? 'Messung läuft' : 'Gemessener Zeitraum') + ' – ohne Messung zeigt das Panel den ganzen Zeitraum' :
-      'Ganzer Zeitraum – eine Messung im Chart zeigt hier den gemessenen Abschnitt';
-    if (!p || b <= a) {
-      $('mpTable').innerHTML = '<tbody><tr><td class="mp-empty">' + esc(!p ? emptyText() : 'Zeitraum zu kurz') + '</td></tr></tbody>';
-      $('mpList').innerHTML = '';
-      $('mpNote').textContent = '';
-      return;
-    }
-    var vals = I ? I.value : p.value, frame = I ? I.frame : null, i = I ? a : M.R.start + a, j = I ? b : M.R.start + b, tgt = depotTarget();
-    // the list below shows the holdings of the picked row (Yacht or a shown benchmark; user 27.09.: in the card's order)
-    var pick = state.mpPick;
-    function row(id, name, color, v, eur, eurTitle) {
-      var w = E.intradayWindow(v, a, b), dd = E.drawdown(v.slice(a, b + 1)), r = get(w, 'ret');
-      return '<tr data-mp="' + esc(id) + '" tabindex="0" class="' + (id === pick ? 'is-sel' : '') + '" title="Klicken: Positionen von „' + esc(name) + '“ unten anzeigen">' +
-        '<td><span class="mp-nm" style="--c:' + color + '"><i></i><span>' + esc(name) + '</span></span></td>' +
-        '<td class="' + sgn(r) + '">' + pct(r) + '</td><td class="' + sgn(eur) + '" title="' + esc(eurTitle) + '">' + eurS(eur, 0) + '</td>' +
-        '<td class="' + (dd && dd.maxDD < 0 ? 'neg' : '') + '">' + pctU(dd ? dd.maxDD : null, 1) + '</td></tr>';
-    }
-    var list = I ? I.benches.filter(function (o) { return o.s; }).map(function (o) { return { x: o.x, v: o.s.value }; }) :
-      M.selB.filter(function (x) { return x.s; }).map(function (x) { return { x: x, v: x.s.value }; });
-    var picked = null;
-    list.forEach(function (o) { if (o.x.id === pick) picked = o.x; });
-    if (!picked) pick = 'yacht';                  // the picked benchmark was hidden: back to the Yacht
-    var yw = E.intradayWindow(vals, a, b), html = row('yacht', 'Yacht', 'var(--accent)', vals, get(yw, 'pl'), 'Wertänderung des Portfolios (Startwert-skaliert)');
-    list.forEach(function (o) {
-      var real = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, o.x.b, i, j, { frame: frame, target: tgt, buyAt: M.R.start })) : null;
-      html += row(o.x.id, o.x.name, o.x.color, o.v, real, 'Echt: €-Veränderung bei einem Wert von ' + eur(tgt, { dec: 0 }) + ' („Benchmark (€)“) heute');
-    });
-    $('mpTable').innerHTML = '<thead><tr><th></th><th>Rendite</th><th title="Yacht: Wertänderung · Benchmarks: „Echt“ wie in der Messbox">G/V €</th>' +
-      '<th title="Größter Rückgang innerhalb des Zeitraums">Max. DD</th></tr></thead><tbody>' + html + '</tbody>';
-    var rows, note, SORTS = { 'name-asc': 'Name A–Z', 'name-desc': 'Name Z–A', 'ret-asc': 'niedrigste Rendite', 'ret-desc': 'höchste Rendite',
-      'value-asc': 'kleinste Position', 'value-desc': 'größte Position' };
-    if (!picked) {                                 // Yacht: sorted like the Portfolio list (its ⋮ menu)
-      rows = E.assetsSpan ? E.assetsSpan(ctx, { selected: state.selected, scale: I ? I.scale : p.scale, a: i, b: j, frame: frame }) : [];
-      rows = sortHoldRows(rows.filter(function (r) { return r.selected; }), false);
-      note = 'Yacht · ' + rows.length + ' · ' + (SORTS[state.holdSort] || SORTS['value-desc']);
-    } else {                                       // a benchmark: its holdings in the order of its card's rows, € = "Echt"
-      var bs = E.benchmarkSpan ? E.benchmarkSpan(ctx0, picked.b, { a: i, b: j, frame: frame, target: tgt, buyAt: M.R.start }) : null;
-      var card = cardById(picked.id), order = {};
-      (card ? card.rows : []).forEach(function (r, k) { if (r.isin && !(r.isin in order)) order[r.isin] = k; });
-      rows = (bs || []).map(function (r, k) {
-        var ins = INSTR_BY[r.isin] || { name: r.isin, short: r.isin };
-        return { isin: r.isin, name: ins.name, short: ins.short, ret: r.ret, pl: r.pl, k: r.isin in order ? order[r.isin] : 1e6 + k };
-      }).sort(function (x, y) { return x.k - y.k; });
-      note = picked.name + ' · ' + (!bs ? 'keine Einzelwerte' : rows.length + (card && card.rows.length ? ' · wie die Karte' : ' · nach Wert'));
-    }
-    $('mpNote').textContent = note;
-    $('mpList').innerHTML = rows.map(function (r) {
-      var tip = picked ? ' · € = Anteil an „Echt“' + (picked.b && picked.b.transactions ? ' (Käufe/Verkäufe im Zeitraum herausgerechnet; % = Gewinn auf eingesetztes Kapital)' : '') :
-        ' · Beitrag ' + pp(r.contrib) + ' %-Punkte';
-      return '<div class="mp-row" title="' + esc(r.name + ' · ' + r.isin + tip) + '">' + avatarHTML(r, 'av--sm') +
-        '<span class="mp-n">' + esc(r.short || r.name) + '</span>' +
-        '<span class="mp-v"><b class="' + sgn(r.ret) + '">' + pct(r.ret) + '</b><span>' + eurS(r.pl) + '</span></span></div>';
-    }).join('');
-  }
-  sync.add({ drawOverlay: function (S) { renderMeasPanel(S && S.measure); } });
-  function pickMeasPanel(ev) {
-    var tr = ev.target.closest && ev.target.closest('tr[data-mp]');
-    if (!tr || (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ')) return;
-    if (ev.type === 'keydown') ev.preventDefault();
-    state.mpPick = tr.getAttribute('data-mp');
-    mpStamp++;
-    renderMeasPanel(sync.measure);
-    var again = $('mpTable').querySelector('tr[data-mp="' + state.mpPick.replace(/["\\]/g, '\\$&') + '"]');
-    if (again && ev.type === 'keydown') again.focus();
-  }
-  if ($('mpTable')) { $('mpTable').addEventListener('click', pickMeasPanel); $('mpTable').addEventListener('keydown', pickMeasPanel); }
-
-  /**
    * Muted note under the chart: the chart's interval ("Intervall: 30 Min." / "2 Std." / "1 Tag") and, when the range
    * stepped down to a coarser grid, why ("keine 30-Min-Kurse für diesen Zeitraum"). The title lists what was collected.
    */
@@ -867,8 +765,7 @@
     eye: SVG + EYE + '</svg>',
     eyeOff: SVG + EYE + '<path d="M2.5 13.5l11-11"/></svg>',
     copy: SVG + '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>',
-    trash: SVG + '<path d="M2.5 4.5h11M6.5 4.5V3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6M6.8 7v4.5M9.2 7v4.5"/></svg>',
-    reset: SVG + '<path d="M2.8 7.5a5.2 5.2 0 1 0 1.6-3.6"/><path d="M2.5 1.8v2.9h2.9"/></svg>'
+    trash: SVG + '<path d="M2.5 4.5h11M6.5 4.5V3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6M6.8 7v4.5M9.2 7v4.5"/></svg>'
   };
 
   /** Instruments a card can hold: D.instruments (every price column), only those with at least one quote. */
@@ -878,38 +775,6 @@
     .sort(function (a, b) { return a.short.localeCompare(b.short, 'de'); });
   var INSTR_BY = {};
   INSTR.forEach(function (i) { INSTR_BY[i.isin] = i; });
-  var TODAY = ctx0.dates[ctx0.n - 1];
-  /**
-   * {ISIN: fraction} -> rows [{isin, pct}] by weight desc, 2 decimals that add up to exactly 100 (largest remainder,
-   * a tiny holding keeps at least 0,01 %; display only – the unedited card uses the exact quantities).
-   */
-  function shareRows(w) {
-    var list = Object.keys(w || {}).filter(function (i) { return INSTR_BY[i] && w[i] > 0; })
-      .map(function (i) { var c = w[i] * 10000, f = Math.floor(c); return { isin: i, c: Math.max(1, f), rest: f ? c - f : -1, w: w[i] }; })
-      .sort(function (a, b) { return b.w - a.w; });
-    var left = 10000 - list.reduce(function (s, r) { return s + r.c; }, 0);
-    list.slice().sort(function (a, b) { return b.rest - a.rest; }).forEach(function (r) { if (left > 0) { r.c++; left--; } });
-    for (var k = 0; left < 0 && list.length; k = (k + 1) % list.length) if (list[k].c > 1) { list[k].c--; left++; }
-    return list.map(function (r) { return { isin: r.isin, pct: fmtShare(r.c / 100) }; });
-  }
-  // holdings presets of data/benchmarks.csv ("Mein Depot"; user 27.09.: editable like the other cards). Their rows are the
-  // value shares on the last day and start as the fetched allocation; unedited the card uses the real quantities, edited
-  // shares become constant quantities (engine.holdingsFromWeights, backcast like the positions). Not deletable.
-  ctx0.benchmarks.forEach(function (b) {
-    if (b.transactions) return;                                  // Depot-Historie: its own locked card (below)
-    var def = shareRows(E.benchmarkWeights ? E.benchmarkWeights(ctx0, b) : null);
-    if (!def.length) return;
-    var name = String(b.name || b.id);
-    state.cards.push({ id: b.id, hold: true, base: b, name: name, defName: name, color: colorOf(b.id), show: b.id === DEPOT_ID,
-      def: def, rows: def.map(function (r) { return newRow(r.isin, r.pct); }) });
-  });
-  // transactions preset (data/benchmarks.csv "transactions" = data/transactions.csv, "Depot-Historie"; user 27.09.): the real
-  // depot replayed from its trades, time-weighted. Locked: only the eye button, no rows; hidden in the chart; after Mein Depot.
-  ctx0.benchmarks.forEach(function (b) {
-    if (!b.transactions || !E.transactionHistory || !E.transactionHistory(ctx0, b)) return;
-    var name = String(b.name || b.id);
-    state.cards.push({ id: b.id, tx: true, base: b, name: name, defName: name, color: colorOf(b.id), show: false, rows: [] });
-  });
   // weighting presets (data/benchmarks.csv "ISIN:20%|…", e.g. "Energie"; user 27.09.): start as own cards – editable,
   // deletable, hidden in the chart; a reload brings them back as defined
   (Array.isArray(D.card_presets) ? D.card_presets : []).forEach(function (p) {
@@ -988,39 +853,18 @@
       orphan ? 'Instrument fehlt' : !nIns ? 'Instrument wählen' : '';
     return { total: total, weights: weights, ok100: ok100, valid: !hint, hint: hint };
   }
-  /** A holdings card still holds its fetched allocation (same instruments, same shares as its default rows). */
-  function isDefault(c, info) {
-    if (!c.hold) return false;
-    var w = (info || cardInfo(c)).weights, d = {};
-    c.def.forEach(function (r) { if (pctVal(r.pct) > 0) d[r.isin] = pctVal(r.pct); });
-    var ks = Object.keys(w);
-    return ks.length === Object.keys(d).length && ks.every(function (i) { return isNum(d[i]) && Math.abs(d[i] - w[i]) < 1e-9; });
-  }
-  /**
-   * What compute() hands the engine: every valid card; invalid cards are left out everywhere. Own cards as {id, name,
-   * weights} (bought at the period start); holdings cards unedited as their preset (the real quantities), edited as
-   * constant quantities from today's shares.
-   */
+  /** What compute() hands the engine: the locked benchmarks + every valid card as {id, name, weights}; invalid cards are left out everywhere. */
   function benchDefs() {
-    var out = [];
+    var out = ctx.benchmarks.map(function (b) {
+      return { b: b, id: b.id, name: b.name || b.id, color: colorOf(b.id), show: !!state.fixedOn[b.id] };
+    });
     state.cards.forEach(function (c) {
-      if (c.tx) { out.push({ b: c.base, id: c.id, name: cardName(c), color: c.color, show: c.show, hold: false, tx: true, real: false }); return; }
       var info = cardInfo(c);
       if (!info.valid) return;
       var desc = c.rows.filter(function (r) { return r.isin && pctVal(r.pct) > 0; }).map(function (r) {
         return fmtShare(pctVal(r.pct)) + ' % ' + INSTR_BY[r.isin].short;
-      }).join(' · ');
-      var b, real = false;
-      if (c.hold) {
-        real = isDefault(c, info);
-        var h = real ? null : E.holdingsFromWeights(ctx0, info.weights);
-        if (!real && !h) return;
-        b = real ? c.base : { id: c.id, name: cardName(c), holdings: h,
-          description: desc + ' – Anteile am ' + F.date(TODAY, 'short') + ', Stückzahlen konstant' };
-      } else {
-        b = { id: c.id, name: cardName(c), weights: info.weights, description: desc + ' – am ersten Tag des Zeitraums gekauft, dann gehalten' };
-      }
-      out.push({ b: b, id: c.id, name: cardName(c), color: c.color, show: c.show, hold: !!c.hold, real: real && c.id === REAL_ID });
+      }).join(' · ') + ' – am ersten Tag des Zeitraums gekauft, dann gehalten';
+      out.push({ b: { id: c.id, name: cardName(c), weights: info.weights, description: desc }, id: c.id, name: cardName(c), color: c.color, show: c.show });
     });
     return out;
   }
@@ -1030,38 +874,18 @@
       (extra || '') + '>' + ICONS[icon] + '</button>';
   }
   function showBtn() { return iconBtn('show', 'eye', 'Im Chart ausblenden', ' aria-pressed="true"'); }
-  function barHTML() {
-    return '<div class="bb-bar"><button type="button" class="bb-mini" data-act="addrow" title="Zeile hinzufügen" aria-label="Zeile hinzufügen">+</button>' +
-      '<button type="button" class="bb-mini" data-act="clear" title="Alle Zeilen leeren" aria-label="Alle Zeilen leeren">×</button></div>';
-  }
-  /** "Mein Depot" (holdings preset): like an own card, but fixed name, rows = today's shares, reset to the fetched allocation instead of duplicate / delete. */
-  function holdCardHTML(c) {
-    return '<div class="bb-card bb-card--hold" role="group" data-card="' + esc(c.id) + '" style="--c:' + c.color + '">' +
-      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i><span class="bb-kind"></span></span><span class="bb-icons">' +
-      iconBtn('reset', 'reset', 'Echte Aufteilung wiederherstellen') + showBtn() + '</span></div>' +
-      '<div class="bb-namerow"><span class="bb-fixname">' + esc(c.name) + '</span><b class="bb-ret"></b></div>' +
-      '<div class="bb-meta"></div>' + barHTML() +
-      '<div class="bb-rows">' + c.rows.map(rowHTML).join('') + '</div>' +
-      '<div class="bb-foot"><span class="bb-hint" aria-live="polite"></span><span class="bb-total"></span></div></div>';
-  }
-  /** "Depot-Historie" (transactions preset): locked – dot, kind, fixed name + period return, facts; only the eye button. */
-  function txCardHTML(c) {
-    var b = c.base, tx = b.transactions || [], trades = tx.filter(function (t) { return t.type === 'Buy' || t.type === 'Sell'; }).length;
-    var H = E.transactionHistory(ctx0, b), un = Object.keys((H && H.unpriced) || {}).map(function (i) { return (b.names && b.names[i]) || i; });
-    var span = tx.length ? F.date(tx[0].date, 'short') + '–' + F.date(tx[tx.length - 1].date, 'short') : '';
-    var how = 'Dein Depot aus dem Scalable-Transaktionsexport nachgespielt: Stückzahlen ändern sich mit jedem Kauf und Verkauf. ' +
-      'Nur Wertpapiere (ohne Cash, Gebühren, Steuern, Dividenden). Rendite zeitgewichtet (Käufe/Verkäufe zählen nicht als Gewinn); ' +
-      '„Echt“ = Wertänderung ohne die Käufe und Verkäufe.' + (un.length ? ' Ohne Kurse, zum letzten Handelspreis bewertet: ' + un.join(', ') + '.' : '');
-    return '<div class="bb-card bb-card--tx" role="group" data-card="' + esc(c.id) + '" style="--c:' + c.color + '">' +
-      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i><span class="bb-kind">Echte Transaktionen</span></span><span class="bb-icons">' +
-      showBtn() + '</span></div>' +
-      '<div class="bb-namerow"><span class="bb-fixname">' + esc(c.name) + '</span><b class="bb-ret"></b></div>' +
-      '<div class="bb-meta bb-meta--tx" title="' + esc(how) + '"><span>' + trades + ' Käufe/Verkäufe</span> · <span>' + esc(span) +
-      '</span> · <span>nur Wertpapiere, zeitgewichtet</span></div>' +
-      '<div class="bb-facts">' +
-      '<div class="bb-fact"><span>Wert am ' + esc(F.date(TODAY, 'short')) + '</span><b class="bb-tx-now"></b></div>' +
-      '<div class="bb-fact" title="Echter Gewinn im Zeitraum: Wertänderung ohne die Käufe und Verkäufe (nicht hochgerechnet)"><span class="bb-tx-per"></span><b class="bb-tx-pl"></b></div>' +
-      '</div></div>';
+  function fixedCardHTML(b) {
+    var isins = Object.keys(b.holdings || {}), depot = b.id === DEPOT_ID;
+    var names = isins.map(function (i) { return INSTR_BY[i] ? INSTR_BY[i].short : i; });
+    var now = E.benchmarkValueNow ? nv(E.benchmarkValueNow(ctx0, b.id)) : null;
+    return '<div class="bb-card bb-card--fixed" role="group" data-card="' + esc(b.id) + '" style="--c:' + colorOf(b.id) + '">' +
+      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i>' + (depot ? 'Echtes Depot · nicht änderbar' : 'Feste Stückzahlen') + '</span>' +
+      '<span class="bb-icons">' + showBtn() + '</span></div>' +
+      '<div class="bb-namerow" title="' + esc(b.description || '') + '"><span class="bb-fixname">' + esc(b.name || b.id) + '</span><b class="bb-ret"></b></div>' +
+      '<div class="bb-meta"' + (depot ? ' title="Stückzahlen × letzter Kurs, ohne Cash"' : '') + '>' + (depot ? 'Echte' : 'Feste') + ' Stückzahlen · ' +
+      isins.length + (isins.length === 1 ? ' Position' : ' Positionen') +
+      (now !== null ? '<br>Wert <b>' + eur(now) + '</b> am ' + esc(F.date(ctx0.dates[ctx0.n - 1], 'short')) : '') + '</div>' +
+      '<div class="bb-hold" title="' + esc(names.join(', ')) + '">' + esc(names.join(' · ')) + '</div></div>';
   }
   function rowHTML(r, k) {
     var i = r.isin ? INSTR_BY[r.isin] : null;
@@ -1077,22 +901,25 @@
       '<div class="bb-top"><label class="bb-lbl" for="bbn-' + c.id + '"><i class="bb-dot"></i>Name</label><span class="bb-icons">' +
       showBtn() + iconBtn('dup', 'copy', 'Duplizieren') + iconBtn('del', 'trash', 'Löschen') + '</span></div>' +
       '<div class="bb-namerow"><input type="text" class="bb-name" id="bbn-' + c.id + '" data-f="name" value="' + esc(c.name) + '" placeholder="' +
-      esc(c.defName) + '" maxlength="40" autocomplete="off" spellcheck="false"><b class="bb-ret"></b></div>' + barHTML() +
+      esc(c.defName) + '" maxlength="40" autocomplete="off" spellcheck="false"><b class="bb-ret"></b></div>' +
+      '<div class="bb-bar"><button type="button" class="bb-mini" data-act="addrow" title="Zeile hinzufügen" aria-label="Zeile hinzufügen">+</button>' +
+      '<button type="button" class="bb-mini" data-act="clear" title="Alle Zeilen leeren" aria-label="Alle Zeilen leeren">×</button></div>' +
       '<div class="bb-rows">' + c.rows.map(rowHTML).join('') + '</div>' +
       '<div class="bb-foot"><span class="bb-hint" aria-live="polite"></span><span class="bb-total"></span></div></div>';
   }
   function makeEl(html) { var t = document.createElement('div'); t.innerHTML = html; return t.firstChild; }
-  function cardSig(c) { return c.rows.map(function (r) { return r.id; }).join(','); }
+  function cardSig(c) { return c ? c.rows.map(function (r) { return r.id; }).join(',') : 'fixed'; }
 
   /** Builds missing / structurally changed cards (every other card and the field being typed in stay), then patches the derived parts. */
   function renderBenchCards(M) {
     var box = $('benchCards'), old = {}, prev = null;
     Array.prototype.forEach.call(box.children, function (el) { if (el.hasAttribute('data-card')) old[el.getAttribute('data-card')] = el; });
-    var list = state.cards.map(function (c) { return { id: c.id, c: c }; });
+    var list = ctx.benchmarks.map(function (b) { return { id: b.id, b: b }; })
+      .concat(state.cards.map(function (c) { return { id: c.id, c: c }; }));
     list.forEach(function (o) {
       var el = old[o.id], sig = cardSig(o.c);
       if (!el || el._sig !== sig) {
-        var nu = makeEl(o.c.tx ? txCardHTML(o.c) : o.c.hold ? holdCardHTML(o.c) : cardHTML(o.c));
+        var nu = makeEl(o.c ? cardHTML(o.c) : fixedCardHTML(o.b));
         nu._sig = sig;
         if (el) box.replaceChild(nu, el);
         el = nu;
@@ -1114,9 +941,9 @@
     }
   }
   function patchCard(el, o, M) {
-    var c = o.c, x = M && M.byId[o.id], shown = c.show, r = x ? get(x.st, 'totalReturn') : null;
+    var c = o.c, x = M && M.byId[o.id], shown = c ? c.show : !!state.fixedOn[o.id], r = x ? get(x.st, 'totalReturn') : null;
     el.classList.toggle('is-hidden', !shown);
-    el.setAttribute('aria-label', 'Benchmark ' + cardName(c));
+    el.setAttribute('aria-label', 'Benchmark ' + (c ? cardName(c) : o.b.name || o.id));
     var sb = el.querySelector('[data-act="show"]');
     if (sb.getAttribute('aria-pressed') !== String(shown)) {
       var lbl = shown ? 'Im Chart ausblenden' : 'Im Chart einblenden';
@@ -1128,17 +955,14 @@
     var rb = el.querySelector('.bb-ret');
     rb.className = 'bb-ret ' + sgn(r);
     rb.textContent = pct(r);
-    rb.title = x ? (c.tx ? 'Zeitgewichtete Rendite' : 'Rendite') + ' im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') :
-      'wird erst bei 100 % berechnet';
-    if (c.tx) { patchTx(el, c, M); return; }
+    rb.title = x ? 'Rendite im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') : 'wird erst bei 100 % berechnet';
+    if (!c) return;
     var info = cardInfo(c), tot = el.querySelector('.bb-total'), hint = el.querySelector('.bb-hint');
     el.classList.toggle('is-invalid', !info.valid);
     tot.textContent = fmtShare(info.total) + ' %';
     tot.className = 'bb-total ' + (info.ok100 ? 'is-ok' : 'is-bad');
     hint.className = 'bb-hint' + (info.valid ? '' : ' is-bad');
-    hint.textContent = !info.valid ? info.hint : c.hold ? 'Anteile am ' + F.date(TODAY, 'dayMonthShort') + ', Stückzahlen konstant' :
-      'Kauf am ' + F.date(ctx.dates[M.R.start], 'short') + ', dann gehalten';
-    if (c.hold) patchHold(el, c, info);
+    hint.textContent = info.valid ? 'Kauf am ' + F.date(ctx.dates[M.R.start], 'short') + ', dann gehalten' : info.hint;
     c.rows.forEach(function (rw) {
       var p = el.querySelector('[data-row="' + rw.id + '"] .bb-pct');
       if (!p) return;
@@ -1148,28 +972,6 @@
     });
     var ni = el.querySelector('.bb-name');
     if (ni && document.activeElement !== ni && ni.value !== c.name) ni.value = c.name;
-  }
-  /** Depot-Historie card: its real value on the last day and its real € gain in the period (without purchases / sales). */
-  function patchTx(el, c, M) {
-    var now = E.benchmarkValueNow ? nv(E.benchmarkValueNow(ctx0, c.base)) : null;
-    var pl = M && E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, c.base, M.R.start, M.R.end)) : null;
-    el.querySelector('.bb-tx-now').textContent = eur(now);
-    var per = el.querySelector('.bb-tx-per');
-    per.textContent = 'Gewinn im Zeitraum';
-    per.title = M ? 'Zeitraum ' + periodText(M.R) : '';
-    var b = el.querySelector('.bb-tx-pl');
-    b.className = 'bb-tx-pl ' + sgn(pl);
-    b.textContent = eurS(pl);
-  }
-  /** Holdings card: kind label, value line and the reset button follow whether the fetched allocation was edited. */
-  function patchHold(el, c, info) {
-    var dflt = isDefault(c, info), depot = c.id === DEPOT_ID, meta = el.querySelector('.bb-meta'), rs = el.querySelector('[data-act="reset"]');
-    var now = dflt && E.benchmarkValueNow ? nv(E.benchmarkValueNow(ctx0, c.base)) : null, day = F.date(TODAY, 'short');
-    el.querySelector('.bb-kind').textContent = (depot ? 'Echtes Depot' : 'Feste Stückzahlen') + (dflt ? '' : ' · geändert');
-    meta.innerHTML = dflt ? (depot ? 'Echte' : 'Feste') + ' Stückzahlen' + (now !== null ? ' · Wert <b>' + eur(now) + '</b> am ' + esc(day) : '') :
-      'Geändert: Stückzahlen aus den Anteilen am ' + esc(day) + ', rückwirkend konstant';
-    meta.title = dflt ? 'Stückzahlen × letzter Kurs, ohne Cash' : 'Wie beim Portfolio: die Stückzahlen, die heute diese Anteile ergeben, gelten für den ganzen Zeitraum';
-    if (rs.hidden !== dflt) rs.hidden = dflt;
   }
 
   // card actions (structure changes re-render the card, then the focus goes to the matching control)
@@ -1202,13 +1004,6 @@
     benchChanged();
     var nx = state.cards[k] || state.cards[k - 1], add = $('benchCards').querySelector('.bb-add');
     if (nx) focusCard(nx.id, '[data-act="del"]'); else if (add) add.focus();
-  }
-  /** Holdings card back to the fetched allocation (its default rows). */
-  function resetCard(c) {
-    if (drop && drop.cardId === c.id) closeDrop();
-    c.rows = c.def.map(function (r) { return newRow(r.isin, r.pct); });
-    benchChanged();
-    focusCard(c.id, '[data-act="show"]');
   }
   function addRow(c) {
     var r = newRow();
@@ -1319,11 +1114,7 @@
   function placeDrop() {
     if (!drop) return;
     var row = drop.inp.closest('.bb-row') || drop.inp, rr = row.getBoundingClientRect(), ir = drop.inp.getBoundingClientRect();
-    var out = [drop.inp.closest('.bb-rows'), drop.inp.closest('.rail-in')].some(function (sc) {
-      var sr = sc && sc.scrollHeight > sc.clientHeight ? sc.getBoundingClientRect() : null;
-      return sr && (ir.bottom < sr.top + 4 || ir.top > sr.bottom - 4);
-    });
-    if (!ir.width || out) { closeDrop(); return; }            // scrolled out of its card / the right column
+    if (!ir.width) { closeDrop(); return; }
     var vv = window.visualViewport, bar = $('topBar');
     var vw = document.documentElement.clientWidth, vh = vv ? Math.min(window.innerHeight, vv.offsetTop + vv.height) : window.innerHeight;  // above an on-screen keyboard
     var w = Math.min(Math.max(rr.width, 340), vw - 16), left = Math.max(8, Math.min(rr.left, vw - 8 - w));
@@ -1366,12 +1157,14 @@
       }
       var act = b.getAttribute('data-act'), o = ctxOf(b);
       if (act === 'new') { addCard(); return; }
+      if (act === 'show') {
+        if (o.c) o.c.show = !o.c.show; else if (o.id) state.fixedOn[o.id] = !state.fixedOn[o.id];
+        benchChanged();
+        return;
+      }
       if (!o.c) return;
-      if (act === 'show') { o.c.show = !o.c.show; benchChanged(); return; }
-      if (o.c.tx) return;                                        // Depot-Historie: locked (only show / hide)
-      if (act === 'reset') { resetCard(o.c); return; }
-      if (act === 'dup' && !o.c.hold) dupCard(o.c);
-      else if (act === 'del' && !o.c.hold) delCard(o.c);
+      if (act === 'dup') dupCard(o.c);
+      else if (act === 'del') delCard(o.c);
       else if (act === 'addrow') addRow(o.c);
       else if (act === 'clear') clearRows(o.c);
       else if (act === 'delrow' && o.r) delRow(o.c, o.r);
@@ -1427,7 +1220,6 @@
     });
     window.addEventListener('resize', placeDrop);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', placeDrop);
-    document.addEventListener('scroll', function () { if (drop) placeDrop(); }, true);   // rows / the right column scroll: the list follows
   }
 
   function renderHeadline(M) {
@@ -1438,19 +1230,17 @@
     if (!M.p || !s) {
       // actionable: the button switches „Einzelwerte“ on (also when hidden), scrolls to it and focuses the next step (openAssets)
       var zero = state.selected.size && ctx !== ctx0;
-      main.hidden = false;
       main.innerHTML = '<span class="hl-empty"><span class="weak">' + esc(zero ? 'Keine Bestände in der Auswahl' : 'Keine Position ausgewählt') + '</span>' +
         '<button type="button" class="hl-act" data-hl-act="assets">' + (zero ? 'Stück anpassen' : 'Positionen auswählen') + '</button></span>';
       sub.innerHTML = (zero ? 'Was-wäre-wenn: alle ausgewählten Positionen stehen auf 0 Stück · ' : 'Auswahl über die Liste „Einzelwerte“ · ') + period;
       $('legend').innerHTML = '';
       return;
     }
-    // no big figure here (user, 27.09.: the overview block above already shows the value) – only the line with the period
-    main.hidden = true;
-    main.innerHTML = '';
     if (state.mode === 'value') {
+      main.innerHTML = eur(s.endValue);
       sub.innerHTML = colored(s.pl, eurS(s.pl) + ' (' + pct(s.totalReturn) + ')') + ' ' + period;
     } else {
+      main.innerHTML = '<span class="' + (isNum(s.pl) && s.pl < 0 ? 'neg' : 'pos') + '">' + eurS(s.pl) + '</span>';
       sub.innerHTML = colored(s.totalReturn, pct(s.totalReturn)) + ' ' + period + ' · Endwert ' + eur(s.endValue);
     }
     var lg = '<span class="lg-item" style="--c:var(--accent)"><i></i><span>' + (M.orig ? 'Was-wäre-wenn' : 'Portfolio') + '</span>' +
@@ -1779,7 +1569,6 @@
     return i < 0 ? '<b>' + esc(s) + '</b>' : '<b>' + esc(s.slice(0, i)) + '</b><sup>' + esc(s.slice(i + 1)) + '</sup>';
   }
 
-  /** App-style value "553.343⁹⁹ €": integer part big, decimals and € stacked (sizes via .bigval / .bigval--sm). */
   function bigValueHTML(v) {
     if (!isNum(v)) return '<span class="bv-int weak">–</span>';
     var s = F.num(v, 2), i = s.lastIndexOf(',');
@@ -1866,56 +1655,6 @@
       '</div>';
   }
 
-  /**
-   * Overview block (user, 27.09.): beside the Yacht value one block per benchmark shown in the chart (cur.selB, card
-   * order: Mein Depot, Energie, own cards). Value at the period end and € change over the period in the amount of
-   * „Benchmark (€)“ – the same scaling as "Echt" in the measurement boxes: benchmarkRealValue / benchmarkRealPl
-   * (cards bought at the period start and held; unedited Mein Depot with the field empty = the real depot). % (tooltip)
-   * = the benchmark's period return (legend / card). Daily like the Yacht value (1T: previous close -> last close).
-   * "Seit Kauf": benchmarks have no cost basis, so they use the chart period (MAX) and say so.
-   */
-  function renderOvBench(H) {
-    var box = $('ovBench'), list = cur ? cur.selB : [];
-    if (!list.length) { box.innerHTML = ''; box.hidden = true; return; }
-    var R = H.R, sk = H.sk, tgt = depotTarget(), today = F.date(ctx0.dates[ctx0.n - 1], 'short');
-    var label = sk ? periodLabel({ hp: 'MAX', sk: false, R: R }) : periodLabel(H);
-    var tgtTxt = isNum(tgt) ? eur(tgt, { dec: 0 }) : '–', dflt = state.depotValue == null;
-    var intra = ctx0.status[R.end] === 'intraday' ? ' (intraday' + (ASOF ? ' ' + ASOF : '') + ')' : '';
-    box.innerHTML = list.map(function (x, k) {
-      var o = { target: tgt, buyAt: R.start };
-      var val = E.benchmarkRealValue ? nv(E.benchmarkRealValue(ctx0, x.b, R.end, o)) : null;
-      var chg = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, x.b, R.start, R.end, o)) : null;
-      var ret = get(x.st, 'totalReturn');
-      var basis = x.real && dflt ? 'Wert = echte Stückzahlen deines Depots × Kurs (ohne Guthaben), am ' + today + ' ' + eur(tgt) :
-        (x.real ? 'echte Stückzahlen deines Depots' :
-          x.tx ? 'Stückzahlen laut Transaktionen (ohne Guthaben), Veränderung = Gewinn ohne die Käufe und Verkäufe, % zeitgewichtet' :
-          x.hold ? 'Stückzahlen aus den Anteilen vom ' + today + ', konstant' :
-            'gekauft am ' + F.date(ctx0.dates[R.start], 'short') + ', dann gehalten') +
-        ' – hochgerechnet auf ' + tgtTxt + ' am ' + today + ' (Betrag aus „Benchmark (€)“' +
-        (dflt ? ' = Wert von „Mein Depot“ heute' : '') + ')';
-      var tip = pct(ret) + ' · Veränderung von „' + x.name + '“ im Zeitraum ' + periodText(R) + intra + ' · ' + basis +
-        (sk ? ' · Seit Kauf: Benchmarks haben keinen Einstand, daher der ganze Chartzeitraum (MAX)' : '');
-      return '<div class="ovb" style="--c:' + x.color + '" data-bench="' + esc(x.id) + '">' +
-        '<div class="ov-lbl"><i aria-hidden="true"></i><span>' + esc(x.name) + '</span></div>' +
-        '<div class="bigval bigval--sm">' + bigValueHTML(val) + '</div>' +
-        '<div class="hold-chg hold-chg--sm"><b class="' + sgn(chg) + '">' + eurS(chg) + '</b>' +
-        ' <span class="hold-per">' + esc(label) + '</span>' +
-        '<span class="info" tabindex="0" role="img" aria-label="Info" aria-describedby="ovTip' + k + '"></span>' +
-        '<span class="info-tip" id="ovTip' + k + '" role="tooltip">' + esc(tip) + '</span></div></div>';
-    }).join('');
-    box.hidden = false;
-  }
-  /** Keeps an overview tooltip inside the window (the benchmark blocks can sit at the right edge). */
-  function fitTip(ev) {
-    var info = ev.target.closest && ev.target.closest('.ov .info'), tip = info && info.nextElementSibling;
-    if (!tip || !tip.classList.contains('info-tip')) return;
-    tip.style.left = '';
-    requestAnimationFrame(function () {
-      var r = tip.getBoundingClientRect(), over = r.right - (document.documentElement.clientWidth - 8);
-      if (r.width && over > 0) tip.style.left = -Math.min(over, Math.max(0, r.left - 8)) + 'px';
-    });
-  }
-
   function renderHoldings() {
     var H = holdPeriod(), R = H.R, sk = H.sk, sel = state.selected;
     var rows = E.assets(ctx, { selected: sel, start: R.start, end: R.end, scale: 1 }) || [];
@@ -1952,7 +1691,6 @@
       '<span class="info" tabindex="0" role="img" aria-label="Info" aria-describedby="holdTip"></span>' +
       '<span class="info-tip" id="holdTip" role="tooltip">' + esc(tipText) + '</span>' :
       '<span class="weak">Keine Position ausgewählt</span>';
-    renderOvBench(H);
 
     Array.prototype.forEach.call($('holdPills').querySelectorAll('[data-hp]'), function (b) {
       var on = b.getAttribute('data-hp') === H.hp;
@@ -2177,8 +1915,6 @@
     renderAssets(cur);
     renderRisk(cur);
     renderMeasureBar();
-    mpStamp++;
-    renderMeasPanel(sync.measure);
   }
 
   /** What-if: a Stück input was committed (Enter / blur). */
@@ -2233,7 +1969,7 @@
     update({ keepMeasure: true });
   }
 
-  /** "Benchmark (€)": only "Echt" in the measure boxes and the benchmark values of the overview use it – no re-render of the charts. */
+  /** "Mein Depot (€)": only the "echt" amount of the measure box uses it – no re-render of the charts. */
   function onDepotValue() {
     var inp = $('depotValue'), s = inp.value.trim(), v = s ? F.parseDE(s) : null, hint = $('depotHint');
     if (s && (!isNum(v) || v <= 0)) { inp.classList.add('is-invalid'); hint.textContent = 'ungültiger Betrag'; $('depotReset').hidden = false; return; }
@@ -2241,9 +1977,7 @@
     hint.textContent = '';
     state.depotValue = s ? v : null;
     $('depotReset').hidden = !s;
-    renderOvBench(holdPeriod());                  // benchmark values in the overview use the same amount
     mainChart.tipKey = '';                        // rebuild an open measure box with the new value
-    mpStamp++;                                    // and the "Echt" column of the Messung panel
     sync.draw();
   }
 
@@ -2293,9 +2027,6 @@
     });
     $('startValue').addEventListener('input', onStartValue);
     $('depotValue').addEventListener('input', onDepotValue);
-    var ov = document.querySelector('.ov');
-    ov.addEventListener('pointerover', fitTip);
-    ov.addEventListener('focusin', fitTip);
     $('depotReset').addEventListener('click', function () { $('depotValue').value = ''; onDepotValue(); $('depotValue').focus(); });
     $('startReset').addEventListener('click', function () { $('startValue').value = ''; onStartValue(); $('startValue').focus(); });
     $('rfInput').addEventListener('input', onRf);
@@ -2357,8 +2088,6 @@
       state.holdSort = it.getAttribute('data-hsort');
       closeSortMenu(true);
       renderHoldings();
-      mpStamp++;                                 // the Messung panel's Yacht list uses the same order
-      renderMeasPanel(sync.measure);
     });
     $('holdSortMenu').addEventListener('keydown', function (ev) {
       var items = Array.prototype.slice.call(this.querySelectorAll('[data-hsort]'));
@@ -2398,7 +2127,6 @@
         var widthChanged = w !== lastW;
         lastW = w; lastH = h;
         rerenderChartsOnly();
-        renderMeasPanel(sync.measure);                         // shown again after the window got wide enough
         if (widthChanged && heat.model) heat.render();         // cell size follows the card width
       });
     }
