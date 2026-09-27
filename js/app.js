@@ -104,18 +104,45 @@
     try { return new Intl.DateTimeFormat('de-DE', { weekday: 'long', timeZone: 'UTC' }).format(new Date(iso + 'T12:00:00Z')); }
     catch (e) { return F.date(iso, 'dayMonthShort'); }
   }
-  /** Intraday slot k -> "Gestern, 20:00". */
-  function slotLabel(I, k) { return dayWord(I.dates[Math.floor(k / I.S)]) + ', ' + I.times[k % I.S]; }
-  /** Axis like the app: "Gestern · 15:15 · Heute · 15:15" (session start + middle of the session). */
+  /**
+   * Point k of a sub-daily chart -> label. 1T (one session): "Gestern, 20:00" (the start close: "Gestern, Schluss");
+   * several sessions: "Mi 23.09., 14:30", the start point = the daily close of the range start: "Fr 18.09., Schluss".
+   */
+  function slotLabel(I, k) {
+    var fr = I.frame, s = fr.slot[k], iso = ctx.dates[fr.day[k]];
+    return (I.oneDay ? dayWord(iso) : F.date(iso, 'weekdayDayMonth')) + ', ' + (s < 0 ? 'Schluss' : fr.times[s]);
+  }
+  /** 1T axis like the app: "Gestern · 15:15 · Heute · 15:15" (session start + middle of the session). */
   function intraTicks(I) {
-    var t0 = I.times[0], t1 = I.times[I.S - 1];
+    var fr = I.frame, t0 = fr.times[0], t1 = fr.times[fr.S - 1];
     var mid = ((+t0.slice(0, 2) * 60 + +t0.slice(3)) + (+t1.slice(0, 2) * 60 + +t1.slice(3))) / 2;
     var midTxt = pad2(Math.floor(mid / 60)) + ':' + pad2(Math.round(mid % 60)), out = [];
-    for (var d = 0; d < I.dates.length; d++) {
-      out.push({ i: d * I.S, text: dayWord(I.dates[d]), anchor: 'start' });
-      out.push({ i: d * I.S + (I.S - 1) / 2, text: midTxt, anchor: 'middle' });
-    }
+    fr.segs.forEach(function (g) {
+      out.push({ i: g.from, text: dayWord(g.date), anchor: 'start' });
+      out.push({ i: g.from + (fr.S - 1) / 2, text: midTxt, anchor: 'middle' });
+    });
     return out;
+  }
+  /**
+   * Axis of a multi-day grid (1W, 1M, custom), as a function of the plot width: up to 7 sessions one label per session
+   * in its middle ("Mo 21.09.", narrow: "21.09."); more sessions: the first session of each week like the daily charts
+   * ("26. Aug.", "31", "7. Sept.", "14"). MainChart drops labels that would overlap.
+   */
+  function gridTicks(I) {
+    var segs = I.frame.sessions;
+    return function (plotW) {
+      var out = [], per = plotW / Math.max(1, segs.length), prevWeek = null, prevMonth = null;
+      segs.forEach(function (g, k) {
+        var mid = (g.from + g.to) / 2;
+        if (segs.length <= 7) { out.push({ i: mid, text: F.date(g.date, per >= 76 ? 'weekdayDayMonth' : 'dayMonthShort'), anchor: 'middle' }); return; }
+        var week = Math.floor((Date.UTC(+g.date.slice(0, 4), +g.date.slice(5, 7) - 1, +g.date.slice(8, 10)) / 864e5 + 3) / 7), mon = g.date.slice(0, 7);
+        if (week === prevWeek) return;
+        prevWeek = week;
+        out.push({ i: mid, text: weekLabel(g.date, k === 0 || (prevMonth !== null && mon !== prevMonth)), anchor: 'middle' });
+        prevMonth = mon;
+      });
+      return out;
+    };
   }
   function padNull(a, m) { var out = a.slice(); while (out.length < m) out.push(null); return out; }
 
@@ -178,6 +205,14 @@
     }
     return E.presetRange(ctx, state.preset || 'YTD');
   }
+  /** What picks the chart interval: 'custom' (valid Von/Bis range, by its length), 'MAX' for Seit Kauf, else the preset. */
+  function intervalPreset() {
+    if (state.custom && E.customRange(ctx, state.custom.from, state.custom.to)) return 'custom';
+    return state.sinceBuy ? 'MAX' : (state.preset || 'YTD');
+  }
+  var IV_SHORT = { m30: '30 Min.', h2: '2 Std.', day: '1 Tag' };
+  var IV_KURSE = { m30: '30-Min-Kurse', h2: '2-Std-Kurse' };
+  var IV_LONG = { m30: '30-Minuten-Kurse', h2: '2-Stunden-Kurse' };
 
   function compute() {
     var R = currentRange(), rf = state.rf, sel = state.selected, n = ctx.n;
@@ -211,22 +246,29 @@
     var groups = E.groupSummary(ctx, assets) || [];
     // what-if: the original portfolio (same selection, range and Startwert) for the dashed comparison line
     var orig = ctx !== ctx0 && sel.size ? E.portfolio(ctx0, { selected: sel, start: R.start, end: R.end, startValue: state.startValue }) : null;
-    // 1T: 30-min intraday grid (yesterday grey + today) when data/intraday.csv is current; otherwise the 2 daily points
+    // chart interval (engine.chartInterval): 1T/1W 30 min, 1M 2 h, custom by length, stepping down where the finer grid
+    // lacks a session; main chart + drawdown then run on the sub-daily frame (1T: previous session grey as context,
+    // x spans the whole day; several sessions: trimmed at the last point). Everything else stays daily.
+    var ivp = intervalPreset();
+    var iv = E.chartInterval ? E.chartInterval(ctx, R, ivp) : { key: 'day', want: 'day', stepped: false, skipped: [] };
     var intra = null;
-    if (!state.custom && !state.sinceBuy && state.preset === '1T' && sel.size && E.intraday) {
-      intra = E.intraday(ctx, { selected: sel, startValue: state.startValue });
+    if (iv.key !== 'day' && sel.size) {
+      var fr = E.gridFrame(ctx, iv.key, R.start, R.end, { context: ivp === '1T', trim: R.end - R.start > 1 });
+      intra = fr ? E.intraday(ctx, { selected: sel, startValue: state.startValue, frame: fr }) : null;
       if (intra) {
-        intra.benches = selB.map(function (x) { return { x: x, s: E.intradayBenchmark(ctx, x.b, intra.base) }; })
+        intra.oneDay = fr.sessions.length === 1;          // labels "Gestern, 20:00" / axis "Gestern · 15:15 · Heute …"
+        intra.oneT = ivp === '1T';
+        intra.benches = selB.map(function (x) { return { x: x, s: E.intradayBenchmark(ctx, x.b, intra.base, fr) }; })
           .filter(function (o) { return o.s; });
         intra.benches.forEach(function (o) { o.dd = E.drawdown(o.s.value.slice(0, intra.last + 1)); });
-        intra.orig = ctx !== ctx0 ? E.intraday(ctx0, { selected: sel, startValue: state.startValue }) : null;
+        intra.orig = ctx !== ctx0 ? E.intraday(ctx0, { selected: sel, startValue: state.startValue, frame: fr }) : null;
         intra.dd = E.drawdown(intra.value.slice(0, intra.last + 1));
       }
     }
     return {
       R: R, p: p, ps: ps, pdd: pdd, benches: benches, byId: byId, selB: selB,
       monthlyP: monthlyP, monthsRef: monthsRef || [], assets: assets, groups: groups,
-      orig: orig, origStats: orig ? E.stats(orig, { rf: rf }) : null, intra: intra
+      orig: orig, origStats: orig ? E.stats(orig, { rf: rf }) : null, iv: iv, intra: intra
     };
   }
 
@@ -440,13 +482,13 @@
   /**
    * "Mein Depot" box beside the measure box (only while `my_depot` is selected and has a series). x: its selB entry;
    * pValues/dValues: portfolio and depot VALUE series (also in Gesamtrendite); a/b: chart indices; i/j: daily indices
-   * into ctx or intraday slots for the real change. % and "Gleicher Wert" = the depot at the portfolio's size at the
-   * start of the span; "Echt" = the real depot's € change, scaled to „Mein Depot (€)“.
+   * into ctx, or points of the sub-daily frame `frame`, for the real change. % and "Gleicher Wert" = the depot at the
+   * portfolio's size at the start of the span; "Echt" = the real depot's € change, scaled to „Mein Depot (€)“.
    */
-  function depotBoxHTML(x, pValues, dValues, a, b, i, j, intraday) {
+  function depotBoxHTML(x, pValues, dValues, a, b, i, j, frame) {
     var w = E.equalValueWindow ? E.equalValueWindow(pValues, dValues, a, b) : null;
     var ret = get(w, 'ret'), eq = get(w, 'pl'), tgt = depotTarget();
-    var real = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, REAL_ID, i, j, { intraday: intraday, target: tgt })) : null;
+    var real = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, REAL_ID, i, j, { frame: frame || null, target: tgt })) : null;
     var tgtTxt = isNum(tgt) ? eur(tgt, { dec: 0 }) : '';
     function row(label, v, text, title) {
       return '<div class="tt-dr" title="' + esc(title) + '">' + label + '<span class="tt-dv ' + sgn(v) + '">' + text + '</span></div>';
@@ -472,7 +514,7 @@
     I.benches.slice(0, maxBench).forEach(function (o) { rows += ttRow(o.x.name, o.x.color, pl ? eurS(o.s.pl[i]) : eur(o.s.value[i]), o.s.ret[i]); });
     return '<div class="tt-one">' + main + '</div>' + (rows ? '<div class="tt-h">' + rows + '</div>' : '');
   }
-  /** 1T: measure box + "Mein Depot" box ({ main, side } for MainChart); a/b are intraday slots. */
+  /** Sub-daily chart: measure box + "Mein Depot" box ({ main, side } for MainChart); a/b are points of the frame. */
   function intraMeasureHTML(a, b) {
     var I = cur.intra, pl = state.mode === 'pl';
     var w = E.intradayWindow(I.value, a, b);
@@ -480,7 +522,7 @@
     return {
       main: measureBox(slotLabel(I, a), slotLabel(I, b), pl ? eurS(I.pl[a]) : eur(I.value[a]), pl ? eurS(I.pl[b]) : eur(I.value[b]),
         get(w, 'pl'), get(w, 'ret')),
-      side: d ? depotBoxHTML(d.x, I.value, d.s.value, a, b, Math.min(a, b), Math.max(a, b), true) : ''
+      side: d ? depotBoxHTML(d.x, I.value, d.s.value, a, b, Math.min(a, b), Math.max(a, b), I.frame) : ''
     };
   }
 
@@ -511,7 +553,7 @@
     return {
       main: measureBox(dateLabel(M.R.start + a), dateLabel(M.R.start + b), pl ? eurS(p.pl[a]) : eur(p.value[a]), pl ? eurS(p.pl[b]) : eur(p.value[b]),
         get(w, 'pl'), get(w, 'totalReturn')),
-      side: d ? depotBoxHTML(d, p.value, d.s.value, a, b, M.R.start + Math.min(a, b), M.R.start + Math.max(a, b), false) : ''
+      side: d ? depotBoxHTML(d, p.value, d.s.value, a, b, M.R.start + Math.min(a, b), M.R.start + Math.max(a, b), null) : ''
     };
   }
 
@@ -543,7 +585,7 @@
   }
 
   function intraChartModels(M) {
-    var I = M.intra, pl = state.mode === 'pl', ticks = intraTicks(I);
+    var I = M.intra, pl = state.mode === 'pl', ticks = I.oneDay ? intraTicks(I) : gridTicks(I);
     var common = { dates: [], xTicks: ticks, last: I.last, emptyText: emptyText() };
     var main = extend({
       series: { values: pl ? I.pl : I.value },
@@ -554,7 +596,7 @@
       lastLabel: function (v) { return F.num(v, 2); },
       hoverHTML: hoverHTML, measureHTML: measureHTML
     }, common);
-    var d = I.dd, mk = d && d.maxDD < 0 ? { i: d.trough, value: d.maxDD, label: 'Max. ' + pctU(d.maxDD) + ' ' + slotLabel(I, d.trough) } : null;
+    var d = I.dd, mk = d && d.maxDD < 0 ? { i: d.trough, value: d.maxDD, label: 'Max. ' + pctU(d.maxDD) + (I.oneDay ? ' ' : ' am ') + slotLabel(I, d.trough) } : null;
     var dd = extend({
       dd: padNull(d.dd, I.m),
       benches: I.benches.map(function (o) { return { id: o.x.id, color: o.x.color, dd: padNull(o.dd.dd, I.m) }; }),
@@ -618,7 +660,7 @@
   function renderMeasureBar() {
     var pin = sync.pinned(), btn = $('applyMeasure'), help = $('chartHelp');
     var end = TOUCH ? ' · Tippen in den Chart hebt sie auf' : ' · Klick in den Chart oder Esc hebt sie auf';
-    btn.hidden = !pin || !!(cur && cur.intra);
+    btn.hidden = !pin || !!(cur && cur.intra);             // "Zeitraum auf Auswahl setzen": daily charts only
     if (pin && cur && cur.intra) {
       help.textContent = 'Messung ' + slotLabel(cur.intra, pin.a) + ' – ' + slotLabel(cur.intra, pin.b) + end;
     } else if (pin && cur && cur.p) {
@@ -632,6 +674,26 @@
       help.textContent = !(cur && cur.p) ? '' : TOUCH ? 'Zum Messen im Chart ziehen oder einen Startpunkt antippen' :
         'In den Chart klicken, um ab diesem Punkt zu messen (oder ziehen)';
     }
+  }
+
+  /**
+   * Muted note under the chart: the chart's interval ("Intervall: 30 Min." / "2 Std." / "1 Tag") and, when the range
+   * stepped down to a coarser grid, why ("keine 30-Min-Kurse für diesen Zeitraum"). The title lists what was collected.
+   */
+  function renderInterval(M) {
+    var el = $('chartIv'), iv = M.iv;
+    if (!el) return;
+    if (!iv) { el.textContent = ''; return; }
+    var why = iv.stepped && iv.skipped.length ? 'keine ' + (iv.skipped.length > 1 ? '30-Min- oder 2-Std-Kurse' : IV_KURSE[iv.skipped[0]]) + ' für diesen Zeitraum' : '';
+    el.innerHTML = 'Intervall: <b>' + esc(IV_SHORT[iv.key]) + '</b>' + (why ? '<span class="chart-iv-why"> · ' + esc(why) + '</span>' : '');
+    var have = ['m30', 'h2'].map(function (k) {
+      var G = ctx.grids && ctx.grids[k];
+      return G && G.D ? IV_SHORT[k] + ' für ' + G.D + (G.D === 1 ? ' Handelstag' : ' Handelstage') + ' (' +
+        F.date(G.dates[0], 'dayMonthShort') + '–' + F.date(G.dates[G.D - 1], 'short') + ')' : IV_SHORT[k] + ': keine';
+    });
+    el.title = 'Kursintervall von Chart und Drawdown (Kennzahlen, Tabellen und Listen: Tagesschlusskurse). ' +
+      '1T/1W: 30 Min., 1M: 2 Std., länger: 1 Tag; eigener Zeitraum: bis 7 Tage 30 Min., bis 31 Tage 2 Std. – ' +
+      'gröber, wo feinere Kurse fehlen. Gesammelt: ' + have.join(', ') + '.';
   }
 
   // ------------------------------------------------------------------ header / controls
@@ -1153,7 +1215,7 @@
 
   function renderHeadline(M) {
     var s = M.ps, R = M.R, main = $('hlMain'), sub = $('hlSub'), note = state.custom ? '' : clipNote(state.preset, R);
-    if (M.intra) note = '30-Minuten-Kurse bis ' + F.asofBerlin(M.intra.asof) + ' Uhr' +
+    if (M.intra && M.intra.oneT) note = IV_LONG[M.intra.key] + ' bis ' + F.asofBerlin(M.intra.asof) + ' Uhr' +
       (M.intra.missing.length ? ', ' + M.intra.missing.length + ' Werte ohne Intraday-Kurse' : '');
     var period = 'im Zeitraum ' + periodText(R) + (note ? ' <span class="weak">(' + esc(note) + ')</span>' : '');
     if (!M.p || !s) {
@@ -1568,8 +1630,8 @@
       var cps = isNum(r.costBasis) && isNum(r.shares) && r.shares > 0 ? r.costBasis / r.shares : null;
       spark = C.splitSpark(px ? px.slice(0, ctx.n) : r.spark, { w: 64, h: 22, base: cps, includeBase: cps != null, cls: 'spark--hold' });
       if (cps != null) tip += ' · Einstand ' + num(cps, 2) + ' € je Stück';
-    } else if (H.hp === '1T' && cur && cur.intra && E.intradayAsset(ctx, r.isin)) {
-      var ia = E.intradayAsset(ctx, r.isin);
+    } else if (H.hp === '1T' && cur && cur.intra && cur.intra.oneT && E.intradayAsset(ctx, r.isin, cur.intra.frame)) {
+      var ia = E.intradayAsset(ctx, r.isin, cur.intra.frame);
       spark = C.splitSpark(ia.px, { w: 64, h: 22, off: ia.ctxEnd + 1, base: ia.prevClose, cls: 'spark--hold' });
     } else {
       spark = C.splitSpark(px ? px.slice(H.ws, H.R.end + 1) : r.spark, { w: 64, h: 22, off: px ? H.R.start - H.ws : 0, cls: 'spark--hold' });
@@ -1836,6 +1898,7 @@
     renderSettings(cur);
     renderHeadline(cur);
     renderCharts(cur);
+    renderInterval(cur);
     renderHoldings();
     renderKpis(cur);
     renderBenchTable(cur);

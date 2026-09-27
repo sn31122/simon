@@ -110,8 +110,13 @@
   /** X labels: month starts for long ranges (left-aligned like the app), "21.09." otherwise. */
   function xLabels(M, L, font) {
     var dates = M.dates || [], m = dates.length, out = [], i;
-    if (M.xTicks) {                            // explicit ticks, e.g. the intraday axis "Gestern · 15:15 · Heute · 15:15"
-      out = M.xTicks.map(function (t) { return { x: L.x(t.i), text: t.text, anchor: t.anchor || 'middle', w: textW(t.text, font) }; });
+    if (M.xTicks) {                            // explicit ticks (or a function of the plot width), e.g. "Gestern · 15:15 · Heute · 15:15"
+      var ticks = typeof M.xTicks === 'function' ? M.xTicks(L.plotW) : M.xTicks;
+      out = ticks.map(function (t) {
+        var o = { x: L.x(t.i), text: t.text, anchor: t.anchor || 'middle', w: textW(t.text, font) };
+        if (o.anchor === 'middle' && o.x - o.w / 2 < 0) { o.anchor = 'start'; o.x = 0; }     // a centred label at the left edge
+        return o;
+      });
     } else if (m < 2) {
       return out;
     } else if (m >= 45) {
