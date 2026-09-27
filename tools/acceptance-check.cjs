@@ -21,13 +21,18 @@ function check(area, name, pass, detail) {
 }
 const shots = [];
 async function shot(page, name, opts) {
-  const file = path.join(OUT, name + '.png');
-  await page.screenshot(Object.assign({ path: file }, opts || {}));
+  const jpeg = !!(opts && opts.fullPage);              // full pages as JPEG (much smaller in the repo)
+  const file = path.join(OUT, name + (jpeg ? '.jpg' : '.png'));
+  await page.waitForTimeout(450);                       // let the .3s marker fades finish
+  const o = Object.assign({ path: file }, opts || {}, jpeg ? { type: 'jpeg', quality: 80 } : {});
+  delete o.note;
+  await page.screenshot(o);
   shots.push({ file: path.basename(file), viewport: page.viewportSize(), note: (opts && opts.note) || '' });
 }
 
-async function open(browser, width, height) {
-  const page = await browser.newPage({ viewport: { width, height: height || 1000 } });
+async function open(browser, width, height, touch) {
+  const context = await browser.newContext({ viewport: { width, height: height || 1000 }, hasTouch: !!touch, isMobile: !!touch });
+  const page = await context.newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') page.errors.push('console: ' + m.text()); });
@@ -45,7 +50,20 @@ const badText = (page) => page.evaluate(() => {
   return { nan: /\bNaN\b/.test(t), undef: /\bundefined\b/.test(t) };
 });
 async function settle(page) { await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); }
-async function selectAllAndType(page, text) { await page.keyboard.press('Control+A'); await page.keyboard.type(text); }
+async function selectAllAndType(page, text) {
+  await page.keyboard.press('Control+A');
+  if (text) await page.keyboard.type(text); else await page.keyboard.press('Backspace');   // '' = clear the field
+}
+/** Waits until window.scrollY stops changing (smooth scrolling), at most ~3 s. */
+async function scrollSettled(page) {
+  let last = -1;
+  for (let k = 0; k < 30; k++) {
+    const y = await page.evaluate(() => window.scrollY);
+    if (y === last) return;
+    last = y;
+    await page.waitForTimeout(100);
+  }
+}
 
 /** Builds a card through the UI: rows = [[query, percent], ...]; returns the card id. */
 async function addCard(page, rows) {
@@ -267,7 +285,7 @@ async function depotBoxCheck(page) {
       { '99,98': P['99,98'], '100,02': P['100,02'] });
     check('cards', 'German input: "1.000" = 1000 %, "-5"/"abc" invalid ("Ungültige Prozentzahl"), empty/0 = 0 %, "100.0" = 100 %',
       !P['1.000'].valid && /1\.000 %/.test(P['1.000'].total) && !P['-5'].valid && /Ungültige/.test(P['-5'].hint) && !P['abc'].valid &&
-      !P['(leer)'].valid && /^0 %$/.test(P['(leer)'].total) && !P['0'].valid && P['100.0'].valid,
+      !P['(leer)'].valid && /^0 %$/.test(P['(leer)'].total) && /Noch 100 % verteilen/.test(P['(leer)'].hint) && !P['0'].valid && P['100.0'].valid,
       { '1.000': P['1.000'].total, '-5': P['-5'].hint, leer: P['(leer)'], '100.0': P['100.0'].valid });
     check('cards', 'invalid card shows "–" as return', P['100,02'].ret === '–' && P['100'].ret !== '–', { invalid: P['100,02'].ret, valid: P['100'].ret });
     // a % without instrument -> invalid; instrument with 0 % ignored
@@ -546,7 +564,8 @@ async function depotBoxCheck(page) {
     }
     check('measure', 'Startwert 10.000 / 1.000.000 / empty: Gleicher Wert follows the scaled value, Echt unchanged, numbers match the engine',
       Object.values(sv).every((d) => d.side && JSON.stringify(d.rows) === JSON.stringify(d.expect)) &&
-      sv['10000'].rows[2] === sv['leer'].rows[2] && sv['10000'].rows[1] !== sv['leer'].rows[1],
+      sv['10000'].rows[2] === sv['leer'].rows[2] && sv['1000000'].rows[2] === sv['leer'].rows[2] &&
+      new Set([sv['10000'].rows[1], sv['1000000'].rows[1], sv['leer'].rows[1]]).size === 3,
       { s10k: sv['10000'].rows, s1m: sv['1000000'].rows, leer: sv['leer'].rows });
     await page.locator('#depotValue').click();
     await page.keyboard.type('150000');
@@ -555,7 +574,6 @@ async function depotBoxCheck(page) {
     check('measure', '"Mein Depot (€)" updates the open box (label + Echt), no hard-coded 298.811',
       dv.side && dv.targetLabel === '150.000 €' && dv.hasTarget && JSON.stringify(dv.rows) === JSON.stringify(dv.expect), dv);
     await selectAllAndType(page, '');
-    await page.keyboard.press('Backspace');
     await page.click('#benchCards .bb-card--fixed [data-act="show"]');
     await settle(page);
     await drag(page, 0.4, 0.9);
@@ -676,7 +694,8 @@ async function depotBoxCheck(page) {
     let emptyOk = false;
     if (empty.btn) {
       await page.click('#hlSub button, #hlSub a, .headline button');
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(150);
+      await scrollSettled(page);
       emptyOk = await page.evaluate(() => { const b = document.getElementById('assetBlock'); const r = b.getBoundingClientRect(); return !b.hidden && r.top < innerHeight && r.bottom > 0 && PFApp.state.showAssets; });
     }
     check('lists', 'empty selection: hint is actionable while Einzelwerte is hidden (switches it on and brings it into view)', empty.assetsHidden && empty.btn && emptyOk, Object.assign(empty, { emptyOk }));
@@ -762,6 +781,37 @@ async function depotBoxCheck(page) {
     await shot(mp, 'full-375', { fullPage: true, note: 'full page at 375 px, both lists on' });
     const btm = await badText(mp);
     check('general', '375: no console errors, no NaN/undefined', mp.errors.length === 0 && !btm.nan && !btm.undef, { errors: mp.errors.slice(0, 5) });
+
+    // ================================================================= touch screen (375, emulated touch input)
+    const tp = await open(browser, 375, 812, true);
+    pages.push(tp);
+    const tbox = await tp.locator('#mainChart svg').boundingBox();
+    const TL = await tp.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
+    const ty = tbox.y + (TL.top + TL.bottom) / 2, tx = (f) => tbox.x + TL.padL + TL.plotW * f;
+    const outside = await tp.locator('#hlMain').boundingBox();
+    await tp.touchscreen.tap(tx(0.3), ty);
+    await settle(tp);
+    const tap1 = await tp.evaluate(() => PFApp.sync.following());
+    await tp.touchscreen.tap(outside.x + 10, outside.y + 5);
+    await settle(tp);
+    const tap2 = await tp.evaluate(() => PFApp.sync.measure === null);
+    check('mobile', 'touch: a tapped start point follows; a tap outside the chart removes it', tap1 && tap2, { tap1, tap2 });
+    const cdp = await tp.context().newCDPSession(tp);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: tx(0.25), y: ty }] });
+    for (let k = 1; k <= 10; k++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: tx(0.25 + 0.45 * k / 10), y: ty }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await settle(tp);
+    const tpin = await tp.evaluate(() => PFApp.sync.pinned());
+    const tgeo = await chartGeo(tp);
+    await tp.touchscreen.tap(outside.x + 10, outside.y + 5);
+    await settle(tp);
+    const tkeep = await tp.evaluate(() => !!PFApp.sync.pinned());
+    await tp.touchscreen.tap(tx(0.5), ty);
+    await settle(tp);
+    const tclear = await tp.evaluate(() => PFApp.sync.measure === null);
+    check('mobile', 'touch: drag pins a measurement (boxes cover nothing); a tap outside keeps it; a tap in the plot clears it',
+      !!tpin && tpin.b > tpin.a && tgeo.tips.length === 2 && tgeo.hits.length === 0 && tkeep && tclear, { tpin, tips: tgeo.tips.length, hits: tgeo.hits, tkeep, tclear });
+    check('general', 'touch page: no console errors', tp.errors.length === 0, tp.errors.slice(0, 5));
   } catch (e) {
     check('script', 'acceptance script ran to the end', false, String(e && e.stack || e).split('\n').slice(0, 4).join(' | '));
   } finally {

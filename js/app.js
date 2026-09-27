@@ -2039,8 +2039,9 @@
     document.addEventListener('pointerdown', function (ev) {
       var t = ev.target;
       if (sortMenuOpen() && !$('holdMenuWrap').contains(t)) closeSortMenu(false);
-      // touch: a tap outside the charts / heatmap removes a sticky read-out
+      // touch: a tap outside the charts / heatmap removes a sticky read-out and a tapped start point (a pinned measurement stays)
       if (ev.pointerType !== 'mouse' && sync.hoverI != null && !(t.closest && t.closest('.pc'))) sync.setHover(null);
+      if (ev.pointerType !== 'mouse' && sync.following() && !(t.closest && t.closest('.pc'))) sync.clearMeasure();
       if (ev.pointerType !== 'mouse' && heat.hot && !$('heatmap').contains(t)) heat.highlight(null);
     }, true);
 

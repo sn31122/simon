@@ -1,0 +1,1231 @@
+{
+  "url": "http://127.0.0.1:8770/dashboard.html",
+  "at": "2026-09-27T03:51:35.662Z",
+  "browser": "141.0.7390.37",
+  "fonts": "Selawik injected as \"Segoe UI\" (Segoe UI metrics)",
+  "passed": 75,
+  "failed": 0,
+  "results": [
+    {
+      "area": "data",
+      "name": "50 instruments and price series, 188 final rows to 2026-09-25, intraday 24/25.09.",
+      "pass": true,
+      "detail": {
+        "instruments": 50,
+        "prices": 50,
+        "dates": 188,
+        "first": "2026-01-02",
+        "last": "2026-09-25",
+        "lastStatus": "final",
+        "intraday": [
+          "2026-09-24",
+          "2026-09-25"
+        ],
+        "bloom": 1,
+        "newOnes": true,
+        "benchmarks": [
+          "my_depot"
+        ],
+        "positions": 32
+      }
+    },
+    {
+      "area": "data",
+      "name": "four new stocks present, Bloom once, only my_depot preset, 32 positions",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "area": "cards",
+      "name": "initially only the locked Mein Depot card, shown, no edit/delete controls",
+      "pass": true,
+      "detail": {
+        "n": 1,
+        "fixed": true,
+        "acts": [
+          "show"
+        ],
+        "inputs": 0,
+        "shown": "my_depot",
+        "legend": "Portfolio+126,83 %Mein Depot+8,43 %"
+      }
+    },
+    {
+      "area": "cards",
+      "name": "Mein Depot hide/show removes and restores it everywhere",
+      "pass": true,
+      "detail": {
+        "shown": 0,
+        "legend": "Portfolio+126,83 %",
+        "lines": 0,
+        "table": 2
+      }
+    },
+    {
+      "area": "cards",
+      "name": "new card: \"Benchmark 1\", one empty row, focus in its instrument field, list open with all 50 instruments",
+      "pass": true,
+      "detail": {
+        "focusIns": true,
+        "inCard": true,
+        "rows": 1,
+        "name": "Benchmark 1",
+        "open": true,
+        "opts": 50,
+        "color": "#6ea8ff"
+      }
+    },
+    {
+      "area": "cards",
+      "name": "search: prefix matches first (micro -> Micron, Microsoft, then AMD by word start)",
+      "pass": true,
+      "detail": [
+        "Micron | Micron Technology · US5951121038 · Aktie",
+        "Microsoft | Microsoft · US5949181045 · Aktie",
+        "AMD | Advanced Micro Devices · US0079031078 · Aktie"
+      ]
+    },
+    {
+      "area": "cards",
+      "name": "search by ISIN prefix, full name, case-insensitive; new stocks searchable",
+      "pass": true,
+      "detail": {
+        "s2": "NVIDIA | NVIDIA · US67066G1040 · Aktie",
+        "s3": "NVIDIA | NVIDIA · US67066G1040 · Aktie",
+        "s4": "Halbleiter 3x | WisdomTree PHLX Semiconductor 3x Daily Leveraged ETP · XS3091657729 · ETP",
+        "s5": "Coherent | Coherent · US19247G1076 · Aktie",
+        "s6": "MSCI World | iShares Core MSCI World (Acc) · IE00B4L5Y983 · ETF",
+        "s7": [
+          "Nasdaq-100 | iShares Nasdaq 100 (Acc) · IE00B53SZB19 · ETF",
+          "Nasdaq-100 2x | Amundi Nasdaq-100 Daily (2x) Leveraged (Acc) · FR0010342592 · ETF",
+          "Nasdaq-100 3x | WisdomTree NASDAQ 100 3x Daily Leveraged · IE00BLRPRL42 · ETP"
+        ]
+      }
+    },
+    {
+      "area": "cards",
+      "name": "entry subtitle = full name · ISIN · type",
+      "pass": true,
+      "detail": "Coherent | Coherent · US19247G1076 · Aktie"
+    },
+    {
+      "area": "cards",
+      "name": "arrows wrap, Enter picks the highlighted entry and moves to the % field",
+      "pass": true,
+      "detail": {
+        "nNas": 3,
+        "wrapUp": true,
+        "hi2": "Nasdaq-100 2x",
+        "picked": {
+          "isin": "FR0010342592",
+          "q": "Nasdaq-100 2x",
+          "pctFocus": true,
+          "closed": true
+        }
+      }
+    },
+    {
+      "area": "cards",
+      "name": "Esc closes the list and reverts the typed text",
+      "pass": true,
+      "detail": {
+        "val": "Nasdaq-100 2x",
+        "open": false,
+        "isin": "FR0010342592"
+      }
+    },
+    {
+      "area": "cards",
+      "name": "Esc on an unchanged field still clears a chart measurement",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "area": "cards",
+      "name": "Tab with changed text picks the highlighted entry and moves to the % field",
+      "pass": true,
+      "detail": {
+        "q": "Micron",
+        "pct": true
+      }
+    },
+    {
+      "area": "cards",
+      "name": "Tab on an unchanged field keeps the instrument",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "area": "cards",
+      "name": "blur: exact ISIN picks it, partial text is reverted",
+      "pass": true,
+      "detail": {
+        "blur1": "Microsoft",
+        "blur2": "Microsoft"
+      }
+    },
+    {
+      "area": "cards",
+      "name": "total within 100 % ± 0,01 is valid (99,99 / 100 / 100,01), outside is not (99,98 / 100,02)",
+      "pass": true,
+      "detail": {
+        "99,98": {
+          "valid": false,
+          "total": "99,98 %",
+          "hint": "Noch 0,02 % verteilen",
+          "ret": "–"
+        },
+        "100,02": {
+          "valid": false,
+          "total": "100,02 %",
+          "hint": "0,02 % zu viel",
+          "ret": "–"
+        }
+      }
+    },
+    {
+      "area": "cards",
+      "name": "German input: \"1.000\" = 1000 %, \"-5\"/\"abc\" invalid (\"Ungültige Prozentzahl\"), empty/0 = 0 %, \"100.0\" = 100 %",
+      "pass": true,
+      "detail": {
+        "1.000": "1.000 %",
+        "-5": "Ungültige Prozentzahl (z. B. 12,5)",
+        "leer": {
+          "valid": false,
+          "total": "0 %",
+          "hint": "Noch 100 % verteilen",
+          "ret": "–"
+        },
+        "100.0": true
+      }
+    },
+    {
+      "area": "cards",
+      "name": "invalid card shows \"–\" as return",
+      "pass": true,
+      "detail": {
+        "invalid": "–",
+        "valid": "+12,63 %"
+      }
+    },
+    {
+      "area": "cards",
+      "name": "a percentage without an instrument makes the card invalid (\"Instrument fehlt\")",
+      "pass": true,
+      "detail": {
+        "valid": false,
+        "hint": "Instrument fehlt"
+      }
+    },
+    {
+      "area": "cards",
+      "name": "an instrument already in the card is not offered again",
+      "pass": true,
+      "detail": {
+        "items": [],
+        "empty": "Schon in dieser Benchmark enthalten"
+      }
+    },
+    {
+      "area": "cards",
+      "name": "60 % Microsoft + 40 % NVIDIA is valid",
+      "pass": true,
+      "detail": {
+        "rows": [
+          [
+            "Microsoft",
+            "60"
+          ],
+          [
+            "NVIDIA",
+            "40"
+          ]
+        ],
+        "valid": true
+      }
+    },
+    {
+      "area": "cards",
+      "name": "custom card = buy at period start and hold (matches Σ wᵢ·Pᵢ(t)/Pᵢ(start), differs from daily rebalancing)",
+      "pass": true,
+      "detail": {
+        "maxErr": 2.6379067946064546e-16,
+        "bh": 284638.69870886917,
+        "reb": 289067.37432634475,
+        "n": 188
+      }
+    },
+    {
+      "area": "cards",
+      "name": "1T: card bought at the previous close and held; line + legend in 1T",
+      "pass": true,
+      "detail": {
+        "ok": true,
+        "maxErr": 2.1364241837410143e-16,
+        "legend": true,
+        "line": true
+      }
+    },
+    {
+      "area": "cards",
+      "name": "hover % reads the period series (bought at the range start)",
+      "pass": true,
+      "detail": {
+        "hoverHas": true,
+        "win": 0.05416323976698423,
+        "rebuy": 0.048112772816073734
+      }
+    },
+    {
+      "area": "cards",
+      "name": "card return = legend = Benchmark-Vergleich = Kennzahlen bench line; monthly row, drawdown line + readout",
+      "pass": true,
+      "detail": {
+        "card": "+16,68 %",
+        "legend": "+16,68 %",
+        "table": "+16,68 %",
+        "kpi": "Benchmark 1: +16,68 % · +40.691,11 €",
+        "month": true,
+        "dd": true,
+        "readout": true
+      }
+    },
+    {
+      "area": "cards",
+      "name": "an invalid card is left out of chart, drawdown, legend, Benchmark-Vergleich, Monatsrenditen",
+      "pass": true,
+      "detail": {
+        "bench": false,
+        "legend": false,
+        "lines": false,
+        "dd": false,
+        "table": false,
+        "months": false
+      }
+    },
+    {
+      "area": "cards",
+      "name": "name edit keeps focus and caret; legend follows",
+      "pass": true,
+      "detail": {
+        "same": true,
+        "val": "BenXYchmark 1",
+        "pos": 5,
+        "legend": "Portfolio+126,83 %Mein Depot+8,43 %BenXYchmark 1+16,68 %"
+      }
+    },
+    {
+      "area": "cards",
+      "name": "% edit keeps focus and caret",
+      "pass": true,
+      "detail": {
+        "same": true,
+        "val": "650",
+        "pos": 2
+      }
+    },
+    {
+      "area": "cards",
+      "name": "emptied name falls back to the default on blur",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "area": "cards",
+      "name": "duplicate: \"… (Kopie)\", same rows, new colour, focus on its name",
+      "pass": true,
+      "detail": {
+        "n": 2,
+        "name": "Benchmark 1 (Kopie)",
+        "rows": [
+          [
+            "US5949181045",
+            "60"
+          ],
+          [
+            "US67066G1040",
+            "40"
+          ]
+        ],
+        "colors": [
+          "#6ea8ff",
+          "#ffb300"
+        ],
+        "focusName": true
+      }
+    },
+    {
+      "area": "cards",
+      "name": "same instrument allowed in another card; colours distinct and away from accent/neg/white",
+      "pass": true,
+      "detail": {
+        "valid": true,
+        "colors": [
+          "#6ea8ff",
+          "#ffb300",
+          "#ba68c8"
+        ]
+      }
+    },
+    {
+      "area": "cards",
+      "name": "clear leaves one empty row and focuses its instrument field",
+      "pass": true,
+      "detail": {
+        "rows": 1,
+        "empty": true,
+        "focus": true
+      }
+    },
+    {
+      "area": "cards",
+      "name": "remove row keeps focus inside the card",
+      "pass": true,
+      "detail": {
+        "rows": 1,
+        "focusInCard": true
+      }
+    },
+    {
+      "area": "cards",
+      "name": "delete card moves focus to a sensible control; freed colour is reused",
+      "pass": true,
+      "detail": {
+        "del": {
+          "n": 2,
+          "focus": "del"
+        },
+        "freed": "#ffb300",
+        "reuse": "#ffb300"
+      }
+    },
+    {
+      "area": "cards",
+      "name": "no console errors while editing cards",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "area": "cards",
+      "name": "search list is an overlay outside the card, inside the window, opens upward near the bottom",
+      "pass": true,
+      "detail": {
+        "place": {
+          "open": true,
+          "below": true,
+          "beyondCard": true,
+          "inWindow": true
+        },
+        "placeUp": {
+          "above": true,
+          "top": 584.328125
+        }
+      }
+    },
+    {
+      "area": "hover",
+      "name": "desktop: hover box with 3 shown benchmarks never covers lines, y labels or the last-value box (YTD/1T, both modes)",
+      "pass": true,
+      "detail": {
+        "shownNow": 3,
+        "sweeps": {
+          "value/YTD": [],
+          "pl/YTD": [],
+          "value/1T": [],
+          "pl/1T": []
+        }
+      }
+    },
+    {
+      "area": "measure",
+      "name": "forward drag pins a measurement; \"Zeitraum auf Auswahl setzen\" shown",
+      "pass": true,
+      "detail": {
+        "pin": {
+          "a": 103,
+          "b": 159
+        },
+        "btn": true
+      }
+    },
+    {
+      "area": "measure",
+      "name": "Yacht box + Mein Depot box beside it, inside the chart, not covering lines/labels",
+      "pass": true,
+      "detail": {
+        "W": 820,
+        "top": 140,
+        "tips": [
+          {
+            "cls": "pc-tip pc-tip--measure",
+            "left": 371,
+            "top": 2,
+            "right": 674,
+            "bottom": 73
+          },
+          {
+            "cls": "pc-tip pc-tip--side is-pinned",
+            "left": 174,
+            "top": 2,
+            "right": 367,
+            "bottom": 73
+          }
+        ],
+        "hits": [],
+        "inside": true
+      }
+    },
+    {
+      "area": "measure",
+      "name": "Mein Depot box: % / Gleicher Wert / Echt match an independent engine computation, label shows the real depot value",
+      "pass": true,
+      "detail": {
+        "side": true,
+        "rows": [
+          "-21,62 %",
+          "-112.674,38 €",
+          "-80.733,56 €"
+        ],
+        "expect": [
+          "-21,62 %",
+          "-112.674,38 €",
+          "-80.733,56 €"
+        ],
+        "targetLabel": "298.811 €",
+        "hasTarget": true
+      }
+    },
+    {
+      "area": "measure",
+      "name": "Esc clears the measurement and hover works again",
+      "pass": true,
+      "detail": {
+        "escd": true,
+        "hovAfter": true
+      }
+    },
+    {
+      "area": "measure",
+      "name": "reverse drag pins the same kind of span (a < b) with correct numbers",
+      "pass": true,
+      "detail": {
+        "rev": {
+          "a": 65,
+          "b": 150
+        },
+        "drev": {
+          "side": true,
+          "rows": [
+            "+34,98 %",
+            "+98.538,98 €",
+            "+84.919,22 €"
+          ],
+          "expect": [
+            "+34,98 %",
+            "+98.538,98 €",
+            "+84.919,22 €"
+          ],
+          "targetLabel": "298.811 €",
+          "hasTarget": true
+        }
+      }
+    },
+    {
+      "area": "measure",
+      "name": "click sets the start, the end follows the pointer (live boxes), the next click ends it",
+      "pass": true,
+      "detail": {
+        "follow": {
+          "following": true,
+          "measure": {
+            "a": 37,
+            "b": 94,
+            "live": true,
+            "follow": true
+          },
+          "tips": 2
+        },
+        "ended": true
+      }
+    },
+    {
+      "area": "measure",
+      "name": "left-edge, right-edge and full-range spans stay inside the chart and cover nothing",
+      "pass": true,
+      "detail": {
+        "left": {
+          "tips": 2,
+          "hits": [],
+          "inside": true
+        },
+        "right": {
+          "tips": 2,
+          "hits": [],
+          "inside": true
+        },
+        "full": {
+          "tips": 2,
+          "hits": [],
+          "inside": true
+        }
+      }
+    },
+    {
+      "area": "measure",
+      "name": "Gesamtrendite keeps the measurement, signed values, same Mein Depot numbers",
+      "pass": true,
+      "detail": {
+        "text": "21.04.202631.08.2026+94.972,36 €+137.150,14 €+232.122,50 €+40,47 %",
+        "rows": [
+          "-3,07 %",
+          "-10.400,72 €",
+          "-8.888,82 €"
+        ]
+      }
+    },
+    {
+      "area": "measure",
+      "name": "Startwert 10.000 / 1.000.000 / empty: Gleicher Wert follows the scaled value, Echt unchanged, numbers match the engine",
+      "pass": true,
+      "detail": {
+        "s10k": [
+          "-3,07 %",
+          "-426,35 €",
+          "-8.888,82 €"
+        ],
+        "s1m": [
+          "-3,07 %",
+          "-42.635,05 €",
+          "-8.888,82 €"
+        ],
+        "leer": [
+          "-3,07 %",
+          "-10.400,72 €",
+          "-8.888,82 €"
+        ]
+      }
+    },
+    {
+      "area": "measure",
+      "name": "\"Mein Depot (€)\" updates the open box (label + Echt), no hard-coded 298.811",
+      "pass": true,
+      "detail": {
+        "side": true,
+        "rows": [
+          "-3,07 %",
+          "-10.400,72 €",
+          "-4.462,09 €"
+        ],
+        "expect": [
+          "-3,07 %",
+          "-10.400,72 €",
+          "-4.462,09 €"
+        ],
+        "targetLabel": "150.000 €",
+        "hasTarget": true
+      }
+    },
+    {
+      "area": "measure",
+      "name": "Mein Depot hidden: only the Yacht box",
+      "pass": true,
+      "detail": [
+        {
+          "cls": "pc-tip pc-tip--measure",
+          "left": 260,
+          "top": 2,
+          "right": 710,
+          "bottom": 73
+        }
+      ]
+    },
+    {
+      "area": "data",
+      "name": "1T shows the 30-min sessions of 24./25.09. (two day labels, note \"30-Minuten-Kurse bis 22:59 Uhr\")",
+      "pass": true,
+      "detail": {
+        "x": [
+          "Donnerstag",
+          "15:15",
+          "Freitag",
+          "15:15"
+        ],
+        "dates": [
+          "2026-09-24",
+          "2026-09-25"
+        ],
+        "note": "+6.109,61 € (+1,12 %) im Zeitraum 24.09.–25.09.2026 (30-Minuten-Kurse bis 22:59 Uhr)"
+      }
+    },
+    {
+      "area": "measure",
+      "name": "1T: slot labels, both boxes, intraday Echt/Gleicher Wert match the engine, nothing covered",
+      "pass": true,
+      "detail": {
+        "lbl": "Donnerstag, 18:30",
+        "g1t": {
+          "W": 820,
+          "top": 140,
+          "tips": [
+            {
+              "cls": "pc-tip pc-tip--measure",
+              "left": 189,
+              "top": 2,
+              "right": 523,
+              "bottom": 73
+            },
+            {
+              "cls": "pc-tip pc-tip--side is-pinned",
+              "left": 527,
+              "top": 2,
+              "right": 716,
+              "bottom": 73
+            }
+          ],
+          "hits": [],
+          "inside": true
+        },
+        "d1t": {
+          "side": true,
+          "rows": [
+            "+1,55 %",
+            "+8.482,75 €",
+            "+4.525,20 €"
+          ],
+          "expect": [
+            "+1,55 %",
+            "+8.482,75 €",
+            "+4.525,20 €"
+          ],
+          "targetLabel": "298.811 €",
+          "hasTarget": true
+        }
+      }
+    },
+    {
+      "area": "measure",
+      "name": "drawdown chart follows the main chart hover; same padR",
+      "pass": true,
+      "detail": {
+        "hover": 94,
+        "readout": "19. Mai 2026: -5,56 % · Mein Depot -7,75 % · Benchmark 1 -1,41 % · Benchmark 2 -1,41 %",
+        "padR": [
+          74,
+          74
+        ]
+      }
+    },
+    {
+      "area": "periods",
+      "name": "3M/6M pills and tabs update each other and the labels; MAX = no pill; Seit Kauf = MAX tab",
+      "pass": true,
+      "detail": {
+        "3M": {
+          "pill": "3M",
+          "tab": "3M",
+          "label": "3 Monate"
+        },
+        "6M": {
+          "pill": "6M",
+          "tab": "6M",
+          "label": "6 Monate"
+        },
+        "1W": {
+          "pill": "1W",
+          "tab": "1W",
+          "label": "Woche"
+        },
+        "MAX": {
+          "pill": null,
+          "tab": "MAX",
+          "label": "seit 02.01.2026"
+        },
+        "SK": {
+          "pill": "Seit Kauf",
+          "tab": "MAX",
+          "label": "seit Kauf"
+        },
+        "YTD": {
+          "pill": "YTD",
+          "tab": "YTD",
+          "label": "seit 02.01."
+        }
+      }
+    },
+    {
+      "area": "lists",
+      "name": "defaults: Portfolio on, Einzelwerte off",
+      "pass": true,
+      "detail": {
+        "hold": "true",
+        "assets": "false",
+        "assetHidden": true
+      }
+    },
+    {
+      "area": "lists",
+      "name": "order: lists, Benchmark-Vergleich, Drawdown, Monatsrenditen, Kennzahlen, Risiko & Korrelation, Hinweise",
+      "pass": true,
+      "detail": [
+        "Listen",
+        "Benchmark-Vergleich",
+        "Drawdown",
+        "Monatsrenditen",
+        "Kennzahlen",
+        "Risiko & Korrelation",
+        "Hinweise"
+      ]
+    },
+    {
+      "area": "lists",
+      "name": "1903: four combinations, both on = side by side, both off = hint, no page overflow",
+      "pass": true,
+      "detail": [
+        {
+          "hold": true,
+          "assets": false,
+          "side": false,
+          "stack": false,
+          "hint": false,
+          "ok": true
+        },
+        {
+          "hold": true,
+          "assets": true,
+          "side": true,
+          "stack": false,
+          "hint": false,
+          "ok": true
+        },
+        {
+          "hold": false,
+          "assets": true,
+          "side": false,
+          "stack": false,
+          "hint": false,
+          "ok": true
+        },
+        {
+          "hold": false,
+          "assets": false,
+          "side": false,
+          "stack": false,
+          "hint": true,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "area": "lists",
+      "name": "resize 1903 -> 1400 -> 1903 switches side by side / stacked",
+      "pass": true,
+      "detail": {
+        "r1400": true,
+        "r1903": true
+      }
+    },
+    {
+      "area": "lists",
+      "name": "sorting via table headers (toggle direction) and the ⋮ menu",
+      "pass": true,
+      "detail": {
+        "s1a": {
+          "key": "ret",
+          "dir": -1
+        },
+        "s1b": {
+          "key": "ret",
+          "dir": 1
+        },
+        "hs": {
+          "key": "name-asc",
+          "first": "Advanced Micro Devices"
+        }
+      }
+    },
+    {
+      "area": "lists",
+      "name": "checkbox selection, Alle; Stück what-if (banner, changed row, focus kept, Original line) and reset",
+      "pass": true,
+      "detail": {
+        "sel31": 31,
+        "wiState": {
+          "banner": true,
+          "changed": 1,
+          "focus": true,
+          "ghost": true
+        },
+        "wiOff": true
+      }
+    },
+    {
+      "area": "lists",
+      "name": "empty selection: hint is actionable while Einzelwerte is hidden (switches it on and brings it into view)",
+      "pass": true,
+      "detail": {
+        "main": "Keine Position ausgewähltPositionen auswählen",
+        "sub": "Auswahl über die Liste „Einzelwerte“ · im Zeitraum 02.01.–25.09.2026 (YTD ab Schlusskurs 02.01.2026, kein Jahresschluss 2025)",
+        "btn": true,
+        "assetsHidden": true,
+        "emptyOk": true
+      }
+    },
+    {
+      "area": "lists",
+      "name": "empty selection shows no NaN/undefined",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "area": "lists",
+      "name": "a hidden Einzelwerte list is current when switched on (period + Startwert)",
+      "pass": true,
+      "detail": {
+        "sub": "32 von 32 ausgewählt · 25.08.–25.09.2026",
+        "scaled": true
+      }
+    },
+    {
+      "area": "general",
+      "name": "1903: no console errors, no NaN/undefined on the page",
+      "pass": true,
+      "detail": {
+        "errors": [],
+        "bt": {
+          "nan": false,
+          "undef": false
+        }
+      }
+    },
+    {
+      "area": "cards",
+      "name": "reload resets to Mein Depot only (and list defaults); nothing persisted",
+      "pass": true,
+      "detail": {
+        "cards": 0,
+        "shown": "my_depot",
+        "dom": 1,
+        "assets": false,
+        "hold": true
+      }
+    },
+    {
+      "area": "lists",
+      "name": "1920: list layout (side by side) and no page overflow",
+      "pass": true,
+      "detail": [
+        {
+          "hold": true,
+          "assets": false,
+          "side": false,
+          "stack": false,
+          "hint": false,
+          "ok": true
+        },
+        {
+          "hold": true,
+          "assets": true,
+          "side": true,
+          "stack": false,
+          "hint": false,
+          "ok": true
+        },
+        {
+          "hold": false,
+          "assets": true,
+          "side": false,
+          "stack": false,
+          "hint": false,
+          "ok": true
+        },
+        {
+          "hold": false,
+          "assets": false,
+          "side": false,
+          "stack": false,
+          "hint": true,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "area": "general",
+      "name": "1920: no console errors, no NaN/undefined",
+      "pass": true,
+      "detail": {
+        "errors": []
+      }
+    },
+    {
+      "area": "lists",
+      "name": "1400: list layout (stacked) and no page overflow",
+      "pass": true,
+      "detail": [
+        {
+          "hold": true,
+          "assets": false,
+          "side": false,
+          "stack": false,
+          "hint": false,
+          "ok": true
+        },
+        {
+          "hold": true,
+          "assets": true,
+          "side": false,
+          "stack": true,
+          "hint": false,
+          "ok": true
+        },
+        {
+          "hold": false,
+          "assets": true,
+          "side": false,
+          "stack": false,
+          "hint": false,
+          "ok": true
+        },
+        {
+          "hold": false,
+          "assets": false,
+          "side": false,
+          "stack": false,
+          "hint": true,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "area": "general",
+      "name": "1400: no console errors, no NaN/undefined",
+      "pass": true,
+      "detail": {
+        "errors": []
+      }
+    },
+    {
+      "area": "mobile",
+      "name": "measurement boxes stack, stay inside the chart, cover nothing; numbers match",
+      "pass": true,
+      "detail": {
+        "gm": {
+          "W": 343,
+          "top": 142,
+          "tips": [
+            {
+              "cls": "pc-tip pc-tip--measure",
+              "left": 15,
+              "top": 2,
+              "right": 282,
+              "bottom": 61
+            },
+            {
+              "cls": "pc-tip pc-tip--side is-pinned",
+              "left": 15,
+              "top": 65,
+              "right": 282,
+              "bottom": 124
+            }
+          ],
+          "hits": [],
+          "inside": true
+        },
+        "dm": [
+          "+36,76 %",
+          "+101.738,04 €",
+          "+88.071,68 €"
+        ]
+      }
+    },
+    {
+      "area": "mobile",
+      "name": "hover box with 3 shown benchmarks covers nothing (YTD/1T)",
+      "pass": true,
+      "detail": {
+        "value/YTD": [],
+        "value/1T": []
+      }
+    },
+    {
+      "area": "mobile",
+      "name": "cards full width",
+      "pass": true,
+      "detail": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "area": "mobile",
+      "name": "375: list combinations stack, no page overflow; table scrolls inside its card with a sticky name column",
+      "pass": true,
+      "detail": {
+        "cm": [
+          {
+            "hold": true,
+            "assets": false,
+            "side": false,
+            "stack": false,
+            "hint": false,
+            "ok": true
+          },
+          {
+            "hold": true,
+            "assets": true,
+            "side": false,
+            "stack": true,
+            "hint": false,
+            "ok": true
+          },
+          {
+            "hold": false,
+            "assets": true,
+            "side": false,
+            "stack": false,
+            "hint": false,
+            "ok": true
+          },
+          {
+            "hold": false,
+            "assets": false,
+            "side": false,
+            "stack": false,
+            "hint": true,
+            "ok": true
+          }
+        ],
+        "scroll": {
+          "inner": true,
+          "sticky": "sticky"
+        }
+      }
+    },
+    {
+      "area": "mobile",
+      "name": "period pills fit at 375 px",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "area": "general",
+      "name": "375: no console errors, no NaN/undefined",
+      "pass": true,
+      "detail": {
+        "errors": []
+      }
+    },
+    {
+      "area": "mobile",
+      "name": "touch: a tapped start point follows; a tap outside the chart removes it",
+      "pass": true,
+      "detail": {
+        "tap1": true,
+        "tap2": true
+      }
+    },
+    {
+      "area": "mobile",
+      "name": "touch: drag pins a measurement (boxes cover nothing); a tap outside keeps it; a tap in the plot clears it",
+      "pass": true,
+      "detail": {
+        "tpin": {
+          "a": 47,
+          "b": 131
+        },
+        "tips": 2,
+        "hits": [],
+        "tkeep": true,
+        "tclear": true
+      }
+    },
+    {
+      "area": "general",
+      "name": "touch page: no console errors",
+      "pass": true,
+      "detail": []
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "cards-dropdown-1903.png",
+      "viewport": {
+        "width": 1903,
+        "height": 1000
+      },
+      "note": "benchmark cards with the search list open"
+    },
+    {
+      "file": "hover-3-benchmarks-1903.png",
+      "viewport": {
+        "width": 1903,
+        "height": 1000
+      },
+      "note": "hover with Mein Depot + 2 cards"
+    },
+    {
+      "file": "measure-ytd-1903.png",
+      "viewport": {
+        "width": 1903,
+        "height": 1000
+      },
+      "note": "pinned YTD measurement with the Mein Depot box"
+    },
+    {
+      "file": "measure-1t-1903.png",
+      "viewport": {
+        "width": 1903,
+        "height": 1000
+      },
+      "note": "1T measurement"
+    },
+    {
+      "file": "lists-side-1903.png",
+      "viewport": {
+        "width": 1903,
+        "height": 1000
+      },
+      "note": "Portfolio + Einzelwerte side by side"
+    },
+    {
+      "file": "full-1903.jpg",
+      "viewport": {
+        "width": 1903,
+        "height": 1000
+      },
+      "note": "full page at 1903 px (both lists on, 3 benchmarks)"
+    },
+    {
+      "file": "full-1400.jpg",
+      "viewport": {
+        "width": 1400,
+        "height": 1000
+      },
+      "note": "full page at 1400 px, lists stacked"
+    },
+    {
+      "file": "measure-375.png",
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "note": "stacked measurement boxes on a phone"
+    },
+    {
+      "file": "cards-375.png",
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "note": "benchmark cards on a phone"
+    },
+    {
+      "file": "full-375.jpg",
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "note": "full page at 375 px, both lists on"
+    }
+  ]
+}
