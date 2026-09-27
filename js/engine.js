@@ -375,27 +375,33 @@
     if (hit && hit.px === ctx.px && hit.dates === ctx.dates) return hit.h;
     const trades = txTrades(ctx, bench), n = ctx.n, q = {}, lastPx = {};
     const value = new Array(n), flow = new Array(n).fill(0), index = new Array(n), holdings = new Array(n), unpriced = {};
+    const vi = new Array(n), fi = new Array(n);                                 // per ISIN: value and flow of each day
     let j = 0;
     for (let k = 0; k < n; k++) {
+      const f = {};
       for (; j < trades.length && trades[j].di === k; j++) {
         const t = trades[j], x = (q[t.isin] || 0) + t.q;
         q[t.isin] = Math.abs(x) < Q_EPS ? 0 : x;
         lastPx[t.isin] = t.px;
         flow[k] += t.q * t.px;
+        f[t.isin] = (f[t.isin] || 0) + t.q * t.px;
       }
-      const h = {};
+      const h = {}, w = {};
       let v = 0;
       Object.keys(q).forEach((i) => {
         if (!q[i]) return;
         h[i] = q[i];
-        if (hasPx(ctx, i)) v += q[i] * ctx.px[i][k];
-        else { v += q[i] * lastPx[i]; (unpriced[i] = unpriced[i] || []).push(k); }
+        if (hasPx(ctx, i)) w[i] = q[i] * ctx.px[i][k];
+        else { w[i] = q[i] * lastPx[i]; (unpriced[i] = unpriced[i] || []).push(k); }
+        v += w[i];
       });
       value[k] = v;
       holdings[k] = h;
+      vi[k] = w;
+      fi[k] = f;
       index[k] = k ? index[k - 1] * growth(v, flow[k], value[k - 1]) : 1;
     }
-    const out = { trades, value, flow, index, holdings, unpriced, after: trades.length - j };
+    const out = { trades, value, flow, index, holdings, unpriced, after: trades.length - j, vi, fi };
     if (txCache) txCache.set(bench, { px: ctx.px, dates: ctx.dates, h: out, F: null, fr: null });
     return out;
   }
@@ -420,27 +426,32 @@
     };
     const key = H.trades.map((t) => t.di * (S + 1) + slotOf(t));               // non-decreasing: trades are chronological
     const value = new Array(m).fill(null), flow = new Array(m).fill(0), index = new Array(m).fill(null);
+    const vi = new Array(m).fill(null), fi = new Array(m).fill(null);          // per ISIN: value and flow of each point
     const q = {}, lastPx = {}, held = {};
     let j = 0;
     for (let p = 0; p <= last; p++) {
       const kp = F.day[p] * (S + 1) + (F.slot[p] < 0 ? S : F.slot[p]);        // the daily close ranks after every slot of its day
+      const f = {}, w = {};
       for (; j < key.length && key[j] <= kp; j++) {
         const t = H.trades[j], x = (q[t.isin] || 0) + t.q;
         q[t.isin] = Math.abs(x) < Q_EPS ? 0 : x;
         lastPx[t.isin] = t.px;
-        if (p > 0) flow[p] += t.q * t.px;                                     // trades up to point 0 = its holdings
+        if (p > 0) { flow[p] += t.q * t.px; f[t.isin] = (f[t.isin] || 0) + t.q * t.px; }   // trades up to point 0 = its holdings
       }
       let v = 0;
       Object.keys(q).forEach((i) => {
         if (!q[i]) return;
         const px = hasPx(ctx, i) ? framePx(ctx, F, i, p) : lastPx[i];
         if (hasPx(ctx, i)) held[i] = 1;
-        v += q[i] * (isNum(px) ? px : 0);
+        w[i] = q[i] * (isNum(px) ? px : 0);
+        v += w[i];
       });
       value[p] = v;
+      vi[p] = w;
+      fi[p] = f;
       index[p] = p ? index[p - 1] * growth(v, flow[p], value[p - 1]) : 1;
     }
-    const fr = { value, flow, index, missing: Object.keys(held).filter((i) => !frameSeen(F, i)) };
+    const fr = { value, flow, index, vi, fi, missing: Object.keys(held).filter((i) => !frameSeen(F, i)) };
     if (hit) { hit.F = F; hit.fr = fr; }
     return fr;
   }
@@ -921,6 +932,90 @@
     return out;
   }
 
+  /**
+   * assetsSpan(ctx, {selected, scale, a, b, frame}) -> one row per position (selected or not) for a measured span:
+   * a/b = daily indices (no frame) or points of a sub-daily frame (gridFrame; order-independent). Row = { isin, name,
+   * short, selected, p0, p1, ret = p1/p0 − 1, pl = shares · scale · (p1 − p0), contrib = pl / V0 (V0 = Σ shares · scale · p0
+   * of the selected positions; null if not selected) }. Prices follow the fill rules of the daily series / the frame.
+   */
+  function assetsSpan(ctx, opts) {
+    opts = opts || {};
+    const sel = selectionSet(ctx, opts.selected);
+    const F = opts.frame ? frameOf(ctx, opts.frame) : null;
+    const i = Math.min(opts.a, opts.b), j = Math.max(opts.a, opts.b);
+    const lim = F ? Math.min(F.last, F.m - 1) : ctx.n - 1;
+    if (!isNum(i) || !isNum(j) || i < 0 || j > lim) return [];
+    const price = F ? (isin, k) => framePx(ctx, F, isin, k) : (isin, k) => (ctx.px[isin] ? ctx.px[isin][k] : null);
+    const scale = isNum(opts.scale) && opts.scale > 0 ? opts.scale : 1;
+    const rows = ctx.positions.map((p) => {
+      const p0 = fin(price(p.isin, i)), p1 = fin(price(p.isin, j)), q = sharesOf(p) * scale;
+      const r = div(p1, p0);
+      return { isin: p.isin, name: p.name, short: p.short, selected: sel.has(p.isin), p0, p1,
+        ret: r === null ? null : r - 1, pl: p0 === null || p1 === null ? null : fin(q * (p1 - p0)), v0: p0 === null ? null : q * p0,
+        v1: p1 === null ? null : fin(q * p1) };
+    });
+    const V0 = sum(rows.filter((r) => r.selected && r.v0 !== null).map((r) => r.v0));
+    rows.forEach((r) => { r.contrib = r.selected ? div(r.pl, V0) : null; delete r.v0; });
+    return rows;
+  }
+
+  /**
+   * benchmarkSpan(ctx, bench|id, {a, b, frame, intraday, target, buyAt}) -> [{ isin, p0, p1, ret, pl }] | null: every holding
+   * of a holdings or weights benchmark over a span (a/b daily indices or points of `frame`; weights bought at `buyAt`),
+   * pl = qty · (p1 − p0) · target / benchmarkValueNow – so Σ pl = benchmarkRealPl with the same options. Rows in the
+   * benchmark's holdings order. Other benchmark kinds: null. (Messung panel: holdings of the picked benchmark.)
+   */
+  function benchmarkSpan(ctx, bench, opts) {
+    opts = opts || {};
+    if (typeof bench === 'string') bench = ctx.benchmarks.find((x) => x.id === bench);
+    if (isTx(bench)) return txSpan(ctx, bench, opts);
+    if (!bench || !(bench.holdings || bench.weights)) return null;
+    const h = benchHoldings(ctx, bench, opts.buyAt), now = benchmarkValueNow(ctx, bench, opts.buyAt);
+    const i = Math.min(opts.a, opts.b), j = Math.max(opts.a, opts.b), fr = opts.frame || opts.intraday;
+    if (!h || now === null || !isNum(i) || !isNum(j) || i < 0) return null;
+    let price;
+    if (fr) {
+      const F = frameOf(ctx, fr);
+      if (!F || j > Math.min(F.last, F.m - 1)) return null;
+      price = (isin, k) => framePx(ctx, F, isin, k);
+    } else {
+      if (j > ctx.n - 1) return null;
+      price = (isin, k) => ctx.px[isin][k];
+    }
+    const f = (isNum(opts.target) && opts.target > 0 ? opts.target : now) / now;
+    return h.map((x) => {
+      const p0 = fin(price(x[0], i)), p1 = fin(price(x[0], j)), r = div(p1, p0);
+      return { isin: x[0], p0, p1, ret: r === null ? null : r - 1, pl: p0 === null || p1 === null ? null : fin(x[1] * (p1 - p0) * f) };
+    });
+  }
+
+  /**
+   * benchmarkSpan for a transactions benchmark: every ISIN held or traded in (a, b]; pl = V_i(b) − V_i(a) − its net purchases
+   * in (a, b], ret = pl / (V_i(a) + its purchases in (a, b]) (gain on the capital put in), v1 = V_i(b); all scaled by
+   * target / V(last day) like "Echt" (Σ pl = benchmarkRealPl). Sorted: held at b by value, then closed positions by pl.
+   */
+  function txSpan(ctx, bench, opts) {
+    const H = transactionHistory(ctx, bench), now = txNow(ctx, bench), fr = opts.frame || opts.intraday;
+    const i = Math.min(opts.a, opts.b), j = Math.max(opts.a, opts.b);
+    if (!H || now === null || !Number.isInteger(i) || !Number.isInteger(j) || i < 0) return null;
+    let vi = H.vi, fi = H.fi, lim = ctx.n - 1;
+    if (fr) {
+      const F = frameOf(ctx, fr), T = F ? txFrame(ctx, bench, F) : null;
+      if (!T) return null;
+      vi = T.vi; fi = T.fi; lim = Math.min(F.last, F.m - 1);
+    }
+    if (j > lim || !vi[i] || !vi[j]) return null;
+    const sc = (isNum(opts.target) && opts.target > 0 ? opts.target : now) / now, acc = {};
+    const row = (isin) => acc[isin] || (acc[isin] = { isin, v0: vi[i][isin] || 0, v1: vi[j][isin] || 0, flow: 0, buys: 0 });
+    Object.keys(vi[i]).forEach(row);
+    Object.keys(vi[j]).forEach(row);
+    for (let k = i + 1; k <= j; k++) Object.keys(fi[k] || {}).forEach((isin) => { const r = row(isin), f = fi[k][isin]; r.flow += f; if (f > 0) r.buys += f; });
+    return Object.keys(acc).map((isin) => {
+      const r = acc[isin], pl = r.v1 - r.v0 - r.flow, cap = r.v0 + r.buys;
+      return { isin, p0: null, p1: null, ret: cap > 0 ? fin(pl / cap) : null, pl: fin(pl * sc), v1: fin(r.v1 * sc) };
+    }).sort((x, y) => (y.v1 > 0) - (x.v1 > 0) || (x.v1 > 0 ? y.v1 - x.v1 : y.pl - x.pl));
+  }
+
   /** assets(ctx, {selected, start, end, scale}) -> one row per position (selected or not) */
   function assets(ctx, opts) {
     opts = opts || {};
@@ -1257,6 +1352,9 @@
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },
     util: { mean, sampleSd, sampleCov, quantile, returnsOf, minusMonths, daysBetween, dayNumber, isMonthComplete },
   };
+
+  PFEngine.assetsSpan = assetsSpan;         // measurement panel (3-column layout, user 27.09.)
+  PFEngine.benchmarkSpan = benchmarkSpan;
 
   if (typeof module !== 'undefined' && module.exports) module.exports = PFEngine; else root.PFEngine = PFEngine;
 })(typeof window !== 'undefined' ? window : globalThis);

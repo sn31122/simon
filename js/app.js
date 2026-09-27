@@ -41,8 +41,10 @@
   var DEPOT_ID = 'my_depot', DEPOT_COLOR = '#f2f3f4';          // "Mein Depot" (the real depot) is always white
   var CONTEXT_DAYS = 21;                       // holdings list, period 1T: grey history shown before the last day
   var ALL = ctx.positions.map(function (p) { return p.isin; });
-  var BIDX = {};                               // locked benchmarks of data/benchmarks.csv other than Mein Depot -> colour slot
-  ctx.benchmarks.filter(function (b) { return b.id !== DEPOT_ID; }).forEach(function (b, k) { BIDX[b.id] = k; });
+  // locked benchmarks of data/benchmarks.csv other than Mein Depot (Depot-Historie) -> colour slot from the second palette
+  // entry on, so the first card (Energie) keeps the blue it had before Depot-Historie existed
+  var BIDX = {};
+  ctx.benchmarks.filter(function (b) { return b.id !== DEPOT_ID; }).forEach(function (b, k) { BIDX[b.id] = k + 1; });
   function colorOf(id) { return id === DEPOT_ID ? DEPOT_COLOR : BENCH_COLORS[(BIDX[id] || 0) % BENCH_COLORS.length]; }
   var ASOF = META.last_asof_utc ? F.asofBerlin(META.last_asof_utc) : '';
 
@@ -55,6 +57,7 @@
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
     selected: new Set(ALL), sort: { key: 'contrib', dir: -1 }, measure: null, hover: null,
     sinceBuy: false, holdSort: 'value-desc',   // sinceBuy: pill "Seit Kauf" (chart shows MAX)
+    mpPick: 'yacht',                           // Messung panel: whose holdings the list shows ('yacht' or a benchmark id)
     showHold: true, showAssets: false,         // list section toggles "Portfolio" / "Einzelwerte" (independent; not persisted)
     whatIf: HAS_WHATIF, overrides: {}                // Stück are always editable (what-if): {ISIN: shares}; not persisted
   };
@@ -686,6 +689,96 @@
   }
 
   /**
+   * Messung panel (3-column layout, user 27.09.): the Yacht and every shown benchmark (return, € change, max. drawdown
+   * within the span) and every selected position (return, € change) over the measured span – live while measuring – or
+   * over the whole period while nothing is measured. Numbers: the chart's series (daily or the sub-daily frame), "Echt"
+   * like the benchmark boxes, positions from engine.assetsSpan. Registered with Sync, so it redraws with the overlays;
+   * skipped while the panel is hidden (< 1200px).
+   */
+  var mpKey = '', mpStamp = 0;
+  function renderMeasPanel(meas) {
+    var el = $('measPanel'), M = cur;
+    if (!el || !M) return;
+    if (el.offsetParent === null) { mpKey = ''; return; }
+    var I = M.intra, p = M.p, span = !!(meas && meas.a != null && meas.b != null && meas.a !== meas.b);
+    var first = I ? Math.max(0, I.ctxEnd) : 0, last = I ? I.last : (p ? p.value.length - 1 : 0);
+    var a = span ? Math.max(0, Math.min(meas.a, meas.b)) : first, b = span ? Math.min(last, Math.max(meas.a, meas.b)) : last;
+    var key = mpStamp + '|' + span + '|' + a + '|' + b + '|' + (meas && meas.live ? 1 : 0);
+    if (key === mpKey) return;
+    mpKey = key;
+    var lbl = function (k) { return I ? slotLabel(I, k) : F.date(ctx.dates[M.R.start + k], 'short'); };
+    var sub = $('mpSub');
+    sub.textContent = span ? lbl(a) + ' – ' + lbl(b) : 'Zeitraum ' + periodText(M.R);
+    sub.classList.toggle('is-live', span);
+    sub.title = span ? (meas.live ? 'Messung läuft' : 'Gemessener Zeitraum') + ' – ohne Messung zeigt das Panel den ganzen Zeitraum' :
+      'Ganzer Zeitraum – eine Messung im Chart zeigt hier den gemessenen Abschnitt';
+    if (!p || b <= a) {
+      $('mpTable').innerHTML = '<tbody><tr><td class="mp-empty">' + esc(!p ? emptyText() : 'Zeitraum zu kurz') + '</td></tr></tbody>';
+      $('mpList').innerHTML = '';
+      $('mpNote').textContent = '';
+      return;
+    }
+    var vals = I ? I.value : p.value, frame = I ? I.frame : null, i = I ? a : M.R.start + a, j = I ? b : M.R.start + b, tgt = depotTarget();
+    // the list below shows the holdings of the picked row (Yacht or a shown benchmark; user 27.09.: in the card's order)
+    var pick = state.mpPick;
+    function row(id, name, color, v, eur, eurTitle) {
+      var w = E.intradayWindow(v, a, b), dd = E.drawdown(v.slice(a, b + 1)), r = get(w, 'ret');
+      return '<tr data-mp="' + esc(id) + '" tabindex="0" class="' + (id === pick ? 'is-sel' : '') + '" title="Klicken: Positionen von „' + esc(name) + '“ unten anzeigen">' +
+        '<td><span class="mp-nm" style="--c:' + color + '"><i></i><span>' + esc(name) + '</span></span></td>' +
+        '<td class="' + sgn(r) + '">' + pct(r) + '</td><td class="' + sgn(eur) + '" title="' + esc(eurTitle) + '">' + eurS(eur, 0) + '</td>' +
+        '<td class="' + (dd && dd.maxDD < 0 ? 'neg' : '') + '">' + pctU(dd ? dd.maxDD : null, 1) + '</td></tr>';
+    }
+    var list = I ? I.benches.filter(function (o) { return o.s; }).map(function (o) { return { x: o.x, v: o.s.value }; }) :
+      M.selB.filter(function (x) { return x.s; }).map(function (x) { return { x: x, v: x.s.value }; });
+    var picked = null;
+    list.forEach(function (o) { if (o.x.id === pick) picked = o.x; });
+    if (!picked) pick = 'yacht';                  // the picked benchmark was hidden: back to the Yacht
+    var yw = E.intradayWindow(vals, a, b), html = row('yacht', 'Yacht', 'var(--accent)', vals, get(yw, 'pl'), 'Wertänderung des Portfolios (Startwert-skaliert)');
+    list.forEach(function (o) {
+      var real = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, o.x.b, i, j, { frame: frame, target: tgt, buyAt: M.R.start })) : null;
+      html += row(o.x.id, o.x.name, o.x.color, o.v, real, 'Echt: €-Veränderung bei einem Wert von ' + eur(tgt, { dec: 0 }) + ' („Benchmark (€)“) heute');
+    });
+    $('mpTable').innerHTML = '<thead><tr><th></th><th>Rendite</th><th title="Yacht: Wertänderung · Benchmarks: „Echt“ wie in der Messbox">G/V €</th>' +
+      '<th title="Größter Rückgang innerhalb des Zeitraums">Max. DD</th></tr></thead><tbody>' + html + '</tbody>';
+    var rows, note, SORTS = { 'name-asc': 'Name A–Z', 'name-desc': 'Name Z–A', 'ret-asc': 'niedrigste Rendite', 'ret-desc': 'höchste Rendite',
+      'value-asc': 'kleinste Position', 'value-desc': 'größte Position' };
+    if (!picked) {                                 // Yacht: sorted like the Portfolio list (its ⋮ menu)
+      rows = E.assetsSpan ? E.assetsSpan(ctx, { selected: state.selected, scale: I ? I.scale : p.scale, a: i, b: j, frame: frame }) : [];
+      rows = sortHoldRows(rows.filter(function (r) { return r.selected; }), false);
+      note = 'Yacht · ' + rows.length + ' · ' + (SORTS[state.holdSort] || SORTS['value-desc']);
+    } else {                                       // a benchmark: its holdings in the order of its card's rows, € = "Echt"
+      var bs = E.benchmarkSpan ? E.benchmarkSpan(ctx0, picked.b, { a: i, b: j, frame: frame, target: tgt, buyAt: M.R.start }) : null;
+      var card = cardById(picked.id), order = {};
+      (card ? card.rows : []).forEach(function (r, k) { if (r.isin && !(r.isin in order)) order[r.isin] = k; });
+      rows = (bs || []).map(function (r, k) {
+        var ins = INSTR_BY[r.isin] || { name: r.isin, short: r.isin };
+        return { isin: r.isin, name: ins.name, short: ins.short, ret: r.ret, pl: r.pl, k: r.isin in order ? order[r.isin] : 1e6 + k };
+      }).sort(function (x, y) { return x.k - y.k; });
+      note = picked.name + ' · ' + (!bs ? 'keine Einzelwerte' : rows.length + (card && card.rows.length ? ' · wie die Karte' : ' · nach Wert'));
+    }
+    $('mpNote').textContent = note;
+    $('mpList').innerHTML = rows.map(function (r) {
+      var tip = picked ? ' · € = Anteil an „Echt“' + (picked.b && picked.b.transactions ? ' (Käufe/Verkäufe im Zeitraum herausgerechnet; % = Gewinn auf eingesetztes Kapital)' : '') :
+        ' · Beitrag ' + pp(r.contrib) + ' %-Punkte';
+      return '<div class="mp-row" title="' + esc(r.name + ' · ' + r.isin + tip) + '">' + avatarHTML(r, 'av--sm') +
+        '<span class="mp-n">' + esc(r.short || r.name) + '</span>' +
+        '<span class="mp-v"><b class="' + sgn(r.ret) + '">' + pct(r.ret) + '</b><span>' + eurS(r.pl) + '</span></span></div>';
+    }).join('');
+  }
+  sync.add({ drawOverlay: function (S) { renderMeasPanel(S && S.measure); } });
+  function pickMeasPanel(ev) {
+    var tr = ev.target.closest && ev.target.closest('tr[data-mp]');
+    if (!tr || (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ')) return;
+    if (ev.type === 'keydown') ev.preventDefault();
+    state.mpPick = tr.getAttribute('data-mp');
+    mpStamp++;
+    renderMeasPanel(sync.measure);
+    var again = $('mpTable').querySelector('tr[data-mp="' + state.mpPick.replace(/["\\]/g, '\\$&') + '"]');
+    if (again && ev.type === 'keydown') again.focus();
+  }
+  if ($('mpTable')) { $('mpTable').addEventListener('click', pickMeasPanel); $('mpTable').addEventListener('keydown', pickMeasPanel); }
+
+  /**
    * Muted note under the chart: the chart's interval ("Intervall: 30 Min." / "2 Std." / "1 Tag") and, when the range
    * stepped down to a coarser grid, why ("keine 30-Min-Kurse für diesen Zeitraum"). The title lists what was collected.
    */
@@ -1226,8 +1319,11 @@
   function placeDrop() {
     if (!drop) return;
     var row = drop.inp.closest('.bb-row') || drop.inp, rr = row.getBoundingClientRect(), ir = drop.inp.getBoundingClientRect();
-    var sc = drop.inp.closest('.bb-rows'), sr = sc ? sc.getBoundingClientRect() : null;
-    if (!ir.width || (sr && (ir.bottom < sr.top + 4 || ir.top > sr.bottom - 4))) { closeDrop(); return; }   // scrolled out of its card
+    var out = [drop.inp.closest('.bb-rows'), drop.inp.closest('.rail-in')].some(function (sc) {
+      var sr = sc && sc.scrollHeight > sc.clientHeight ? sc.getBoundingClientRect() : null;
+      return sr && (ir.bottom < sr.top + 4 || ir.top > sr.bottom - 4);
+    });
+    if (!ir.width || out) { closeDrop(); return; }            // scrolled out of its card / the right column
     var vv = window.visualViewport, bar = $('topBar');
     var vw = document.documentElement.clientWidth, vh = vv ? Math.min(window.innerHeight, vv.offsetTop + vv.height) : window.innerHeight;  // above an on-screen keyboard
     var w = Math.min(Math.max(rr.width, 340), vw - 16), left = Math.max(8, Math.min(rr.left, vw - 8 - w));
@@ -1331,7 +1427,7 @@
     });
     window.addEventListener('resize', placeDrop);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', placeDrop);
-    box.addEventListener('scroll', function () { if (drop) placeDrop(); }, true);     // rows scroll inside a card: the list follows
+    document.addEventListener('scroll', function () { if (drop) placeDrop(); }, true);   // rows / the right column scroll: the list follows
   }
 
   function renderHeadline(M) {
@@ -2081,6 +2177,8 @@
     renderAssets(cur);
     renderRisk(cur);
     renderMeasureBar();
+    mpStamp++;
+    renderMeasPanel(sync.measure);
   }
 
   /** What-if: a Stück input was committed (Enter / blur). */
@@ -2145,6 +2243,7 @@
     $('depotReset').hidden = !s;
     renderOvBench(holdPeriod());                  // benchmark values in the overview use the same amount
     mainChart.tipKey = '';                        // rebuild an open measure box with the new value
+    mpStamp++;                                    // and the "Echt" column of the Messung panel
     sync.draw();
   }
 
@@ -2258,6 +2357,8 @@
       state.holdSort = it.getAttribute('data-hsort');
       closeSortMenu(true);
       renderHoldings();
+      mpStamp++;                                 // the Messung panel's Yacht list uses the same order
+      renderMeasPanel(sync.measure);
     });
     $('holdSortMenu').addEventListener('keydown', function (ev) {
       var items = Array.prototype.slice.call(this.querySelectorAll('[data-hsort]'));
@@ -2297,6 +2398,7 @@
         var widthChanged = w !== lastW;
         lastW = w; lastH = h;
         rerenderChartsOnly();
+        renderMeasPanel(sync.measure);                         // shown again after the window got wide enough
         if (widthChanged && heat.model) heat.render();         // cell size follows the card width
       });
     }

@@ -1081,6 +1081,34 @@ test('intradayBenchmark with weights: bought at the previous close (1T start)', 
   approx(d.value[0], 49, 1e-12, 'daily 1T start');
 });
 
+test('assetsSpan: per-position return and € over a span (daily and on a frame), contributions add up', () => {
+  const ctx = E.prepare(I_DATA());                              // positions A, B, C; daily A [10,11,12], B [20,21,19]
+  const rows = E.assetsSpan(ctx, { selected: ['A', 'B'], a: 2, b: 0, scale: 2 });
+  const A = rows.find((r) => r.isin === 'A'), p = E.portfolio(ctx, { selected: ['A', 'B'], start: 0, end: 2 });
+  approx(A.ret, 12 / 10 - 1, 1e-12, 'ret A, order-independent');
+  approx(A.pl, A.p1 * 0 + 2 * ctx.positions.find((x) => x.isin === 'A').shares * 2, 1e-12, 'pl A = shares · scale · Δpx');
+  approx(rows.filter((r) => r.selected).reduce((s, r) => s + r.contrib, 0), p.value[2] / p.value[0] - 1, 1e-12, 'Σ contrib = portfolio return');
+  assert.strictEqual(rows.find((r) => r.isin === 'C').contrib, null, 'unselected: no contribution');
+  // on the 1T frame: same prices as intradayAsset
+  const f = E.intraday(ctx, { selected: ['A', 'B', 'C'] }).frame, ia = E.intradayAsset(ctx, 'B', f);
+  const fr = E.assetsSpan(ctx, { selected: ['A', 'B', 'C'], a: 1, b: 4, frame: f }).find((r) => r.isin === 'B');
+  approx(fr.ret, ia.px[4] / ia.px[1] - 1, 1e-12, 'frame ret B');
+  assert.deepStrictEqual(E.assetsSpan(ctx, { a: 0, b: 9 }), [], 'beyond the data');
+});
+
+test('benchmarkSpan: holdings of a benchmark over a span, Σ pl = benchmarkRealPl', () => {
+  const ctx = E.prepare(I_DATA());                              // ab = A:1 + B:0.5; daily A [10,11,12], B [20,21,19]
+  const r = E.benchmarkSpan(ctx, 'ab', { a: 0, b: 2, target: 43 });
+  assert.deepStrictEqual(r.map((x) => x.isin), ['A', 'B'], 'holdings order');
+  approx(r[0].ret, 0.2, 1e-12, 'ret A');
+  approx(r[0].pl + r[1].pl, E.benchmarkRealPl(ctx, 'ab', 0, 2, { target: 43 }), 1e-12, 'Σ pl = real pl');
+  const w = { id: 'w', weights: { B: 40, A: 60 } }, o = { a: 1, b: 4, intraday: true, buyAt: 1, target: 1000 };
+  const rw = E.benchmarkSpan(ctx, w, o);
+  assert.deepStrictEqual(rw.map((x) => x.isin), ['B', 'A'], 'weights order');
+  approx(rw[0].pl + rw[1].pl, E.benchmarkRealPl(ctx, w, 1, 4, o), 1e-12, 'weights, frame: Σ pl = real pl');
+  assert.strictEqual(E.benchmarkSpan(ctx, { id: 'x' }, { a: 0, b: 1 }), null, 'unknown kind');
+});
+
 test('equalValueWindow: benchmark return over the span × portfolio value at the span start', () => {
   const p = [100, 110, 121, null], bv = [50, 55, 44, 60];
   const w = E.equalValueWindow(p, bv, 1, 2);
@@ -1353,6 +1381,11 @@ test('real data: Depot-Historie replay ends on the Mein Depot holdings and value
   const R = E.presetRange(ctx, 'YTD'), s = E.benchmark(ctx, b, R.start, R.end, 1);
   assert.ok(s.value.every((v) => Number.isFinite(v) && v > 0), 'finite, positive index');
   console.log(`  Depot-Historie YTD: TWR ${F.pct(E.stats(s).totalReturn)}, real ${F.eur(E.benchmarkRealPl(ctx, b, R.start, R.end), { sign: true })}`);
+  // per-position split (Messung panel): Σ pl = real € of the span, daily and on the 1M frame
+  const sum = (rows) => rows.reduce((t, r) => t + r.pl, 0);
+  approx(sum(E.benchmarkSpan(ctx, b, { a: R.start, b: R.end, target: 1e5 })), E.benchmarkRealPl(ctx, b, R.start, R.end, { target: 1e5 }), 1e-6, 'YTD split');
+  const R1 = E.presetRange(ctx, '1M'), f1 = E.gridFrame(ctx, 'h2', R1.start, R1.end, { trim: true });
+  if (f1) approx(sum(E.benchmarkSpan(ctx, b, { a: 0, b: f1.last, frame: f1 })), E.benchmarkRealPl(ctx, b, 0, f1.last, { frame: f1 }), 1e-6, '1M frame split');
 });
 
 console.log(`\nengine tests: ${passed} passed, ${failed} failed`);
