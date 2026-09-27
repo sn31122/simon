@@ -1,0 +1,28 @@
+Disposable-copy trial only; shipped snapshot still has pending incoming files.
+Command: python data/update_prices.py --finish-add US19247G1076,US55024U1097,US5949181045,US67066G1040
+Exit code: 0
+US19247G1076 Coherent: 188 of 188 trading days filled; 193 30-min points 2026-09-18 .. 2026-09-25
+US55024U1097 Lumentum: 188 of 188 trading days filled; 193 30-min points 2026-09-18 .. 2026-09-25
+US5949181045 Microsoft: 188 of 188 trading days filled; 193 30-min points 2026-09-18 .. 2026-09-25
+US67066G1040 NVIDIA: 188 of 188 trading days filled; 193 30-min points 2026-09-18 .. 2026-09-25
+prices_daily.csv: 50 columns; intraday.csv: 3463 -> 4235 points
+
+== rebuild ==
+portfolio-data.js: 188 dates 2026-01-02 -> 2026-09-25 (final), 32 positions, 1 benchmarks, 50 instruments, 50 price series, intraday ['2026-09-24', '2026-09-25'] (50 series, asof 2026-09-25T20:59Z)
+empty cells per ISIN: {'US84615Q1031': 112, 'IE00BF01VY89': 52}
+WARNINGS:
+  US5738741041 2026-06-02: 188.3 -> 261.225 (+38.7 %) check value
+  US0937121079 2026-07-30: 139.9 -> 189.54 (+35.5 %) check value
+  US26740W1099 2026-05-21: 16.56 -> 22.6 (+36.5 %) check value
+  AT0000969985 2026-06-15: 151.2 -> 212.5 (+40.5 %) check value
+  XS3091657729 2026-06-05: 202.03 -> 146.955 (-27.3 %) check value
+
+== tests ==
+engine tests: 51 passed, 0 failed
+crosscheck: 5441/5441 checks passed
+
+== REPORT (give this to the user) ==
+Prices up to 2026-09-25 (final); 50 ISINs; 1T sessions 2026-09-24, 2026-09-25.
+Tests: OK - engine tests: 51 passed, 0 failed; crosscheck: 5441/5441 checks passed
+HANDOFF.md status updated. Hard-reload the dashboard (Ctrl+F5).
+

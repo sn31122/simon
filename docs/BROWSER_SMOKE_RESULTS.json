@@ -1,0 +1,95 @@
+[
+  {
+    "width": 1920,
+    "status": "passed",
+    "layouts": [
+      {
+        "hold": true,
+        "assets": false,
+        "width": 1920,
+        "scroll": 1920
+      },
+      {
+        "hold": true,
+        "assets": true,
+        "width": 1920,
+        "scroll": 1920
+      },
+      {
+        "hold": false,
+        "assets": true,
+        "width": 1920,
+        "scroll": 1920
+      },
+      {
+        "hold": false,
+        "assets": false,
+        "width": 1920,
+        "scroll": 1920
+      }
+    ],
+    "errors": []
+  },
+  {
+    "width": 1400,
+    "status": "passed",
+    "layouts": [
+      {
+        "hold": true,
+        "assets": false,
+        "width": 1400,
+        "scroll": 1400
+      },
+      {
+        "hold": true,
+        "assets": true,
+        "width": 1400,
+        "scroll": 1400
+      },
+      {
+        "hold": false,
+        "assets": true,
+        "width": 1400,
+        "scroll": 1400
+      },
+      {
+        "hold": false,
+        "assets": false,
+        "width": 1400,
+        "scroll": 1400
+      }
+    ],
+    "errors": []
+  },
+  {
+    "width": 375,
+    "status": "passed",
+    "layouts": [
+      {
+        "hold": true,
+        "assets": false,
+        "width": 375,
+        "scroll": 375
+      },
+      {
+        "hold": true,
+        "assets": true,
+        "width": 375,
+        "scroll": 375
+      },
+      {
+        "hold": false,
+        "assets": true,
+        "width": 375,
+        "scroll": 375
+      },
+      {
+        "hold": false,
+        "assets": false,
+        "width": 375,
+        "scroll": 375
+      }
+    ],
+    "errors": []
+  }
+]
