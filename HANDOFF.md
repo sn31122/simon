@@ -56,9 +56,6 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   Usage and the Segoe UI font fallback for Linux: `docs/VERIFICATION.md`.
 
 ## Open points (for the user)
-- Big one-day moves flagged by the build for the stocks added 27.09. (Scalable data, not split ratios): Nebius +31,9 % and
-  IREN +31,9 % on 30.07.2026 (the day Bloom also rose +35,5 %), IREN −24,1 % on 05.02.2026. Confirm they are real, then they
-  join the known list in AGENTS.md.
 - The "Gruppen" table stays removed (user, 27.09.); its unused CSS was deleted.
 - With 2 or 3 benchmarks shown, the band above the plot reserves room for the hover box, so there is empty space between the
   measurement boxes and the plot while nothing is hovered (deliberate: the plot keeps its height and nothing covers lines).

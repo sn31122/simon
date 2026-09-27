@@ -52,8 +52,9 @@ or Claude Code started before `.claude/settings.json` existed: restart it, check
    - `FETCH AGAIN: start N agent(s) ...` -> start one `price-fetcher` agent per printed prompt (all at once), then run
      `--finish` again. After 2 rounds for the same ISIN, stop and show the user the reason line.
    - `STOP: merge refused` or `CHECK WITH USER:` (split / replaced final close) -> show those lines to the user, change nothing.
-   - The known big moves in the build warnings are real: Marvell 02.06., D-Wave 21.05., AT&S 15.06., Bloom 30.07.2026
-     (> 30 %) and Halbleiter 3x XS3091657729 05.06.2026 (−27 %, 3x a −9 % semiconductor day).
+   - The known big moves in the build warnings are real: Marvell 02.06., D-Wave 21.05., AT&S 15.06., Bloom 30.07.,
+     Nebius 30.07., IREN 30.07.2026 (> 30 %), Halbleiter 3x XS3091657729 05.06.2026 (−27 %, 3x a −9 % semiconductor day)
+     and IREN 05.02.2026 (−24 %).
    - `note:` lines (gaps of thinly traded instruments) need no action.
 
 ## New instrument (only when the user asks for it) – 4 steps
