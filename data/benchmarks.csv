@@ -1,3 +1,4 @@
 id,name,holdings,description
 my_depot,Mein Depot,FR0010342592:9764|IE00BF4RFH31:1|JE00B24DK975:39|US11135F1012:1|US1912161007:4|US5738741041:2|IE00BF01VY89:160|IE00BK5BZX59:1020|US02079K3059:34,"Echtes Scalable-Depot, Stückzahlen vom 25.09.2026 (Rückrechnung mit konstanten Stückzahlen, ohne Cash)"
+depot_historie,Depot-Historie,transactions,"Echte Depot-Historie aus dem Scalable-Transaktionsexport (data/transactions.csv): Käufe und Verkäufe nachgespielt, nur Wertpapiere (ohne Cash, Gebühren, Steuern, Dividenden), zeitgewichtete Rendite"
 energie,Energie,US36828A1016:20%|US92537N1081:12%|US21037T1097:12%|US0937121079:11%|US0255371017:10%|US92840M1027:8%|US2333311072:6%|US3379321074:6%|US6293775085:6%|US1258961002:6%|US83418M1036:3%,"Energie & Strom-Infrastruktur (user 27.09.2026): feste Gewichtung, Kauf am Zeitraumbeginn, dann gehalten; startet als editierbare eigene Karte (im Chart ausgeblendet), beim Neuladen wieder wie hier"
