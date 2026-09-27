@@ -26,7 +26,8 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   are "Startwert (Yacht)" and "Benchmark (€)" (default: the real Mein Depot value). Browser acceptance: 94 of 94 checks.
   Then: the overview shows "Yacht" + value and beside it one block per shown benchmark (value + € change over the period
   in the amount of "Benchmark (€)", like "Echt"; engine `benchmarkRealValue`), the headline's big figure is gone and the
-  space between bar, overview and tabs is smaller. Browser acceptance: 104 of 104 checks.
+  space between bar, overview and tabs is smaller. Checked with engine tests, crosscheck and screenshots at 1903/375 px;
+  `tools/acceptance-check.cjs` only adapted (no `#hlMain` tap target; 375 px checks scroll the chart into view), not rerun.
 - **Chart interval per range:** 1T and 1W 30 min, 1M 2 h, 3M and longer daily; custom ranges by length (≤ 7 days 30 min,
   ≤ 31 days 2 h, else daily), stepping down where finer data was not collected (a note under the chart shows the interval
   and why it stepped down). Main chart, hover, measurement boxes and drawdown follow the interval; Kennzahlen,
