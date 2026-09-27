@@ -1096,6 +1096,19 @@ test('assetsSpan: per-position return and € over a span (daily and on a frame)
   assert.deepStrictEqual(E.assetsSpan(ctx, { a: 0, b: 9 }), [], 'beyond the data');
 });
 
+test('benchmarkSpan: holdings of a benchmark over a span, Σ pl = benchmarkRealPl', () => {
+  const ctx = E.prepare(I_DATA());                              // ab = A:1 + B:0.5; daily A [10,11,12], B [20,21,19]
+  const r = E.benchmarkSpan(ctx, 'ab', { a: 0, b: 2, target: 43 });
+  assert.deepStrictEqual(r.map((x) => x.isin), ['A', 'B'], 'holdings order');
+  approx(r[0].ret, 0.2, 1e-12, 'ret A');
+  approx(r[0].pl + r[1].pl, E.benchmarkRealPl(ctx, 'ab', 0, 2, { target: 43 }), 1e-12, 'Σ pl = real pl');
+  const w = { id: 'w', weights: { B: 40, A: 60 } }, o = { a: 1, b: 4, intraday: true, buyAt: 1, target: 1000 };
+  const rw = E.benchmarkSpan(ctx, w, o);
+  assert.deepStrictEqual(rw.map((x) => x.isin), ['B', 'A'], 'weights order');
+  approx(rw[0].pl + rw[1].pl, E.benchmarkRealPl(ctx, w, 1, 4, o), 1e-12, 'weights, frame: Σ pl = real pl');
+  assert.strictEqual(E.benchmarkSpan(ctx, { id: 'x' }, { a: 0, b: 1 }), null, 'unknown kind');
+});
+
 test('equalValueWindow: benchmark return over the span × portfolio value at the span start', () => {
   const p = [100, 110, 121, null], bv = [50, 55, 44, 60];
   const w = E.equalValueWindow(p, bv, 1, 2);

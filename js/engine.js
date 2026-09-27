@@ -765,11 +765,41 @@
       const p0 = fin(price(p.isin, i)), p1 = fin(price(p.isin, j)), q = sharesOf(p) * scale;
       const r = div(p1, p0);
       return { isin: p.isin, name: p.name, short: p.short, selected: sel.has(p.isin), p0, p1,
-        ret: r === null ? null : r - 1, pl: p0 === null || p1 === null ? null : fin(q * (p1 - p0)), v0: p0 === null ? null : q * p0 };
+        ret: r === null ? null : r - 1, pl: p0 === null || p1 === null ? null : fin(q * (p1 - p0)), v0: p0 === null ? null : q * p0,
+        v1: p1 === null ? null : fin(q * p1) };
     });
     const V0 = sum(rows.filter((r) => r.selected && r.v0 !== null).map((r) => r.v0));
     rows.forEach((r) => { r.contrib = r.selected ? div(r.pl, V0) : null; delete r.v0; });
     return rows;
+  }
+
+  /**
+   * benchmarkSpan(ctx, bench|id, {a, b, frame, intraday, target, buyAt}) -> [{ isin, p0, p1, ret, pl }] | null: every holding
+   * of a holdings or weights benchmark over a span (a/b daily indices or points of `frame`; weights bought at `buyAt`),
+   * pl = qty · (p1 − p0) · target / benchmarkValueNow – so Σ pl = benchmarkRealPl with the same options. Rows in the
+   * benchmark's holdings order. Other benchmark kinds: null. (Messung panel: holdings of the picked benchmark.)
+   */
+  function benchmarkSpan(ctx, bench, opts) {
+    opts = opts || {};
+    if (typeof bench === 'string') bench = ctx.benchmarks.find((x) => x.id === bench);
+    if (!bench || !(bench.holdings || bench.weights)) return null;
+    const h = benchHoldings(ctx, bench, opts.buyAt), now = benchmarkValueNow(ctx, bench, opts.buyAt);
+    const i = Math.min(opts.a, opts.b), j = Math.max(opts.a, opts.b), fr = opts.frame || opts.intraday;
+    if (!h || now === null || !isNum(i) || !isNum(j) || i < 0) return null;
+    let price;
+    if (fr) {
+      const F = frameOf(ctx, fr);
+      if (!F || j > Math.min(F.last, F.m - 1)) return null;
+      price = (isin, k) => framePx(ctx, F, isin, k);
+    } else {
+      if (j > ctx.n - 1) return null;
+      price = (isin, k) => ctx.px[isin][k];
+    }
+    const f = (isNum(opts.target) && opts.target > 0 ? opts.target : now) / now;
+    return h.map((x) => {
+      const p0 = fin(price(x[0], i)), p1 = fin(price(x[0], j)), r = div(p1, p0);
+      return { isin: x[0], p0, p1, ret: r === null ? null : r - 1, pl: p0 === null || p1 === null ? null : fin(x[1] * (p1 - p0) * f) };
+    });
   }
 
   /** assets(ctx, {selected, start, end, scale}) -> one row per position (selected or not) */
@@ -1110,6 +1140,7 @@
   };
 
   PFEngine.assetsSpan = assetsSpan;         // measurement panel (3-column layout, user 27.09.)
+  PFEngine.benchmarkSpan = benchmarkSpan;
 
   if (typeof module !== 'undefined' && module.exports) module.exports = PFEngine; else root.PFEngine = PFEngine;
 })(typeof window !== 'undefined' ? window : globalThis);
