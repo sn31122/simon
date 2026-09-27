@@ -1,6 +1,6 @@
 # Checkout note — 27 September 2026
 
-The cloud continuation of 27.09.2026 is finished (branch `cloud-handoff-2026-09-27`); `HANDOFF.md` has the current state and open points, `CLOUD_HANDOFF.md` / `CLOUD_PROMPT.md` are its history. The repository root is canonical: it replaces the local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboard permanent` once pulled there. Windows preview and logo-production paths below are historical; README.md has the portable preview.
+The GitHub repository `sn31122/simon` (branch `cloud-handoff-2026-09-27`) is canonical and the place to work (user, 27.09.: Claude Code cloud sessions only); `HANDOFF.md` has the current state, open points and how to go local again. The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboard permanent` and the Windows preview / logo-production paths below only apply when working locally again; README.md has the portable preview.
 
 **Quote update = say "update" / "refresh" / "check for new quotes" / "Kurse aktualisieren"** → skill `update-quotes` (`.claude/skills/update-quotes/SKILL.md`). A PostToolUse hook (`.claude/settings.json` → `.claude/hooks/save-chart.cjs`, needs Node) saves every `get_security_chart` result to `data/incoming/`.
 

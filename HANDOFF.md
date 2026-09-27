@@ -1,8 +1,8 @@
 # Handoff — 27 September 2026 (cloud session finished)
 
-Branch `cloud-handoff-2026-09-27` of the private repo `sn31122/simon`. It replaces the local folder
-`C:\Users\simon\Downloads\simon\yacht portfolio dashboard permanent` once pulled there (cloud changes do not reach that
-folder by themselves). Earlier handoffs: `CLOUD_HANDOFF.md` (the cloud task, now done), `docs/history/HANDOFF.md`.
+Branch `cloud-handoff-2026-09-27` of the private repo `sn31122/simon`. From 27.09.2026 the user works only here, in Claude
+Code cloud sessions (claude.ai/code, the Desktop app's Cloud mode or the Claude app → repo `sn31122/simon`, this branch).
+The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboard permanent` is no longer updated.
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
@@ -26,16 +26,28 @@ folder by themselves). Earlier handoffs: `CLOUD_HANDOFF.md` (the cloud task, now
   chart result to `data/incoming/` and shows the model one line, so a full update costs ~2 × 55k Haiku tokens (before: ~5 ×
   100k). 30-min and 2-h points are kept forever (`data/intraday.csv`, `data/intraday_2h.csv`). Runbook: `UPDATE_PRICES.md`.
 
-## First steps on the local machine
-1. Pull the branch into the local folder (or download it) and hard-reload `dashboard.html` (Ctrl+F5).
-2. Restart Claude Code in that folder once, so it loads `.claude/settings.json` (the hook; `/hooks` lists it). Node.js must
-   be on PATH (it already runs the tests). If an update agent answers `HOOK NOT ACTIVE`, one of these two is missing.
-3. Say "update" to fetch the quotes of 28.09. onwards.
+## Working on it
+- Start a cloud session on this repo and branch; Claude reads `CLAUDE.md` → `AGENTS.md` + this file by itself. Say "update"
+  for new quotes. Every session commits and pushes to this branch, so the next session continues from there.
+- To look at the dashboard: ask Claude for screenshots, or download the branch (GitHub → Code → Download ZIP) and open
+  `dashboard.html` (works offline, no install).
+
+## Going local again (optional)
+1. Install Claude Code (CLI or Desktop app) on the PC and sign in with the same claude.ai account; Node.js and Python must
+   be on PATH, and the Scalable connector must be available there (it was in the original local session).
+2. Clone the repo (e.g. into the old folder): `git clone https://github.com/sn31122/simon` and `git checkout
+   cloud-handoff-2026-09-27`, or `git pull` in an existing clone.
+3. Either continue a specific cloud chat with its full history: `claude --teleport` in that folder (picker) or
+   `claude --teleport <session-id>` (claude.ai/code → session menu → Open in → Terminal copies the command). The local copy
+   then continues on its own; later cloud chats only see what was pushed. Or simply start `claude` there: the repo files
+   carry all the context a new chat needs.
+4. The hook works locally as well (`/hooks` lists it; restart Claude Code once if it is missing). Push local commits so
+   cloud sessions see them again.
 
 ## Verification
 - `node tests/engine.test.cjs`, `python tests/crosscheck.py && node tests/crosscheck.cjs` (numbers in the status block).
 - Browser acceptance: `tools/acceptance-check.cjs` (Playwright, real mouse/keyboard/touch at 1903/1400/375 px); results
-  and screenshots of the final run in `docs/verification/2026-09-27/`, per-item evidence in `docs/ACCEPTANCE_CHECKLIST.md`.
+  and screenshots of the final run in `docs/verification/2026-09-27/`.
   Usage and the Segoe UI font fallback for Linux: `docs/VERIFICATION.md`.
 
 ## Open points (for the user)

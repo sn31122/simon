@@ -5,4 +5,4 @@
 @AGENTS.md
 @HANDOFF.md
 
-This checkout is self-contained. Use the repository root. Do not resume old agent IDs. `CLOUD_HANDOFF.md` and `CLOUD_PROMPT.md` describe the finished cloud continuation of 27.09.2026 (history); `docs/ACCEPTANCE_CHECKLIST.md` holds its acceptance evidence.
+This checkout is self-contained: the GitHub repository `sn31122/simon` is the place to work (cloud sessions); use the repository root. Do not resume old agent IDs.

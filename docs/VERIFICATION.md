@@ -1,18 +1,22 @@
 # Verification guide
 
-## Baseline already run during packaging
+## Numerical tests (after every data or math change)
 
-`BASELINE_TEST_RESULTS.json` records syntax checks, 51 engine tests and 5,441 independent crosschecks of the migration snapshot. `BACKFILL_TRIAL.txt` records a successful merge/test run in a disposable copy (the pending inputs were merged on 27.09.2026).
+```sh
+node --check js/app.js && node --check js/charts.js && node --check js/engine.js
+node tests/engine.test.cjs
+python3 tests/crosscheck.py && node tests/crosscheck.cjs
+```
+Python scripts use only the standard library; the JavaScript tests use Node built-ins. `update_prices.py --finish` runs the
+tests itself and writes the result into the status block of `HANDOFF.md`.
 
-Run commands from README after integration and after mathematical changes. Python scripts use only the standard library; JavaScript numerical tests use Node built-ins.
-
-## Browser acceptance (27.09.2026)
+## Browser acceptance
 
 `tools/acceptance-check.cjs` drives the real page with Playwright (real mouse drags, clicks, keyboard and touch taps, no
 programmatic shortcuts) at 1903, 1400 and 375 px: startup and console errors, list toggles and layout, 3M/6M, the section
-order, the benchmark-card builder (search, keyboard, validation, duplicate/delete, focus), measurement in both directions
-(daily and sub-daily), the Mein Depot box, Startwert scaling, the hover band with 3 benchmarks, the chart interval per range,
-touch and overflow. It writes `results.json` and screenshots.
+order, the benchmark-card builder (search, keyboard, validation, duplicate/delete, focus), measurement in both directions,
+the Mein Depot box, Startwert scaling, the hover band with 3 benchmarks, the chart interval per range, touch and overflow.
+It writes `results.json` and screenshots. Playwright is a test-only tool; the dashboard itself has no dependencies.
 
 ```sh
 python3 -m http.server 8770 --bind 127.0.0.1
@@ -20,38 +24,22 @@ SEGOE_UI_FALLBACK_DIR=<dir with Selawik TTFs> NODE_PATH=<global node_modules wit
   node tools/acceptance-check.cjs http://127.0.0.1:8770/dashboard.html artifacts/acceptance
 ```
 
-Linux containers have no Segoe UI, and the wider fallback font makes the two lists stack at 1903 px. `tools/segoe-fallback.cjs`
-therefore injects Selawik (Microsoft, SIL OFL, metric-compatible with Segoe UI; `Selawik_Release.zip` from
-github.com/microsoft/Selawik) as "Segoe UI" into the test browser only; the dashboard files are unchanged. Without the variable
-the run uses the system font and the side-by-side check fails for that reason alone. Evidence of the final run:
-`docs/verification/2026-09-27/`.
+In Claude Code cloud containers Playwright and Chromium are preinstalled (`NODE_PATH=/opt/node22/lib/node_modules`). Elsewhere:
+`npm install --no-save --package-lock=false playwright && npx playwright install chromium`.
 
-## Optional portable browser smoke
+Linux has no Segoe UI, and the wider fallback font makes the two lists stack at 1903 px. `tools/segoe-fallback.cjs` therefore
+injects Selawik (Microsoft, SIL OFL, metric-compatible with Segoe UI; `Selawik_Release.zip` from github.com/microsoft/Selawik)
+as "Segoe UI" into the test browser only; the dashboard files are unchanged. Without the variable the run uses the system font
+and the side-by-side check fails for that reason alone. On Windows the variable is not needed.
 
-The static app needs no npm packages. This optional verification helper uses Playwright only for testing:
+Evidence of the final run of 27.09.2026 (results + screenshots): `docs/verification/2026-09-27/`.
 
-```sh
-npm install --no-save --package-lock=false playwright
-npx playwright install chromium
-python3 -m http.server 8770 --bind 0.0.0.0
-# In another terminal:
-node tools/browser-smoke.cjs http://127.0.0.1:8770/dashboard.html artifacts/browser
-```
+## Manual checks and diagnostics
 
-If Linux Chromium reports missing OS dependencies, use the environment's browser tooling or install supported Playwright dependencies according to that environment's permissions. Do not claim browser tests passed if the browser cannot start.
+After UI changes also look at the page yourself: console errors, desktop and 375 px, drag-to-measure in both directions, the
+Gesamtrendite/Portfoliowert toggle, filters incl. empty selection. `window.PFApp` exposes state, update, sync, charts and
+model; e.g. `PFApp.sync.measureStart(a); PFApp.sync.measureEnd(b); PFApp.sync.flush();` with indices of the current range.
+A programmatically pinned measurement alone is not proof that dragging works. Hard-reload after generated data changes.
 
-Optional environment variable `BROWSER_EXECUTABLE` selects an installed compatible browser. On Windows it can point to Edge. The helper checks startup, period buttons, list combinations, simple card creation/deletion, page overflow and runtime errors at 1920/1400/375px, and saves screenshots/results. It is a smoke check, not the full acceptance checklist: manually verify realistic search/percentage editing, measurement pointer gestures, math and appearance.
-
-## Interactive and visual checks
-
-Use docs/ACCEPTANCE_CHECKLIST.md, including real pointer/keyboard actions. `window.PFApp` exposes state, update, sync, charts and model for diagnostics. A programmatically pinned measurement alone is not proof that dragging works.
-
-Useful diagnostic call: `PFApp.sync.measureStart(a); PFApp.sync.measureEnd(b); PFApp.sync.flush();`, where indices belong to the currently selected range. Use `#rangeTabs [data-preset="1T"]` for intraday. Hard-reload after generated data changes.
-
-Use desktop 1920 or 1903px, intermediate 1400px, mobile 375px. Capture cards, measurement boxes and lists, not just top-of-page. Record runtime errors and check horizontal overflow. Keep screenshots in ignored artifacts/ while testing; copy only relevant final evidence into docs if desired.
-
-`docs/history/windows-test-helpers/` retains original Edge/CDP helper code as historical evidence. It includes machine-specific paths and is not the cloud entry point. Some helpers collide on ports if run in parallel.
-
-## Packaging browser result — 27 September 2026
-
-The shipped helper passed on local headless Edge at 1920, 1400 and 375px. All four list-toggle combinations had no horizontal overflow; startup, 3M/6M, card creation/deletion and runtime-error checks passed. See BROWSER_SMOKE_RESULTS.json. This limited functional run does not replace the full visual/pointer/keyboard checklist after integration.
+`docs/history/windows-test-helpers/` keeps the old Windows helpers (Edge + DevTools protocol, machine-specific paths; they
+collide on ports when run in parallel) for local work.

@@ -32,8 +32,7 @@ Python 3 and Node.js required; no pip/npm packages for these checks. Browser acc
 1. `CLAUDE.md`, `AGENTS.md`, `HANDOFF.md`: instructions and current state.
 2. `SPEC.md`: data contract, engine formulas and UI behaviour.
 3. `UPDATE_PRICES.md`: data workflow (hook, skill, scripts).
-4. `docs/ACCEPTANCE_CHECKLIST.md`, `docs/verification/`: acceptance evidence of 27.09.2026; `CLOUD_HANDOFF.md`, `CLOUD_PROMPT.md`: the finished cloud task.
-5. `docs/agent-tasks/`, `docs/AGENT_REPORTS.md`, `docs/REQUIREMENTS_SOURCE.md`: full task specifications and evidence.
-6. `docs/references/`: user references and historical screenshots.
+4. `docs/VERIFICATION.md`, `docs/verification/`: browser acceptance tool and the evidence of 27.09.2026.
+5. `docs/references/`: the user's reference images of 27.09.2026; `docs/history/windows-test-helpers/`: the old Windows (Edge/CDP) test helpers, kept for local work.
 
-Original snapshot hashes of the migration are in `docs/SOURCE_SNAPSHOT.json`; original docs are archived in `docs/history/`.
+Older handoff, requirement and agent-report files were removed on 27.09.2026 (still in the git history).
