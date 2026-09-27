@@ -327,15 +327,172 @@
       .filter((h) => ctx.px[h[0]] && isNum(h[1]));
   }
 
+  // ------------------------------------------------------------------ transactions benchmark ("Depot-Historie", user 27.09.)
+  /*
+   * bench = { id, name, transactions: [{ date: 'YYYY-MM-DD', time: 'HH:MM[:SS]' (Europe/Berlin), isin, shares (signed: + buy,
+   * − sell), price }] } – the real depot replayed from its trades, securities only (no cash, fees, taxes, dividends).
+   * Daily: holdings q_i(t) after all trades of day t (a trade on a non-trading day or before the first data day counts at the
+   * next data day's close; trades after the last data day are left out); V_t = Σ q_i(t) · close_i[t] (an ISIN without prices:
+   * its last trade price so far, flat); flow F_t = Σ shares · price of the trades of day t (buys +, sells −);
+   * time-weighted return r_t = (V_t − F_t) / V_{t−1} − 1; r_t = 0 when V_{t−1} <= 0 or the growth factor would be <= 0
+   * (the index restarts from the new holdings); index I_0 = 1, I_t = I_{t−1} · (1 + r_t).
+   */
+  const txCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  const Q_EPS = 1e-9;                                                      // |quantity| below this = sold out (float noise)
+  function isTx(bench) { return !!bench && Array.isArray(bench.transactions); }
+  function resolveBench(ctx, bench) { return typeof bench === 'string' ? ctx.benchmarks.find((b) => b.id === bench) || null : bench || null; }
+  function hasPx(ctx, isin) { return !!ctx.px[isin] && ctx.firstIdx[isin] < ctx.n; }
+  function clockMin(t) { const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(String(t || '')); return m ? +m[1] * 60 + +m[2] + (m[3] ? +m[3] / 60 : 0) : 0; }
+  function growth(v, flow, prev) { const g = prev > 0 ? (v - flow) / prev : null; return isNum(g) && g > 0 ? g : 1; }
+
+  /** Valid trades, chronological (file order within the same time): [{ date, min, isin, q, px, di (first data day >= date, n = after the data), moved }] */
+  function txTrades(ctx, bench) {
+    const list = [];
+    bench.transactions.forEach((t, k) => {
+      const q = t ? Number(t.shares) : NaN, p = t ? Number(t.price) : NaN;
+      if (!t || typeof t.isin !== 'string' || !isNum(q) || q === 0 || !isNum(p) || p < 0 || dayNumber(t.date) === null) return;
+      list.push({ date: t.date.slice(0, 10), min: clockMin(t.time), k, isin: t.isin, q, px: p });
+    });
+    list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.min - b.min) || (a.k - b.k)));
+    let di = 0;
+    list.forEach((t) => {
+      while (di < ctx.n && ctx.dates[di] < t.date) di++;
+      t.di = di;
+      t.moved = di >= ctx.n || ctx.dates[di] !== t.date;
+    });
+    return list;
+  }
+
+  /**
+   * transactionHistory(ctx, bench|id) -> the daily replay of a transactions benchmark | null (cached per bench and price set):
+   * { trades (valid, chronological), value: V[k], flow: F[k], index: I[k], holdings: [{ISIN: qty} after the trades of day k],
+   *   unpriced: {ISIN: [daily indices held without prices]}, after (trades after the last data day) }
+   */
+  function transactionHistory(ctx, bench) {
+    bench = resolveBench(ctx, bench);
+    if (!isTx(bench) || ctx.n < 1) return null;
+    const hit = txCache && txCache.get(bench);
+    if (hit && hit.px === ctx.px && hit.dates === ctx.dates) return hit.h;
+    const trades = txTrades(ctx, bench), n = ctx.n, q = {}, lastPx = {};
+    const value = new Array(n), flow = new Array(n).fill(0), index = new Array(n), holdings = new Array(n), unpriced = {};
+    const vi = new Array(n), fi = new Array(n);                                 // per ISIN: value and flow of each day
+    let j = 0;
+    for (let k = 0; k < n; k++) {
+      const f = {};
+      for (; j < trades.length && trades[j].di === k; j++) {
+        const t = trades[j], x = (q[t.isin] || 0) + t.q;
+        q[t.isin] = Math.abs(x) < Q_EPS ? 0 : x;
+        lastPx[t.isin] = t.px;
+        flow[k] += t.q * t.px;
+        f[t.isin] = (f[t.isin] || 0) + t.q * t.px;
+      }
+      const h = {}, w = {};
+      let v = 0;
+      Object.keys(q).forEach((i) => {
+        if (!q[i]) return;
+        h[i] = q[i];
+        if (hasPx(ctx, i)) w[i] = q[i] * ctx.px[i][k];
+        else { w[i] = q[i] * lastPx[i]; (unpriced[i] = unpriced[i] || []).push(k); }
+        v += w[i];
+      });
+      value[k] = v;
+      holdings[k] = h;
+      vi[k] = w;
+      fi[k] = f;
+      index[k] = k ? index[k - 1] * growth(v, flow[k], value[k - 1]) : 1;
+    }
+    const out = { trades, value, flow, index, holdings, unpriced, after: trades.length - j, vi, fi };
+    if (txCache) txCache.set(bench, { px: ctx.px, dates: ctx.dates, h: out, F: null, fr: null });
+    return out;
+  }
+
+  /**
+   * The replay on a sub-daily frame (cached for the last frame): a trade takes effect at the grid slot nearest to its time
+   * (a tie goes to the later slot; a trade moved from a non-trading day: the session's first slot), its flow likewise; the
+   * TWR is chained over the frame's points. Point 0 without context = the daily close of `start` (all its trades done).
+   * -> { value, flow, index (I at point 0 = 1; null after the last point), missing (held priced ISINs without points) }
+   */
+  function txFrame(ctx, bench, F) {
+    const H = transactionHistory(ctx, bench);
+    if (!H) return null;
+    const hit = txCache && txCache.get(bench);
+    if (hit && hit.F === F) return hit.fr;
+    const S = F.S, mins = F.times.map(clockMin), m = F.m, last = Math.min(F.last, m - 1);
+    const slotOf = (t) => {
+      if (t.moved) return 0;
+      let best = 0;
+      for (let s = 1; s < S; s++) if (Math.abs(mins[s] - t.min) <= Math.abs(mins[best] - t.min)) best = s;
+      return best;
+    };
+    const key = H.trades.map((t) => t.di * (S + 1) + slotOf(t));               // non-decreasing: trades are chronological
+    const value = new Array(m).fill(null), flow = new Array(m).fill(0), index = new Array(m).fill(null);
+    const vi = new Array(m).fill(null), fi = new Array(m).fill(null);          // per ISIN: value and flow of each point
+    const q = {}, lastPx = {}, held = {};
+    let j = 0;
+    for (let p = 0; p <= last; p++) {
+      const kp = F.day[p] * (S + 1) + (F.slot[p] < 0 ? S : F.slot[p]);        // the daily close ranks after every slot of its day
+      const f = {}, w = {};
+      for (; j < key.length && key[j] <= kp; j++) {
+        const t = H.trades[j], x = (q[t.isin] || 0) + t.q;
+        q[t.isin] = Math.abs(x) < Q_EPS ? 0 : x;
+        lastPx[t.isin] = t.px;
+        if (p > 0) { flow[p] += t.q * t.px; f[t.isin] = (f[t.isin] || 0) + t.q * t.px; }   // trades up to point 0 = its holdings
+      }
+      let v = 0;
+      Object.keys(q).forEach((i) => {
+        if (!q[i]) return;
+        const px = hasPx(ctx, i) ? framePx(ctx, F, i, p) : lastPx[i];
+        if (hasPx(ctx, i)) held[i] = 1;
+        w[i] = q[i] * (isNum(px) ? px : 0);
+        v += w[i];
+      });
+      value[p] = v;
+      vi[p] = w;
+      fi[p] = f;
+      index[p] = p ? index[p - 1] * growth(v, flow[p], value[p - 1]) : 1;
+    }
+    const fr = { value, flow, index, vi, fi, missing: Object.keys(held).filter((i) => !frameSeen(F, i)) };
+    if (hit) { hit.F = F; hit.fr = fr; }
+    return fr;
+  }
+
+  /** Real € change of a transactions benchmark between a and b (daily indices or frame points) without its flows, unscaled. */
+  function txRealPl(ctx, bench, i, j, fr) {
+    const H = transactionHistory(ctx, bench);
+    if (!H) return null;
+    let V = H.value, flow = H.flow, lim = ctx.n - 1;
+    if (fr) {
+      const F = frameOf(ctx, fr), T = F ? txFrame(ctx, bench, F) : null;
+      if (!T) return null;
+      V = T.value; flow = T.flow; lim = Math.min(F.last, F.m - 1);
+    }
+    if (!Number.isInteger(i) || !Number.isInteger(j) || i < 0 || j > lim) return null;
+    let pl = V[j] - V[i];
+    for (let k = i + 1; k <= j; k++) pl -= flow[k];
+    return fin(pl);
+  }
+  /** V on the last data day of a transactions benchmark (> 0) | null */
+  function txNow(ctx, bench) { const H = transactionHistory(ctx, bench), v = H ? H.value[ctx.n - 1] : null; return v > 0 ? v : null; }
+
   /**
    * intradayBenchmark(ctx, bench|id, baseValue, frame) -> { id, name, value, pl, ret, base, missing, …frame info } | null
    * on the frame (omitted = 1T), normalized to baseValue at the daily close of the range start; a weights benchmark is bought
-   * at that close and held (the same purchase as benchmark(ctx, bench, start, end, base)).
+   * at that close and held (the same purchase as benchmark(ctx, bench, start, end, base)); a transactions benchmark follows
+   * its time-weighted index over the frame's points (txFrame).
    */
   function intradayBenchmark(ctx, bench, baseValue, frame) {
     if (typeof bench === 'string') bench = ctx.benchmarks.find((b) => b.id === bench);
     const F = frameOf(ctx, frame);
     if (!bench || !F) return null;
+    if (isTx(bench)) {
+      const T = txFrame(ctx, bench, F);
+      if (!T) return null;
+      const ref = F.ctxEnd >= 0 ? F.ctxEnd : 0, i0 = T.index[ref];               // the daily close of the range start
+      const b0 = isNum(baseValue) ? baseValue : (T.value[ref] > 0 ? T.value[ref] : 1);
+      const v = T.index.map((x) => (x === null ? null : b0 * x / i0));
+      return Object.assign(frameInfo(F), { id: bench.id, name: bench.name, value: v, pl: minusBase(v, b0), base: b0,
+        ret: relBase(v, b0), missing: T.missing });
+    }
     const q = benchQty(ctx, bench, F.start);
     if (!q) return null;
     let r0 = 0;
@@ -356,15 +513,25 @@
     return { px, prevClose: ctx.px[isin][F.start], has: frameSeen(F, isin), ctxEnd: F.ctxEnd, last: F.last };
   }
 
-  function benchHoldings(ctx, bench) {
+  /**
+   * Quantities [[isin, qty]] of a benchmark: a holdings benchmark as it is; a weights benchmark bought at daily index
+   * `buyAt` (as benchmark(…, buyAt, …) buys it) – without `buyAt` a weights benchmark has no quantities (null).
+   */
+  function benchHoldings(ctx, bench, buyAt) {
     if (typeof bench === 'string') bench = ctx.benchmarks.find((b) => b.id === bench);
-    if (!bench) return null;
+    if (!bench || isTx(bench)) return null;                                  // transactions: no constant holdings
+    if (bench.weights) return isNum(buyAt) && buyAt >= 0 && buyAt < ctx.n ? benchQty(ctx, bench, Math.round(buyAt)) : null;
     return Object.keys(bench.holdings || {}).map((i) => [i, Number(bench.holdings[i])]).filter((h) => ctx.px[h[0]] && isNum(h[1]));
   }
 
-  /** benchmarkValueNow(ctx, bench|id) -> Σ quantity × latest price (e.g. the real value of "Mein Depot" today) | null */
-  function benchmarkValueNow(ctx, bench) {
-    const h = benchHoldings(ctx, bench);
+  /**
+   * benchmarkValueNow(ctx, bench|id, buyAt) -> Σ quantity × latest price (e.g. the real value of "Mein Depot" today) | null.
+   * A weights benchmark needs its purchase index `buyAt` (daily index); its value then is per 1 unit invested there.
+   */
+  function benchmarkValueNow(ctx, bench, buyAt) {
+    const tb = resolveBench(ctx, bench);
+    if (isTx(tb)) return txNow(ctx, tb);                                     // Depot-Historie: V on the last day
+    const h = benchHoldings(ctx, bench, buyAt);
     if (!h || ctx.n < 1) return null;
     let t = 0;
     h.forEach((x) => { t += x[1] * ctx.px[x[0]][ctx.n - 1]; });
@@ -372,14 +539,55 @@
   }
 
   /**
-   * benchmarkRealPl(ctx, bench|id, a, b, {target, frame, intraday}) -> real € change of the benchmark's own holdings between
-   * a and b: daily indices into ctx, or points of a sub-daily frame (frame: gridFrame(…); intraday: true = the 1T frame),
-   * scaled by target / benchmarkValueNow (target omitted = the holdings as they are). Independent of the chart's
-   * normalization / Startwert.
+   * benchmarkWeights(ctx, bench|id, at) -> { ISIN: fraction } = each holding's share of the benchmark's value at daily
+   * index `at` (default: the last day), Σ = 1 | null (no value). For a holdings benchmark (e.g. "Mein Depot" today).
+   */
+  function benchmarkWeights(ctx, bench, at) {
+    const h = benchHoldings(ctx, bench);
+    if (!h || ctx.n < 1) return null;
+    const k = isNum(at) ? clamp(Math.round(at), 0, ctx.n - 1) : ctx.n - 1;
+    const v = h.map((x) => [x[0], x[1] * ctx.px[x[0]][k]]).filter((x) => x[1] > 0);
+    const tot = sum(v.map((x) => x[1]));
+    if (!(tot > 0)) return null;
+    const out = {};
+    v.forEach((x) => { out[x[0]] = (out[x[0]] || 0) + x[1] / tot; });
+    return out;
+  }
+
+  /**
+   * holdingsFromWeights(ctx, weights, at) -> { ISIN: qty } | null: the quantities whose value shares at daily index `at`
+   * (default: the last day) are `weights` (% or fractions, normalized like a benchmark card: only ISINs with prices and
+   * weights > 0), worth 1 in total there: q = w / Σw / px[at]. Held constant over the whole history like the positions
+   * ("Mein Depot" card with edited shares, user 27.09.); with benchmarkWeights(ctx, bench, at) it returns the benchmark's
+   * own quantities scaled to a value of 1 at `at`.
+   */
+  function holdingsFromWeights(ctx, weights, at) {
+    if (!weights || ctx.n < 1) return null;
+    const k = isNum(at) ? clamp(Math.round(at), 0, ctx.n - 1) : ctx.n - 1;
+    const q = benchQty(ctx, { weights }, k);
+    if (!q) return null;
+    const out = {};
+    q.forEach((h) => { out[h[0]] = h[1]; });
+    return out;
+  }
+
+  /**
+   * benchmarkRealPl(ctx, bench|id, a, b, {target, frame, intraday, buyAt}) -> real € change of the benchmark's own holdings
+   * between a and b: daily indices into ctx, or points of a sub-daily frame (frame: gridFrame(…); intraday: true = the 1T
+   * frame), scaled by target / benchmarkValueNow (target omitted = the holdings as they are): the change had the benchmark
+   * been worth `target` on the last day. A weights benchmark is bought at daily index `buyAt` (the range start) and held
+   * (without buyAt: null). Independent of the chart's normalization / Startwert.
+   * A transactions benchmark (Depot-Historie): V_b − V_a − Σ flows in (a, b] – the real gain without its purchases and
+   * sales –, scaled by target / V(last day) the same way.
    */
   function benchmarkRealPl(ctx, bench, a, b, opts) {
     opts = opts || {};
-    const h = benchHoldings(ctx, bench), now = benchmarkValueNow(ctx, bench);
+    const tb = resolveBench(ctx, bench);
+    if (isTx(tb)) {
+      const now = txNow(ctx, tb), pl = now === null ? null : txRealPl(ctx, tb, Math.min(a, b), Math.max(a, b), opts.frame || opts.intraday);
+      return pl === null ? null : fin(pl * (isNum(opts.target) && opts.target > 0 ? opts.target : now) / now);
+    }
+    const h = benchHoldings(ctx, bench, opts.buyAt), now = benchmarkValueNow(ctx, bench, opts.buyAt);
     if (!h || now === null) return null;
     const i = Math.min(a, b), j = Math.max(a, b), fr = opts.frame || opts.intraday;
     if (!isNum(i) || !isNum(j) || i < 0) return null;
@@ -396,6 +604,33 @@
     h.forEach((x) => { va += x[1] * price(x[0], i); vb += x[1] * price(x[0], j); });
     const target = isNum(opts.target) && opts.target > 0 ? opts.target : now;
     return fin((vb - va) * target / now);
+  }
+
+  /**
+   * benchmarkRealValue(ctx, bench|id, k, {target, buyAt}) -> the benchmark's holdings value at daily index k, scaled by
+   * target / benchmarkValueNow (target omitted = the holdings as they are): its value on day k had it been worth `target`
+   * on the last day (overview block, user 27.09.; unedited "Mein Depot" without target = the real depot value). A weights
+   * benchmark is bought at daily index `buyAt` (the period start) and held (without buyAt: null). The same scaling as
+   * benchmarkRealPl, so value(b) − value(a) = benchmarkRealPl(a, b) for a <= b. null for an index outside the data.
+   * A transactions benchmark: its real value V_k (securities only) × target / V(last day); there value(b) − value(a) =
+   * benchmarkRealPl(a, b) + the (scaled) flows in (a, b].
+   */
+  function benchmarkRealValue(ctx, bench, k, opts) {
+    opts = opts || {};
+    const tb = resolveBench(ctx, bench);
+    if (isTx(tb)) {
+      const H = transactionHistory(ctx, tb), now = txNow(ctx, tb), i = isNum(k) ? Math.round(k) : -1;
+      if (!H || now === null || i < 0 || i > ctx.n - 1) return null;
+      return fin(H.value[i] * (isNum(opts.target) && opts.target > 0 ? opts.target : now) / now);
+    }
+    const h = benchHoldings(ctx, bench, opts.buyAt), now = benchmarkValueNow(ctx, bench, opts.buyAt);
+    if (!h || now === null || !isNum(k)) return null;
+    const i = Math.round(k);
+    if (i < 0 || i > ctx.n - 1) return null;
+    let v = 0;
+    h.forEach((x) => { v += x[1] * ctx.px[x[0]][i]; });
+    const target = isNum(opts.target) && opts.target > 0 ? opts.target : now;
+    return fin(v * target / now);
   }
 
   /** intradayWindow(values, a, b) -> { pl, ret } between two points (order-independent) | null */
@@ -501,11 +736,23 @@
    * benchmark(ctx, bench|id, start, end, baseValue) -> series (+ id, name); value = baseValue * raw/raw[0]
    * bench = { holdings: {ISIN: qty} } (fixed quantities) or { weights: {ISIN: % or fraction} } (bought at `start`, then
    * held); null for a weights benchmark without any valid ISIN.
+   * bench = { transactions: [...] } (Depot-Historie): value = baseValue · I_k / I_start (time-weighted index, see
+   * transactionHistory; raw = I; baseValue omitted = its real value at start), so stats/relative/monthly see its TWR.
    */
   function benchmark(ctx, bench, start, end, baseValue) {
     if (typeof bench === 'string') bench = ctx.benchmarks.find((b) => b.id === bench);
     if (!bench || ctx.n < 1) return null;
     const [s, e] = normRange(ctx, start, end);
+    if (isTx(bench)) {
+      const H = transactionHistory(ctx, bench);
+      if (!H) return null;
+      const raw = H.index.slice(s, e + 1), i0 = raw[0];
+      const b0 = isNum(baseValue) ? baseValue : (H.value[s] > 0 ? H.value[s] : 1);
+      const ser = makeSeries(ctx, s, e, raw, b0 / i0, raw.map((x) => b0 * x / i0), b0);
+      ser.id = bench.id;
+      ser.name = bench.name;
+      return ser;
+    }
     const hold = benchQty(ctx, bench, s);
     if (!hold) return null;
     const m = e - s + 1, raw = new Array(m);
@@ -683,6 +930,90 @@
     if (last.endIdx < dataMonthEnd[last.month]) last.partial = true;        // series stops before the month's last data day
     else if (last.endIdx === lastData && (ctx.status[lastData] === 'intraday' || !isMonthComplete(ctx.dates[lastData]))) last.partial = true;
     return out;
+  }
+
+  /**
+   * assetsSpan(ctx, {selected, scale, a, b, frame}) -> one row per position (selected or not) for a measured span:
+   * a/b = daily indices (no frame) or points of a sub-daily frame (gridFrame; order-independent). Row = { isin, name,
+   * short, selected, p0, p1, ret = p1/p0 − 1, pl = shares · scale · (p1 − p0), contrib = pl / V0 (V0 = Σ shares · scale · p0
+   * of the selected positions; null if not selected) }. Prices follow the fill rules of the daily series / the frame.
+   */
+  function assetsSpan(ctx, opts) {
+    opts = opts || {};
+    const sel = selectionSet(ctx, opts.selected);
+    const F = opts.frame ? frameOf(ctx, opts.frame) : null;
+    const i = Math.min(opts.a, opts.b), j = Math.max(opts.a, opts.b);
+    const lim = F ? Math.min(F.last, F.m - 1) : ctx.n - 1;
+    if (!isNum(i) || !isNum(j) || i < 0 || j > lim) return [];
+    const price = F ? (isin, k) => framePx(ctx, F, isin, k) : (isin, k) => (ctx.px[isin] ? ctx.px[isin][k] : null);
+    const scale = isNum(opts.scale) && opts.scale > 0 ? opts.scale : 1;
+    const rows = ctx.positions.map((p) => {
+      const p0 = fin(price(p.isin, i)), p1 = fin(price(p.isin, j)), q = sharesOf(p) * scale;
+      const r = div(p1, p0);
+      return { isin: p.isin, name: p.name, short: p.short, selected: sel.has(p.isin), p0, p1,
+        ret: r === null ? null : r - 1, pl: p0 === null || p1 === null ? null : fin(q * (p1 - p0)), v0: p0 === null ? null : q * p0,
+        v1: p1 === null ? null : fin(q * p1) };
+    });
+    const V0 = sum(rows.filter((r) => r.selected && r.v0 !== null).map((r) => r.v0));
+    rows.forEach((r) => { r.contrib = r.selected ? div(r.pl, V0) : null; delete r.v0; });
+    return rows;
+  }
+
+  /**
+   * benchmarkSpan(ctx, bench|id, {a, b, frame, intraday, target, buyAt}) -> [{ isin, p0, p1, ret, pl }] | null: every holding
+   * of a holdings or weights benchmark over a span (a/b daily indices or points of `frame`; weights bought at `buyAt`),
+   * pl = qty · (p1 − p0) · target / benchmarkValueNow – so Σ pl = benchmarkRealPl with the same options. Rows in the
+   * benchmark's holdings order. Other benchmark kinds: null. (Messung panel: holdings of the picked benchmark.)
+   */
+  function benchmarkSpan(ctx, bench, opts) {
+    opts = opts || {};
+    if (typeof bench === 'string') bench = ctx.benchmarks.find((x) => x.id === bench);
+    if (isTx(bench)) return txSpan(ctx, bench, opts);
+    if (!bench || !(bench.holdings || bench.weights)) return null;
+    const h = benchHoldings(ctx, bench, opts.buyAt), now = benchmarkValueNow(ctx, bench, opts.buyAt);
+    const i = Math.min(opts.a, opts.b), j = Math.max(opts.a, opts.b), fr = opts.frame || opts.intraday;
+    if (!h || now === null || !isNum(i) || !isNum(j) || i < 0) return null;
+    let price;
+    if (fr) {
+      const F = frameOf(ctx, fr);
+      if (!F || j > Math.min(F.last, F.m - 1)) return null;
+      price = (isin, k) => framePx(ctx, F, isin, k);
+    } else {
+      if (j > ctx.n - 1) return null;
+      price = (isin, k) => ctx.px[isin][k];
+    }
+    const f = (isNum(opts.target) && opts.target > 0 ? opts.target : now) / now;
+    return h.map((x) => {
+      const p0 = fin(price(x[0], i)), p1 = fin(price(x[0], j)), r = div(p1, p0);
+      return { isin: x[0], p0, p1, ret: r === null ? null : r - 1, pl: p0 === null || p1 === null ? null : fin(x[1] * (p1 - p0) * f) };
+    });
+  }
+
+  /**
+   * benchmarkSpan for a transactions benchmark: every ISIN held or traded in (a, b]; pl = V_i(b) − V_i(a) − its net purchases
+   * in (a, b], ret = pl / (V_i(a) + its purchases in (a, b]) (gain on the capital put in), v1 = V_i(b); all scaled by
+   * target / V(last day) like "Echt" (Σ pl = benchmarkRealPl). Sorted: held at b by value, then closed positions by pl.
+   */
+  function txSpan(ctx, bench, opts) {
+    const H = transactionHistory(ctx, bench), now = txNow(ctx, bench), fr = opts.frame || opts.intraday;
+    const i = Math.min(opts.a, opts.b), j = Math.max(opts.a, opts.b);
+    if (!H || now === null || !Number.isInteger(i) || !Number.isInteger(j) || i < 0) return null;
+    let vi = H.vi, fi = H.fi, lim = ctx.n - 1;
+    if (fr) {
+      const F = frameOf(ctx, fr), T = F ? txFrame(ctx, bench, F) : null;
+      if (!T) return null;
+      vi = T.vi; fi = T.fi; lim = Math.min(F.last, F.m - 1);
+    }
+    if (j > lim || !vi[i] || !vi[j]) return null;
+    const sc = (isNum(opts.target) && opts.target > 0 ? opts.target : now) / now, acc = {};
+    const row = (isin) => acc[isin] || (acc[isin] = { isin, v0: vi[i][isin] || 0, v1: vi[j][isin] || 0, flow: 0, buys: 0 });
+    Object.keys(vi[i]).forEach(row);
+    Object.keys(vi[j]).forEach(row);
+    for (let k = i + 1; k <= j; k++) Object.keys(fi[k] || {}).forEach((isin) => { const r = row(isin), f = fi[k][isin]; r.flow += f; if (f > 0) r.buys += f; });
+    return Object.keys(acc).map((isin) => {
+      const r = acc[isin], pl = r.v1 - r.v0 - r.flow, cap = r.v0 + r.buys;
+      return { isin, p0: null, p1: null, ret: cap > 0 ? fin(pl / cap) : null, pl: fin(pl * sc), v1: fin(r.v1 * sc) };
+    }).sort((x, y) => (y.v1 > 0) - (x.v1 > 0) || (x.v1 > 0 ? y.v1 - x.v1 : y.pl - x.pl));
   }
 
   /** assets(ctx, {selected, start, end, scale}) -> one row per position (selected or not) */
@@ -1017,9 +1348,13 @@
     withShares, correlationMatrix, riskContribution,
     assetsTotal, chartInterval, gridCovers, gridFrame,
     intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
+    benchmarkRealValue, benchmarkWeights, holdingsFromWeights, transactionHistory,
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },
     util: { mean, sampleSd, sampleCov, quantile, returnsOf, minusMonths, daysBetween, dayNumber, isMonthComplete },
   };
+
+  PFEngine.assetsSpan = assetsSpan;         // measurement panel (3-column layout, user 27.09.)
+  PFEngine.benchmarkSpan = benchmarkSpan;
 
   if (typeof module !== 'undefined' && module.exports) module.exports = PFEngine; else root.PFEngine = PFEngine;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -143,13 +143,34 @@ async function depotBoxCheck(page) {
     // sub-daily chart (1T/1W/1M/custom): the real change is read on the same frame, rebuilt here from the fresh context
     const frame = intra ? E.gridFrame(ctx0, M.intra.key, M.R.start, M.R.end, { context: !!M.intra.frame.context, trim: M.R.end - M.R.start > 1 }) : null;
     const w = E.equalValueWindow(pv, dv, a, b), real = E.benchmarkRealPl(ctx0, 'my_depot', i, j, { frame, target });
-    const rows = Array.from(tip2.querySelectorAll('.tt-dv')).map((n) => n.textContent.trim());
-    const labels = tip2.textContent;
+    const box = tip2.querySelector('.tt-d');                  // one box per shown benchmark: Mein Depot's is the first
+    const rows = Array.from(box.querySelectorAll('.tt-dv')).map((n) => n.textContent.trim());
+    const labels = box.textContent;
     return {
       side: true, rows,
       expect: [F.pct(w.ret, { sign: true, dec: 2 }), F.eur(w.pl, { sign: true, dec: 2 }), F.eur(real, { sign: true, dec: 2 })],
       targetLabel: F.eur(target, { dec: 0 }).replace(/\s/g, ' '), hasTarget: labels.indexOf(F.eur(target, { dec: 0 })) >= 0
     };
+  });
+}
+
+/** Every side box (one per shown benchmark, user 27.09.) vs an independent engine computation for the pinned span. */
+async function benchBoxesCheck(page) {
+  return page.evaluate(() => {
+    const E = window.PFEngine, F = E.fmt, S = PFApp.state, M = PFApp.model(), pin = PFApp.sync.pinned() || PFApp.sync.measure;
+    const tip2 = document.querySelectorAll('#mainChart .pc-tip')[1];
+    if (!pin || !tip2 || tip2.hidden) return { boxes: 0 };
+    const a = Math.min(pin.a, pin.b), b = Math.max(pin.a, pin.b), ctx0 = E.prepare(window.PORTFOLIO_DATA);
+    const target = S.depotValue != null ? S.depotValue : E.benchmarkValueNow(ctx0, 'my_depot');
+    const intra = !!M.intra, list = intra ? M.intra.benches.map((o) => ({ x: o.x, v: o.s.value })) : M.selB.filter((x) => x.s).map((x) => ({ x, v: x.s.value }));
+    const frame = intra ? E.gridFrame(ctx0, M.intra.key, M.R.start, M.R.end, { context: !!M.intra.frame.context, trim: M.R.end - M.R.start > 1 }) : null;
+    const pv = intra ? M.intra.value : M.p.value, i = intra ? a : M.R.start + a, j = intra ? b : M.R.start + b;
+    const got = Array.from(tip2.querySelectorAll('.tt-d')).map((d) => ({ name: d.querySelector('.tt-dn').textContent.trim(), rows: Array.from(d.querySelectorAll('.tt-dv')).map((n) => n.textContent.trim()) }));
+    const want = list.map((o) => {
+      const w = E.equalValueWindow(pv, o.v, a, b), real = E.benchmarkRealPl(ctx0, o.x.b, i, j, { frame, target, buyAt: M.R.start });
+      return { name: o.x.name, rows: [F.pct(w.ret, { sign: true, dec: 2 }), F.eur(w.pl, { sign: true, dec: 2 }), F.eur(real, { sign: true, dec: 2 })] };
+    });
+    return { boxes: got.length, same: JSON.stringify(got) === JSON.stringify(want), got, want };
   });
 }
 
@@ -184,33 +205,69 @@ async function depotBoxCheck(page) {
 
     // ================================================================= benchmark cards
     const init = await page.evaluate(() => {
-      const cards = document.querySelectorAll('#benchCards .bb-card'), f = cards[0], e = cards[1], c = PFApp.state.cards[0];
-      return { n: cards.length, fixed: f.classList.contains('bb-card--fixed'), acts: Array.from(f.querySelectorAll('[data-act]')).map((b) => b.getAttribute('data-act')),
-        inputs: f.querySelectorAll('input').length, shown: PFApp.state.benchmarks.join(), legend: document.getElementById('legend').textContent,
+      const cards = document.querySelectorAll('#benchCards .bb-card'), f = cards[0], e = cards[1], c = PFApp.state.cards.filter((x) => !x.hold)[0];
+      const rows = f.querySelector('.bb-rows'), vis = (el) => !el.hidden && el.offsetParent !== null;
+      return { n: cards.length, hold: f.classList.contains('bb-card--hold'), acts: Array.from(f.querySelectorAll('[data-act]')).filter(vis).map((b) => b.getAttribute('data-act')),
+        pcts: Array.from(f.querySelectorAll('.bb-pct')).map((i) => i.value), total: f.querySelector('.bb-total').textContent, kind: f.querySelector('.bb-kind').textContent,
+        name: f.querySelector('.bb-fixname').textContent, nameInput: !!f.querySelector('.bb-name'), meta: f.querySelector('.bb-meta').textContent,
+        rowsScroll: rows.scrollHeight > rows.clientHeight + 20, rowsVisible: Math.round(rows.clientHeight / 38 * 10) / 10,
+        shown: PFApp.state.benchmarks.join(), legend: document.getElementById('legend').textContent,
+        labels: Array.from(document.querySelectorAll('.set-field label')).map((l) => l.textContent),
         energie: e && c ? { name: c.name, show: c.show, rows: c.rows.length, first: c.rows[0].q + ' ' + c.rows[0].pct, hidden: e.classList.contains('is-hidden'),
           total: e.querySelector('.bb-total').textContent, ret: e.querySelector('.bb-ret').textContent, del: !!e.querySelector('[data-act="del"]'),
           pctInputs: e.querySelectorAll('.bb-pct').length } : null };
     });
-    check('cards', 'initially the locked Mein Depot card (shown, no edit/delete controls) and the editable Energie preset card, hidden in the chart',
-      init.n === 2 && init.fixed && init.acts.join() === 'show' && init.inputs === 0 && init.shown === 'my_depot' && /Mein Depot/.test(init.legend) &&
+    // user, 27.09.: Mein Depot is editable like the other cards (rows = today's shares, default = the fetched allocation, reset
+    // instead of duplicate/delete); every card shows about 4 rows and scrolls; fields "Startwert (Yacht)" and "Benchmark (€)"
+    check('cards', 'initially Mein Depot (editable, 9 rows = today\'s shares, 100 %, shown, no delete, reset hidden) and the editable Energie preset card, hidden in the chart; ~4 rows visible, the rest scrolls',
+      init.n === 2 && init.hold && init.acts.join() === 'show,addrow,clear,delrow,delrow,delrow,delrow,delrow,delrow,delrow,delrow,delrow' &&
+      init.pcts.length === 9 && init.pcts[0] === '51,21' && init.total === '100 %' && init.kind === 'Echtes Depot' && init.name === 'Mein Depot' && !init.nameInput &&
+      /Echte Stückzahlen · Wert 298\.811,25/.test(init.meta) && init.rowsScroll && init.rowsVisible >= 3.7 && init.rowsVisible <= 4.3 &&
+      init.shown === 'my_depot' && /Mein Depot/.test(init.legend) && init.labels.slice(0, 2).join() === 'Startwert (Yacht),Benchmark (€)' &&
       !!init.energie && init.energie.name === 'Energie' && !init.energie.show && init.energie.hidden && init.energie.rows === 11 &&
       init.energie.first === 'GE Vernova 20' && init.energie.total === '100 %' && /%/.test(init.energie.ret) && init.energie.del && init.energie.pctInputs === 11 &&
       !/Energie/.test(init.legend), init);
-    const eid = await page.evaluate(() => PFApp.state.cards[0].id);
+    // edit Mein Depot: two shares changed -> "geändert", reset button, constant quantities from today's shares; reset -> the real depot again
+    const depotLine = () => page.evaluate(() => { const x = PFApp.model().byId.my_depot; return { ret: x.st.totalReturn, real: !!x.real, v: x.s.value.slice(-3) }; });
+    const md0 = await depotLine();
+    await page.locator('#benchCards .bb-card--hold .bb-pct').nth(0).click();
+    await selectAllAndType(page, '41,21');
+    await page.locator('#benchCards .bb-card--hold .bb-pct').nth(1).click();
+    await selectAllAndType(page, '43,96');
+    await settle(page);
+    const md1 = await depotLine();
+    const ed = await page.evaluate(() => {
+      const f = document.querySelector('#benchCards .bb-card--hold'), E = window.PFEngine, ctx = E.prepare(window.PORTFOLIO_DATA), M = PFApp.model(), x = M.byId.my_depot;
+      const w = {}; PFApp.state.cards[0].rows.forEach((r) => { if (r.isin) w[r.isin] = E.fmt.parseDE(r.pct); });
+      const ref = E.benchmark(ctx, { id: 'r', holdings: E.holdingsFromWeights(ctx, w) }, M.R.start, M.R.end, M.p.startValue);
+      return { kind: f.querySelector('.bb-kind').textContent, reset: !f.querySelector('[data-act="reset"]').hidden, meta: f.querySelector('.bb-meta').textContent,
+        total: f.querySelector('.bb-total').textContent, same: x.s.value.every((v, k) => Math.abs(v - ref.value[k]) < 1e-6),
+        target: E.benchmarkValueNow(ctx, 'my_depot'), placeholder: document.getElementById('depotValue').placeholder };
+    });
+    await page.click('#benchCards .bb-card--hold [data-act="reset"]');
+    await settle(page);
+    const md2 = await depotLine();
+    const back = await page.evaluate(() => { const f = document.querySelector('#benchCards .bb-card--hold'); return { kind: f.querySelector('.bb-kind').textContent,
+      reset: f.querySelector('[data-act="reset"]').hidden, first: f.querySelector('.bb-pct').value, focus: document.activeElement.getAttribute('data-act') }; });
+    check('cards', 'Mein Depot edited: "geändert", reset button, line = constant quantities from today\'s shares (engine), Benchmark (€) default stays the real depot value; reset restores the real depot exactly',
+      md0.real && !md1.real && Math.abs(md1.ret - md0.ret) > 1e-4 && ed.kind === 'Echtes Depot · geändert' && ed.reset && /Geändert/.test(ed.meta) && ed.total === '100 %' && ed.same &&
+      ed.placeholder === '298.811,25' && md2.real && md2.ret === md0.ret && JSON.stringify(md2.v) === JSON.stringify(md0.v) &&
+      back.kind === 'Echtes Depot' && back.reset && back.first === '51,21' && back.focus === 'show', { md0, md1, ed, md2, back });
+    const eid = await page.evaluate(() => PFApp.state.cards.filter((x) => !x.hold)[0].id);
     await page.click('#benchCards [data-card="' + eid + '"] [data-act="show"]');
     await settle(page);
     const eShown = await page.evaluate((id) => ({ shown: PFApp.state.benchmarks.join(), legend: /Energie/.test(document.getElementById('legend').textContent),
       lines: PFApp.charts.main.model.benches.length, table: Array.from(document.querySelectorAll('#benchTable tbody tr')).some((r) => /Energie/.test(r.textContent)) }), eid);
     await page.click('#benchCards [data-card="' + eid + '"] [data-act="del"]');
     await settle(page);
-    const eDel = await page.evaluate(() => ({ cards: PFApp.state.cards.length, dom: document.querySelectorAll('#benchCards .bb-card').length, shown: PFApp.state.benchmarks.join() }));
+    const eDel = await page.evaluate(() => ({ cards: PFApp.state.cards.filter((x) => !x.hold).length, dom: document.querySelectorAll('#benchCards .bb-card').length, shown: PFApp.state.benchmarks.join() }));
     check('cards', 'Energie preset: the eye draws it (legend, chart line, Benchmark-Vergleich), the trash deletes it like an own card',
       eShown.shown === 'my_depot,' + eid && eShown.legend && eShown.lines === 2 && eShown.table && eDel.cards === 0 && eDel.dom === 1 && eDel.shown === 'my_depot', { eShown, eDel });
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card--hold [data-act="show"]');
     await settle(page);
     const hidden = await page.evaluate(() => ({ shown: PFApp.state.benchmarks.length, legend: document.getElementById('legend').textContent,
       lines: PFApp.charts.main.model.benches.length, table: document.querySelectorAll('#benchTable tbody tr').length }));
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card--hold [data-act="show"]');
     await settle(page);
     const reshown = await page.evaluate(() => PFApp.state.benchmarks.join());
     check('cards', 'Mein Depot hide/show removes and restores it everywhere',
@@ -219,7 +276,7 @@ async function depotBoxCheck(page) {
     await page.click('#benchCards [data-act="new"]');
     await settle(page);
     const fresh = await page.evaluate(() => {
-      const a = document.activeElement, c = PFApp.state.cards[0], drop = document.getElementById('bbDrop');
+      const a = document.activeElement, c = PFApp.state.cards.filter((x) => !x.hold)[0], drop = document.getElementById('bbDrop');
       return { focusIns: a && a.classList.contains('bb-ins'), inCard: !!(a && a.closest('[data-card="' + c.id + '"]')), rows: c.rows.length,
         name: c.name, open: !drop.hidden, opts: drop.querySelectorAll('.bb-opt').length, all: window.PORTFOLIO_DATA.instruments.length, color: c.color };
     });
@@ -250,7 +307,7 @@ async function depotBoxCheck(page) {
     const hi2 = await page.evaluate(() => document.querySelector('#bbDrop .is-hi b').textContent);
     await page.keyboard.press('Enter');
     await settle(page);
-    const picked = await page.evaluate(() => { const c = PFApp.state.cards[0], a = document.activeElement; return { isin: c.rows[0].isin, q: c.rows[0].q, pctFocus: a.classList.contains('bb-pct'), closed: document.getElementById('bbDrop').hidden }; });
+    const picked = await page.evaluate(() => { const c = PFApp.state.cards.filter((x) => !x.hold)[0], a = document.activeElement; return { isin: c.rows[0].isin, q: c.rows[0].q, pctFocus: a.classList.contains('bb-pct'), closed: document.getElementById('bbDrop').hidden }; });
     check('cards', 'arrows wrap, Enter picks the highlighted entry and moves to the % field',
       nNas > 1 && wrapUp && picked.q === hi2 && picked.pctFocus && picked.closed, { nNas, wrapUp, hi2, picked });
     // Esc on a changed instrument field reverts it
@@ -258,7 +315,7 @@ async function depotBoxCheck(page) {
     await selectAllAndType(page, 'gold');
     await page.keyboard.press('Escape');
     await settle(page);
-    const esc1 = await page.evaluate(() => ({ val: document.activeElement.value, open: !document.getElementById('bbDrop').hidden, isin: PFApp.state.cards[0].rows[0].isin }));
+    const esc1 = await page.evaluate(() => ({ val: document.activeElement.value, open: !document.getElementById('bbDrop').hidden, isin: PFApp.state.cards.filter((x) => !x.hold)[0].rows[0].isin }));
     check('cards', 'Esc closes the list and reverts the typed text', esc1.val === picked.q && !esc1.open && esc1.isin === picked.isin, esc1);
     // Esc with nothing to revert reaches the page: clears a measurement
     await page.evaluate(() => { PFApp.sync.measureStart(10); PFApp.sync.measureEnd(40); PFApp.sync.flush(); });
@@ -270,26 +327,26 @@ async function depotBoxCheck(page) {
     await settle(page);
     await page.keyboard.press('Tab');
     await settle(page);
-    const tab1 = await page.evaluate(() => ({ q: PFApp.state.cards[0].rows[0].q, pct: document.activeElement.classList.contains('bb-pct') }));
+    const tab1 = await page.evaluate(() => ({ q: PFApp.state.cards.filter((x) => !x.hold)[0].rows[0].q, pct: document.activeElement.classList.contains('bb-pct') }));
     check('cards', 'Tab with changed text picks the highlighted entry and moves to the % field', tab1.q === 'Micron' && tab1.pct, tab1);
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Tab');
     await settle(page);
-    check('cards', 'Tab on an unchanged field keeps the instrument', await page.evaluate(() => PFApp.state.cards[0].rows[0].q === 'Micron'));
+    check('cards', 'Tab on an unchanged field keeps the instrument', await page.evaluate(() => PFApp.state.cards.filter((x) => !x.hold)[0].rows[0].q === 'Micron'));
     await page.keyboard.press('Shift+Tab');
     await selectAllAndType(page, 'us5949181045');
     await page.evaluate(() => document.activeElement.blur());
     await settle(page);
-    const blur1 = await page.evaluate(() => PFApp.state.cards[0].rows[0].q);
-    await page.locator('#benchCards .bb-card:not(.bb-card--fixed) .bb-ins').first().click();
+    const blur1 = await page.evaluate(() => PFApp.state.cards.filter((x) => !x.hold)[0].rows[0].q);
+    await page.locator('#benchCards .bb-card:not(.bb-card--hold) .bb-ins').first().click();
     await selectAllAndType(page, 'Micr');
     await page.evaluate(() => document.activeElement.blur());
     await settle(page);
-    const blur2 = await page.evaluate(() => PFApp.state.cards[0].rows[0].q);
+    const blur2 = await page.evaluate(() => PFApp.state.cards.filter((x) => !x.hold)[0].rows[0].q);
     check('cards', 'blur: exact ISIN picks it, partial text is reverted', blur1 === 'Microsoft' && blur2 === 'Microsoft', { blur1, blur2 });
 
     // percentages and validity
-    const cid = await page.evaluate(() => PFApp.state.cards[0].id);
+    const cid = await page.evaluate(() => PFApp.state.cards.filter((x) => !x.hold)[0].id);
     const pctSel = '#benchCards [data-card="' + cid + '"] .bb-pct';
     async function pctState(text) {
       await page.locator(pctSel).first().click();
@@ -384,7 +441,7 @@ async function depotBoxCheck(page) {
     check('cards', 'hover % reads the period series (bought at the range start)', bw.hoverHas, bw);
 
     // consumers agree for a custom card (hide Mein Depot so the card is the first shown benchmark)
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card--hold [data-act="show"]');
     await settle(page);
     const agree = await page.evaluate((id) => {
       const el = document.querySelector('[data-card="' + id + '"]'), card = el.querySelector('.bb-ret').textContent;
@@ -399,7 +456,7 @@ async function depotBoxCheck(page) {
     }, cid);
     check('cards', 'card return = legend = Benchmark-Vergleich = Kennzahlen bench line; monthly row, drawdown line + readout',
       agree.card === agree.legend && agree.card === agree.table && agree.kpi && agree.kpi.indexOf(agree.card) >= 0 && agree.month && agree.dd && agree.readout, agree);
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card--hold [data-act="show"]');
     await settle(page);
     // invalid card excluded everywhere
     await page.locator(pctSel).first().click();
@@ -441,11 +498,11 @@ async function depotBoxCheck(page) {
     // structure: duplicate, second card, colours, same instrument in another card, clear, delete row, delete card
     await page.click('#benchCards [data-card="' + cid + '"] [data-act="dup"]');
     await settle(page);
-    const dup = await page.evaluate(() => { const c = PFApp.state.cards; const a = document.activeElement; return { n: c.length, name: c[1].name, rows: c[1].rows.map((r) => [r.isin, r.pct]), colors: c.map((x) => x.color), focusName: a.classList.contains('bb-name') && a.value === c[1].name }; });
+    const dup = await page.evaluate(() => { const c = PFApp.state.cards.filter((x) => !x.hold); const a = document.activeElement; return { n: c.length, name: c[1].name, rows: c[1].rows.map((r) => [r.isin, r.pct]), colors: c.map((x) => x.color), focusName: a.classList.contains('bb-name') && a.value === c[1].name }; });
     check('cards', 'duplicate: "… (Kopie)", same rows, new colour, focus on its name',
       dup.n === 2 && dup.name === 'Benchmark 1 (Kopie)' && dup.rows.length === 2 && dup.colors[0] !== dup.colors[1] && dup.focusName, dup);
     const cid3 = await addCard(page, [['Microsoft', '100']]);
-    const three = await page.evaluate((id) => { const c = PFApp.state.cards; return { valid: PFApp.model().benches.some((b) => b.id === id), colors: c.map((x) => x.color) }; }, cid3);
+    const three = await page.evaluate((id) => { const c = PFApp.state.cards.filter((x) => !x.hold); return { valid: PFApp.model().benches.some((b) => b.id === id), colors: c.map((x) => x.color) }; }, cid3);
     const palette = ['#28ebcf', '#e78e78', '#f2f3f4'];
     check('cards', 'same instrument allowed in another card; colours distinct and away from accent/neg/white',
       three.valid && new Set(three.colors).size === three.colors.length && three.colors.every((c) => palette.indexOf(c.toLowerCase()) < 0), three);
@@ -454,7 +511,7 @@ async function depotBoxCheck(page) {
     const cleared = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, empty: !c.rows[0].isin && !c.rows[0].pct, focus: a.classList.contains('bb-ins') && !!a.closest('[data-card="' + id + '"]') }; }, cid3);
     check('cards', 'clear leaves one empty row and focuses its instrument field', cleared.rows === 1 && cleared.empty && cleared.focus, cleared);
     await page.keyboard.press('Escape');
-    const dupId = await page.evaluate(() => PFApp.state.cards[1].id);
+    const dupId = await page.evaluate(() => PFApp.state.cards.filter((x) => !x.hold)[1].id);
     await page.click('#benchCards [data-card="' + dupId + '"] [data-act="delrow"]');
     await settle(page);
     const delrow = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, focusInCard: !!a.closest('[data-card="' + id + '"]') }; }, dupId);
@@ -462,7 +519,7 @@ async function depotBoxCheck(page) {
     const freed = await page.evaluate((id) => PFApp.state.cards.find((x) => x.id === id).color, dupId);
     await page.click('#benchCards [data-card="' + dupId + '"] [data-act="del"]');
     await settle(page);
-    const del = await page.evaluate(() => { const a = document.activeElement; return { n: PFApp.state.cards.length, focus: a && (a.getAttribute('data-act') || a.className) }; });
+    const del = await page.evaluate(() => { const a = document.activeElement; return { n: PFApp.state.cards.filter((x) => !x.hold).length, focus: a && (a.getAttribute('data-act') || a.className) }; });
     const cid4 = await addCard(page, [['Gold', '100']]);
     const reuse = await page.evaluate((id) => PFApp.state.cards.find((x) => x.id === id).color, cid4);
     check('cards', 'delete card moves focus to a sensible control; freed colour is reused', del.n === 2 && !!del.focus && reuse === freed, { del, freed, reuse });
@@ -528,8 +585,11 @@ async function depotBoxCheck(page) {
     const m1 = await page.evaluate(() => ({ pin: PFApp.sync.pinned(), btn: !document.getElementById('applyMeasure').hidden }));
     const g1 = await chartGeo(page), d1 = await depotBoxCheck(page);
     check('measure', 'forward drag pins a measurement; "Zeitraum auf Auswahl setzen" shown', !!m1.pin && m1.pin.b > m1.pin.a && m1.btn, m1);
-    check('measure', 'Yacht box + Mein Depot box beside it, inside the chart, not covering lines/labels',
-      g1.tips.length === 2 && g1.hits.length === 0 && g1.inside && Math.abs(g1.tips[0].top - g1.tips[1].top) < 1, g1);
+    const bx1 = await benchBoxesCheck(page);
+    check('measure', 'Yacht box + one box per shown benchmark (3: beside it or under it), inside the chart, not covering lines/labels',
+      g1.tips.length === 2 && g1.hits.length === 0 && g1.inside && (Math.abs(g1.tips[0].top - g1.tips[1].top) < 1 || g1.tips[1].top >= g1.tips[0].bottom - 1), g1);
+    check('measure', 'user 27.09.: every shown benchmark has its box (Mein Depot, 2 cards) with % / Gleicher Wert / Echt matching the engine (cards bought at the period start)',
+      bx1.boxes === 3 && bx1.same, bx1);
     check('measure', 'Mein Depot box: % / Gleicher Wert / Echt match an independent engine computation, label shows the real depot value',
       d1.side && JSON.stringify(d1.rows) === JSON.stringify(d1.expect) && d1.hasTarget, d1);
     await shot(page, 'measure-ytd-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: 'pinned YTD measurement with the Mein Depot box' });
@@ -595,16 +655,17 @@ async function depotBoxCheck(page) {
     await page.keyboard.type('150000');
     await settle(page);
     const dv = await depotBoxCheck(page);
-    check('measure', '"Mein Depot (€)" updates the open box (label + Echt), no hard-coded 298.811',
+    check('measure', '"Benchmark (€)" updates the open box (label + Echt), no hard-coded 298.811',
       dv.side && dv.targetLabel === '150.000 €' && dv.hasTarget && JSON.stringify(dv.rows) === JSON.stringify(dv.expect), dv);
     await selectAllAndType(page, '');
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card--hold [data-act="show"]');
     await settle(page);
     await drag(page, 0.4, 0.9);
-    const noDepot = await chartGeo(page);
-    check('measure', 'Mein Depot hidden: only the Yacht box', noDepot.tips.length === 1 && noDepot.hits.length === 0, noDepot.tips);
+    const noDepot = await chartGeo(page), noDepotBx = await benchBoxesCheck(page);
+    check('measure', 'Mein Depot hidden: its box is gone, the 2 shown cards keep theirs (engine numbers), nothing covered',
+      noDepot.tips.length === 2 && noDepot.hits.length === 0 && noDepotBx.boxes === 2 && noDepotBx.same && !noDepotBx.got.some((g) => /Mein Depot/.test(g.name)), { tips: noDepot.tips, noDepotBx });
     await page.keyboard.press('Escape');
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card--hold [data-act="show"]');
     await settle(page);
     // 1T
     await page.click('#rangeTabs [data-preset="1T"]');
@@ -890,7 +951,7 @@ async function depotBoxCheck(page) {
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForFunction(() => window.PFApp && document.querySelector('#benchCards .bb-card'));
     if (page.fallbackFont) await fontsReady(page);
-    const reset = await page.evaluate(() => ({ cards: PFApp.state.cards.length, shown: PFApp.state.benchmarks.join(), dom: document.querySelectorAll('#benchCards .bb-card').length, assets: PFApp.state.showAssets, hold: PFApp.state.showHold }));
+    const reset = await page.evaluate(() => ({ cards: PFApp.state.cards.filter((x) => !x.hold).length, shown: PFApp.state.benchmarks.join(), dom: document.querySelectorAll('#benchCards .bb-card').length, assets: PFApp.state.showAssets, hold: PFApp.state.showHold }));
     check('cards', 'reload resets to Mein Depot + the hidden Energie preset (and list defaults); nothing persisted', reset.cards === 1 && reset.shown === 'my_depot' && reset.dom === 2 && !reset.assets && reset.hold, reset);
 
     // ================================================================= 1920 and 1400
@@ -936,17 +997,23 @@ async function depotBoxCheck(page) {
     await addCard(mp, [['MSCI World', '100']]);
     await addCard(mp, [['Nasdaq-100', '100']]);
     await mp.evaluate(() => window.scrollTo(0, 0));
+    // with 3 shown benchmarks the overview has two rows of benchmark blocks (27.09.), so the plot starts below the
+    // 812px window: scroll the chart under the sticky bar before hovering / dragging (the mouse must reach the plot)
+    const chartIntoView = (pg) => pg.evaluate(() => { const r = document.getElementById('mainChart').getBoundingClientRect(); window.scrollTo(0, Math.max(0, r.top + scrollY - 120)); });
     const sweepM = {};
     for (const [mode, preset] of [['value', 'YTD'], ['value', '1T'], ['value', '1W'], ['pl', '1M']]) {
       await mp.click('#rangeTabs [data-preset="' + preset + '"]');
       await mp.click('#modeToggle [data-mode="' + mode + '"]');
       await settle(mp);
-      sweepM[mode + '/' + preset] = await hoverSweep('m' + mode + preset);
+      await chartIntoView(mp);
+      const reach = await mp.evaluate(() => { const r = document.querySelector('#mainChart svg').getBoundingClientRect(), L = PFApp.charts.main.L; return r.top + (L.top + L.bottom) / 2 < innerHeight; });
+      sweepM[mode + '/' + preset] = reach ? await hoverSweep('m' + mode + preset) : ['plot out of view'];
     }
     check('mobile', 'hover box with 3 shown benchmarks covers nothing (YTD/1T/1W/1M)', Object.values(sweepM).every((b) => b.length === 0), sweepM);
     await mp.click('#modeToggle [data-mode="value"]');
     await mp.click('#rangeTabs [data-preset="1W"]');
     await settle(mp);
+    await chartIntoView(mp);
     await drag(mp, 0.75, 0.2);
     const gm1w = await chartGeo(mp), dm1w = await depotBoxCheck(mp);
     const m1w = await mp.evaluate(() => ({ x: Array.from(document.querySelectorAll('#mainChart .pc-xlabel')).map((n) => n.textContent), note: document.getElementById('chartIv').textContent,
@@ -980,7 +1047,7 @@ async function depotBoxCheck(page) {
     const tbox = await tp.locator('#mainChart svg').boundingBox();
     const TL = await tp.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
     const ty = tbox.y + (TL.top + TL.bottom) / 2, tx = (f) => tbox.x + TL.padL + TL.plotW * f;
-    const outside = await tp.locator('#hlMain').boundingBox();
+    const outside = await tp.locator('#hlSub').boundingBox();          // the headline figure (#hlMain) is gone (user, 27.09.)
     await tp.touchscreen.tap(tx(0.3), ty);
     await settle(tp);
     const tap1 = await tp.evaluate(() => PFApp.sync.following());
