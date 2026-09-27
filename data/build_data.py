@@ -1,0 +1,193 @@
+# Builds portfolio-data.js (window.PORTFOLIO_DATA) for dashboard.html from the CSVs in this folder.
+# Run after every data change:  python build_data.py   (exit code 1 = data error, nothing written)
+import csv, json, datetime, pathlib, sys, urllib.parse
+
+D = pathlib.Path(__file__).resolve().parent
+LOGO_DIR = 'company-logos'   # Scalable logos (128x128 PNG, file = <ISIN>.png), copied 1:1 from Downloads/scalable-company-pictures/images
+NOTES = [
+    'Rückrechnung mit den Stückzahlen vom 02.09.2026 (keine Transaktionshistorie): Werte vor dem Kaufdatum sind hypothetisch.',
+    'Kurse: Scalable-Tagesschluss (year_to_date, Mid, EUR, CONSOLIDATED). Tageskurse gibt es erst ab 02.01.2026.',
+    'Vor dem ersten Kurs eines Titels (z. B. SpaceX ab 12.06.2026) zählt er mit dem ersten Kurs, also ohne Wertänderung.',
+    'Reine Kursentwicklung in EUR: Dividenden ausschüttender Aktien sind nicht enthalten, Währungseffekte stecken in den EUR-Kursen.',
+]
+
+SPLIT_RATIOS = (2, 3, 4, 5, 8, 10, 20, 25, 50, 100, 200)   # day-to-day price ratios that usually mean a split
+
+def num(s):
+    return float(s) if s.strip() else None
+
+pos = list(csv.DictReader(open(D/'positions.csv', encoding='utf-8')))
+bench = list(csv.DictReader(open(D/'benchmarks.csv', encoding='utf-8')))   # presets (today only "Mein Depot")
+inst = {r['isin']: r for r in csv.DictReader(open(D/'instruments.csv', encoding='utf-8'))}   # names for the benchmark search
+with open(D/'prices_daily.csv', encoding='utf-8') as f:
+    rd = csv.reader(f)
+    head = next(rd)
+    rows = [r for r in rd if r]
+isins = head[3:]
+dates, status = [r[0] for r in rows], [r[1] for r in rows]
+errors, warns = [], []
+for a, b in zip(dates, dates[1:]):
+    if b <= a: errors.append(f'dates not ascending/unique: {a} -> {b}')
+for k, d in enumerate(dates):
+    if datetime.date.fromisoformat(d).weekday() > 4: errors.append(f'weekend date {d}')
+    if status[k] not in ('final', 'intraday'): errors.append(f'bad status {status[k]!r} on {d}')
+    if status[k] == 'intraday' and k != len(rows) - 1: errors.append(f'intraday row {d} is not the last row')
+prices = {}
+for j, i in enumerate(isins):
+    s = [num(r[3 + j]) if 3 + j < len(r) else None for r in rows]
+    prices[i] = s
+    last = None
+    for d, v in zip(dates, s):
+        if v is None: continue
+        if v <= 0: errors.append(f'{i} {d}: non-positive price {v}')
+        elif last:
+            q = max(v / last, last / v)
+            split = next((k for k in SPLIT_RATIOS if abs(q / k - 1) < 0.03), None)
+            if split or q > 1.3:
+                warns.append(f'{i} {d}: {last:g} -> {v:g} ({(v / last - 1) * 100:+.1f} %)'
+                             + (f' SPLIT 1:{split}? divide the history before {d} if confirmed' if split else ' check value'))
+        last = v
+    if last is None: errors.append(f'{i}: column has no prices')
+# holdings "ISIN:qty|…" = locked preset with fixed quantities (Mein Depot); "ISIN:20%|…" = weighting preset that starts as an
+# editable own card (hidden in the chart, reset on reload; user 27.09.2026), must total 100 %
+benchmarks, card_presets = [], []
+for b in bench:
+    parts = [x.split(':') for x in b['holdings'].split('|') if x.strip()]
+    pct = [v.strip().endswith('%') for _, v in parts]
+    if any(pct) and not all(pct): errors.append(f"benchmarks.csv {b['id']}: mix of quantities and percentages"); continue
+    if all(pct):
+        w = {i.strip(): float(v.strip().rstrip('%').replace(',', '.')) for i, v in parts}
+        if abs(sum(w.values()) - 100) > 0.01: errors.append(f"benchmarks.csv {b['id']}: weights total {sum(w.values()):g} %, not 100 %")
+        for i in w:
+            if i not in prices: errors.append(f"benchmarks.csv {b['id']}: {i} is not a price column")
+        card_presets.append({'id': b['id'], 'name': b['name'], 'description': b['description'], 'weights': w})
+    else:
+        benchmarks.append({'id': b['id'], 'name': b['name'], 'description': b['description'],
+                           'holdings': {i.strip(): float(v) for i, v in parts}})
+needed = [p['isin'] for p in pos] + [i for b in benchmarks for i in b['holdings']]
+for i in dict.fromkeys(needed):
+    if i not in prices: errors.append(f'missing price column {i}')
+needed += isins                          # every price column is an instrument the benchmark cards can pick
+for i in isins:
+    if i not in inst: warns.append(f'{i}: no row in instruments.csv (isin,name,short,type) - the benchmark search shows the ISIN only')
+if errors:
+    print('ERRORS (nothing written):', *errors, sep='\n  ')
+    sys.exit(1)
+
+def first_date(i):
+    return next(d for d, v in zip(dates, prices[i]) if v is not None)
+
+def logo_for(p):
+    # logos live in ../company-logos, named "<ISIN>.png"; an optional `logo` column overrides the file name
+    f = (p.get('logo') or '').strip() or p['isin'] + '.png'
+    if (D.parent / LOGO_DIR / f).is_file():
+        return LOGO_DIR + '/' + urllib.parse.quote(f)
+    warns.append(f"{p['isin']} {p['name']}: no logo {LOGO_DIR}/{f} (initials are shown instead)")
+    return None
+
+# ---- sub-daily grids (Europe/Berlin slots, Scalable trading hours 07:30-23:00), every collected session -> data.grids:
+#   m30  30-min slots 07:30 .. 23:00 (32) from intraday.csv (seven_days)             -> charts 1T, 1W, custom <= 7 days
+#   h2   2-hour slots 07:30 .. 21:30 + 23:00 (9) from intraday_2h.csv (one_month)    -> chart 1M, custom <= 31 days
+# The engine picks the chart interval per range from these grids (engine.chartInterval / gridFrame); 1T = the last session of m30.
+# A point goes to the nearest slot (the latest point wins a slot). On a final day the 23:00 slot of every instrument is its
+# daily close when no point landed there (one_month's last point of a day is ~21:30 Berlin, not the close), so every
+# finished session ends exactly on prices_daily.csv. Sessions need not be consecutive; they must be daily dates.
+TIMES = ['%02d:%02d' % divmod(m, 60) for m in range(7 * 60 + 30, 23 * 60 + 1, 30)]
+TIMES_2H = ['%02d:%02d' % divmod(m, 60) for m in range(7 * 60 + 30, 21 * 60 + 31, 120)] + ['23:00']
+SLOT_TOL = 15                                   # minutes a point may lie before the first / after the last slot
+
+def _last_sunday(y, m):
+    d = datetime.date(y, m, 31)
+    while d.weekday() != 6: d -= datetime.timedelta(1)
+    return d
+
+def to_berlin(t):
+    start = datetime.datetime.combine(_last_sunday(t.year, 3), datetime.time(1), datetime.timezone.utc)
+    end = datetime.datetime.combine(_last_sunday(t.year, 10), datetime.time(1), datetime.timezone.utc)
+    return (t + datetime.timedelta(hours=2 if start <= t < end else 1)).replace(tzinfo=None)
+
+def build_grid(fname, times, needed):
+    f = D/fname
+    if not f.exists(): return None
+    mins = [int(t[:2]) * 60 + int(t[3:]) for t in times]
+    grid, asof, outside, foreign = {}, None, 0, set()   # (isin, day) -> {slot: (ts, price)}
+    for r in csv.DictReader(open(f, encoding='utf-8')):
+        ts = datetime.datetime.fromisoformat(r['timestamp_utc'].replace('Z', '+00:00')).astimezone(datetime.timezone.utc)
+        b = to_berlin(ts)
+        m = b.hour * 60 + b.minute + b.second / 60        # 05:59:39 UTC -> 07:59.65 Berlin -> slot 08:00
+        if not mins[0] - SLOT_TOL <= m <= mins[-1] + SLOT_TOL: outside += 1; continue
+        slot = min(range(len(mins)), key=lambda k: (abs(mins[k] - m), -k))   # a tie goes to the later slot
+        day = b.date().isoformat()
+        if day not in dates: foreign.add(day); continue
+        cell = grid.setdefault((r['isin'], day), {})
+        if slot not in cell or ts > cell[slot][0]: cell[slot] = (ts, float(r['price']))
+        asof = max(asof or ts, ts)
+    days = sorted({d for _, d in grid})
+    if not days: return None
+    S, px, missing, off = len(times), {}, [], []
+    for i in needed:
+        arr = [None] * (len(days) * S)
+        for k, d in enumerate(days):
+            for s, (_, p) in grid.get((i, d), {}).items(): arr[k * S + s] = p
+            di = dates.index(d)
+            close = prices[i][di]
+            if status[di] == 'final' and close is not None:
+                if arr[k * S + S - 1] is None: arr[k * S + S - 1] = close
+                elif abs(arr[k * S + S - 1] / close - 1) > 0.005: off.append(f'{i} {d}')
+        if not any((i, d) in grid for d in days): missing.append(i)
+        if all(v is None for v in arr): continue
+        px[i] = arr
+    last_day, di = days[-1], dates.index(days[-1])
+    for i in px:                                        # the open session: latest point vs the daily price
+        last = next((v for v in reversed(px[i][-S:]) if v is not None), None)
+        daily = prices[i][di]
+        if status[di] != 'final' and last and daily and abs(last / daily - 1) > 0.005:
+            warns.append(f'{fname}: {i} last price {last:g} differs from the daily price {daily:g} on {last_day} by {(last / daily - 1) * 100:+.2f} %')
+    if missing: warns.append(f'{fname}: no points (flat at the previous close, then the close) for ' + ', '.join(missing))
+    if off: warns.append(f'{fname}: 23:00 point differs from the daily close by > 0.5 % on {len(off)} ISIN-days, e.g. ' + ', '.join(off[:4]))
+    if outside: warns.append(f'{fname}: {outside} points outside 07:30-23:00 Berlin ignored')
+    if foreign: warns.append(f'{fname}: points on dates without a daily row ignored: ' + ', '.join(sorted(foreign)))
+    return {'dates': days, 'times': times, 'asof_utc': asof.strftime('%Y-%m-%dT%H:%MZ'), 'px': px}
+
+def check_latest(g, fname, charts):
+    """The chart intervals need the latest session: warn when a grid does not end on the last daily date."""
+    if not g: warns.append(f'{fname}: no sessions - {charts} use daily prices'); return
+    if g['dates'][-1] != dates[-1]:
+        warns.append(f"{fname}: last session {g['dates'][-1]} is not the last daily date {dates[-1]} - {charts} step down to a coarser interval")
+
+positions = [{'isin': p['isin'], 'name': p['name'], 'short': p['short'], 'group': p['group'], 'shares': float(p['shares']),
+              'ref_date': p['ref_date'], 'ref_price': float(p['ref_price']), 'gv_ref': float(p['gv_ref']),
+              'cost_basis': float(p['cost_basis']), 'note': p['note'], 'first_date': first_date(p['isin']),
+              'logo': logo_for(p)} for p in pos]
+data = {
+    'meta': {'title': 'Yacht-Portfolio', 'currency': 'EUR',
+             'source': 'Scalable MCP get_security_chart year_to_date (Tagesschluss, Mid, EUR)',
+             'generated_at': datetime.datetime.now().astimezone().isoformat(timespec='seconds'),
+             'first_date': dates[0], 'last_date': dates[-1], 'last_status': status[-1],
+             'last_asof_utc': rows[-1][2], 'positions_ref_date': pos[0]['ref_date'], 'notes': NOTES},
+    'dates': dates,
+    'status': status,
+    'groups': list(dict.fromkeys(p['group'] for p in pos)),
+    'positions': positions,
+    'benchmarks': benchmarks,                 # locked presets (fixed quantities)
+    'card_presets': card_presets,             # weighting presets: start as editable own cards
+    # instruments for the benchmark cards: every price column, sorted by short name
+    'instruments': sorted(({'isin': i, 'name': (inst.get(i) or {}).get('name') or i, 'short': (inst.get(i) or {}).get('short') or i,
+                            'type': (inst.get(i) or {}).get('type') or '', 'position': i in {p['isin'] for p in pos}}
+                           for i in isins), key=lambda x: x['short'].casefold()),
+    'prices': {i: prices[i] for i in dict.fromkeys(needed)},
+    'grids': {'m30': build_grid('intraday.csv', TIMES, list(dict.fromkeys(needed))),
+              'h2': build_grid('intraday_2h.csv', TIMES_2H, list(dict.fromkeys(needed)))},
+}
+check_latest(data['grids']['m30'], 'intraday.csv', '1T/1W'); check_latest(data['grids']['h2'], 'intraday_2h.csv', '1M')
+js = ('// Generated by build_data.py from positions.csv, benchmarks.csv, instruments.csv, prices_daily.csv, intraday.csv, intraday_2h.csv. Do not edit by hand.\n'
+      '(typeof window !== "undefined" ? window : globalThis).PORTFOLIO_DATA = '
+      + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n')
+(D/'portfolio-data.js').write_text(js, encoding='utf-8')
+print(f'portfolio-data.js: {len(dates)} dates {dates[0]} -> {dates[-1]} ({status[-1]}), '
+      f'{len(positions)} positions, {len(benchmarks)} locked + {len(card_presets)} card presets, {len(data["instruments"])} instruments, {len(data["prices"])} price series'
+      + ''.join(f', {k} {len(g["dates"])} sessions {g["dates"][0]} .. {g["dates"][-1]} ({len(g["px"])} series, asof {g["asof_utc"]})'
+                if g else f', no {k}' for k, g in data['grids'].items()))
+gaps = {i: sum(v is None for v in prices[i]) for i in data['prices'] if any(v is None for v in prices[i])}
+if gaps: print('empty cells per ISIN:', gaps)
+if warns: print('WARNINGS:', *warns, sep='\n  ')

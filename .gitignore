@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+node_modules/
+.env
+.env.*
+*.pem
+*.key
+.claude/settings.local.json
+artifacts/
+.DS_Store
+Thumbs.db
+
+# temporary fetch files of the quote update (written by .claude/hooks/save-chart.cjs, deleted by update_prices.py --finish)
+data/incoming/

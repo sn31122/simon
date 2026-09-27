@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Portfolio-Dashboard</title>
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+  <!-- sticky bar like the app: full window width, stays on top while the page scrolls underneath (pills always reachable) -->
+  <div class="topbar" id="topBar">
+    <header class="hdr">
+      <div class="hdr-row">
+        <div class="hdr-id">
+          <h1 class="hdr-title" id="title">Portfolio</h1>
+          <p class="hdr-meta" id="metaLine"></p>
+        </div>
+        <div class="pills" id="holdPills" role="group" aria-label="Zeitraum (gilt für Wert, Chart und Positionsliste)">
+          <button type="button" class="pill" data-hp="1T">1T</button>
+          <button type="button" class="pill" data-hp="1W">1W</button>
+          <button type="button" class="pill" data-hp="1M">1M</button>
+          <button type="button" class="pill" data-hp="3M">3M</button>
+          <button type="button" class="pill" data-hp="6M">6M</button>
+          <button type="button" class="pill" data-hp="YTD">YTD</button>
+          <button type="button" class="pill" data-hp="1J">1J</button>
+          <button type="button" class="pill" data-hp="SK">Seit Kauf</button>
+        </div>
+      </div>
+      <div class="wi-banner" id="wiBanner" role="status" aria-live="polite" hidden>
+        <span class="wi-dot" aria-hidden="true"></span>
+        <span class="wi-text" id="wiText"></span>
+        <span class="wi-actions">
+          <button type="button" class="wi-link" id="wiReset" aria-label="Alle Änderungen zurücksetzen" title="Alle Änderungen zurücksetzen"><span class="wi-ico" aria-hidden="true">↺</span><span class="wi-lbl">Zurücksetzen</span></button>
+        </span>
+      </div>
+    </header>
+  </div>
+
+  <div class="page" id="app">
+
+    <!-- overview like the app: big value + change over the selected period -->
+    <section class="ov" aria-label="Portfoliowert">
+      <div class="ov-val">
+        <div class="bigval" id="holdTotal"></div>
+        <div class="hold-chg" id="holdChg"></div>
+      </div>
+    </section>
+
+    <div class="rangebar">
+      <div class="tabs" id="rangeTabs" role="group" aria-label="Zeitraum">
+        <button type="button" class="tab" data-preset="1T" title="1 Handelstag">1T</button>
+        <button type="button" class="tab" data-preset="1W" title="1 Woche">1W</button>
+        <button type="button" class="tab" data-preset="1M" title="1 Monat">1M</button>
+        <button type="button" class="tab" data-preset="3M" title="3 Monate">3M</button>
+        <button type="button" class="tab" data-preset="6M" title="6 Monate">6M</button>
+        <button type="button" class="tab" data-preset="YTD" title="seit Jahresbeginn">YTD</button>
+        <button type="button" class="tab" data-preset="1J" title="1 Jahr">1J</button>
+        <button type="button" class="tab" data-preset="MAX" title="gesamter Datenzeitraum">MAX</button>
+      </div>
+      <div class="seg" id="modeToggle" role="group" aria-label="Darstellung">
+        <button type="button" class="seg-btn" data-mode="pl">Gesamtrendite</button>
+        <button type="button" class="seg-btn" data-mode="value">Portfoliowert</button>
+      </div>
+    </div>
+
+    <section class="headline" aria-live="polite">
+      <div class="hl-main" id="hlMain"></div>
+      <div class="hl-sub" id="hlSub"></div>
+      <div class="legend" id="legend"></div>
+    </section>
+
+    <section class="chart-block" aria-label="Wertentwicklung">
+      <div id="mainChart"></div>
+      <div class="chart-foot">
+        <button type="button" class="btn btn--accent" id="applyMeasure" hidden>Zeitraum auf Auswahl setzen</button>
+        <span class="chart-help" id="chartHelp"></span>
+        <span class="chart-iv" id="chartIv"></span>
+      </div>
+    </section>
+
+    <div class="settings">
+      <div class="daterange" id="dateRange">
+        <div class="dr-field">
+          <span class="dr-lbl" id="fromLbl">Von</span>
+          <div class="dfield" id="dateFrom" role="group" aria-labelledby="fromLbl">
+            <input class="dseg dseg--2" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="TT" aria-label="Von: Tag"><span class="dsep">.</span><input class="dseg dseg--2" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="MM" aria-label="Von: Monat"><span class="dsep">.</span><input class="dseg dseg--4" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="JJJJ" aria-label="Von: Jahr">
+            <button type="button" class="dcal" tabindex="-1" title="Kalender" aria-label="Kalender öffnen"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.4"/></svg></button>
+            <input type="date" class="dnative" tabindex="-1" aria-hidden="true">
+          </div>
+        </div>
+        <div class="dr-field">
+          <span class="dr-lbl" id="toLbl">Bis</span>
+          <div class="dfield" id="dateTo" role="group" aria-labelledby="toLbl">
+            <input class="dseg dseg--2" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="TT" aria-label="Bis: Tag"><span class="dsep">.</span><input class="dseg dseg--2" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="MM" aria-label="Bis: Monat"><span class="dsep">.</span><input class="dseg dseg--4" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="JJJJ" aria-label="Bis: Jahr">
+            <button type="button" class="dcal" tabindex="-1" title="Kalender" aria-label="Kalender öffnen"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.4"/></svg></button>
+            <input type="date" class="dnative" tabindex="-1" aria-hidden="true">
+          </div>
+        </div>
+        <span class="dr-hint" id="rangeHint" role="status" aria-live="polite"></span>
+      </div>
+      <div class="set-field">
+        <label for="startValue">Startwert (€)</label>
+        <span class="inp-wrap">
+          <input type="text" id="startValue" inputmode="decimal" autocomplete="off" spellcheck="false"
+                 title="Portfolio auf diesen Startwert skalieren (leer = tatsächlicher Wert)">
+          <button type="button" class="inp-reset" id="startReset" title="Startwert zurücksetzen" aria-label="Startwert zurücksetzen">×</button>
+        </span>
+        <span class="set-hint" id="scaleHint" aria-live="polite"></span>
+      </div>
+      <div class="set-field">
+        <label for="depotValue">Mein Depot (€)</label>
+        <span class="inp-wrap">
+          <input type="text" id="depotValue" inputmode="decimal" autocomplete="off" spellcheck="false"
+                 title="Aktueller Wert deines echten Depots (Positionen ohne Guthaben). Nur für den „echt“-Betrag in der Messung: echte €-Veränderung von „Mein Depot“ = Kursveränderung deiner Stückzahlen × (dieser Wert ÷ berechneter Depotwert heute). Chart und Startwert bleiben unverändert. Leer = berechneter Wert.">
+          <button type="button" class="inp-reset" id="depotReset" title="Depotwert zurücksetzen" aria-label="Depotwert zurücksetzen">×</button>
+        </span>
+        <span class="set-hint is-error" id="depotHint" aria-live="polite"></span>
+      </div>
+      <div class="set-field">
+        <label for="rfInput">Risikofreier Zins</label>
+        <span class="inp-wrap inp-wrap--unit">
+          <input type="text" id="rfInput" inputmode="decimal" autocomplete="off" spellcheck="false" value="2,0"
+                 title="Jahreszins für Sharpe, Sortino und Alpha">
+          <span class="inp-unit">%</span>
+        </span>
+        <span class="set-hint is-error" id="rfHint" aria-live="polite"></span>
+      </div>
+      <!-- benchmark builder (user, 27.09., like testfolio.io): locked "Mein Depot" card + own cards (instrument + %),
+           rendered by renderBenchCards() in app.js; the instrument search list is an overlay on <body> (#bbDrop) -->
+      <div class="set-bench">
+        <div class="bb-head">
+          <span class="set-label" id="benchLabel">Benchmarks</span>
+          <span class="bb-note">Anteile werden am ersten Tag des Zeitraums gekauft und gehalten (kein Rebalancing) · nur Karten mit 100 % zählen · nicht gespeichert</span>
+        </div>
+        <div class="bb-grid" id="benchCards" role="group" aria-labelledby="benchLabel"></div>
+      </div>
+    </div>
+
+    <!-- list section (user, 27.09.): two independent on/off toggles, Portfolio on / Einzelwerte off by default (not persisted).
+         Both on: side by side (Portfolio left without its sparkline column, Einzelwerte right at its natural width, together
+         sticking out of the 820px column) or stacked when the window is too narrow – decided in layoutLists() in app.js -->
+    <section class="block lists" id="lists" aria-label="Positionslisten">
+      <div class="lists-bar">
+        <div class="ltogs" id="listToggles" role="group" aria-label="Listen ein- und ausblenden">
+          <button type="button" class="ltog is-on" data-list="hold" aria-pressed="true" aria-controls="holdBlock" title="Positionsliste „Portfolio“ ein-/ausblenden"><i aria-hidden="true"></i>Portfolio</button>
+          <button type="button" class="ltog" data-list="assets" aria-pressed="false" aria-controls="assetBlock" title="Tabelle „Einzelwerte“ (Auswahl, Stück, Kennzahlen je Position) ein-/ausblenden"><i aria-hidden="true"></i>Einzelwerte</button>
+        </div>
+        <span class="lists-hint" id="listsHint" hidden>Beide Listen ausgeblendet – „Portfolio“ oder „Einzelwerte“ einschalten.</span>
+      </div>
+      <div class="lists-row" id="listsRow">
+        <section class="holdings" id="holdBlock" aria-labelledby="holdTitle">
+          <div class="hold-head">
+            <div class="hold-left">
+              <div class="hold-titlebar">
+                <h2 id="holdTitle">Portfolio</h2>
+                <div class="menu-wrap" id="holdMenuWrap">
+                  <button type="button" class="kebab" id="holdSortBtn" aria-haspopup="menu" aria-expanded="false"
+                          aria-controls="holdSortMenu" title="Sortieren" aria-label="Sortierung der Positionsliste">
+                    <span class="kebab-dots" aria-hidden="true"></span>
+                  </button>
+                  <div class="menu" id="holdSortMenu" role="menu" aria-labelledby="holdSortBtn" hidden>
+                    <div class="menu-head" role="presentation">Sortieren nach</div>
+                    <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-hsort="name-asc" tabindex="-1">Name (A-Z)</button>
+                    <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-hsort="name-desc" tabindex="-1">Name (Z-A)</button>
+                    <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-hsort="ret-asc" tabindex="-1">Niedrigste Rendite</button>
+                    <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-hsort="ret-desc" tabindex="-1">Höchste Rendite</button>
+                    <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-hsort="value-asc" tabindex="-1">Kleinste Position</button>
+                    <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-hsort="value-desc" tabindex="-1">Größte Position</button>
+                  </div>
+                </div>
+              </div>
+              <div class="hold-subval" id="holdSub"></div>
+            </div>
+          </div>
+          <div class="hold-list" id="holdList"></div>
+        </section>
+
+        <section class="assets" id="assetBlock" aria-labelledby="assetTitle" hidden>
+          <div class="block-head">
+            <h2 id="assetTitle">Einzelwerte</h2>
+            <div class="block-tools">
+              <span class="block-sub" id="assetSub"></span>
+              <button type="button" class="btn" id="selAll">Alle</button>
+              <button type="button" class="btn" id="selNone">Keine</button>
+            </div>
+          </div>
+          <div class="card card--table card--wide"><div class="tscroll"><table class="tbl tbl--assets" id="assetTable"></table></div></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2>Benchmark-Vergleich</h2>
+        <span class="block-sub" id="benchSub"></span>
+      </div>
+      <div class="card card--table"><div class="tscroll"><table class="tbl tbl--bench" id="benchTable"></table></div></div>
+    </section>
+
+    <section class="block" aria-label="Drawdown">
+      <div class="block-head">
+        <h2>Drawdown</h2>
+        <div class="dd-readout" id="ddReadout"></div>
+      </div>
+      <div id="ddChart"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2>Monatsrenditen</h2>
+        <span class="block-sub">gesamter Datenzeitraum · aktuelle Positionsauswahl</span>
+      </div>
+      <div class="card card--table"><div class="tscroll"><table class="tbl tbl--months" id="monthTable"></table></div></div>
+      <p class="footnote" id="monthNote">* Teilmonat</p>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2>Kennzahlen</h2>
+        <span class="block-sub" id="kpiSub"></span>
+      </div>
+      <div class="kpis" id="kpis"></div>
+    </section>
+
+    <section class="block risk" id="riskBlock" aria-labelledby="riskTitle">
+      <div class="block-head">
+        <h2 id="riskTitle">Risiko &amp; Korrelation</h2>
+        <span class="block-sub" id="riskSub"></span>
+      </div>
+      <div class="risk-kpis" id="riskKpis"></div>
+      <div class="card risk-card">
+        <div class="card-head">
+          <h3>Gewicht vs. Risikoanteil</h3>
+          <span class="rb-legend"><i class="rb-key rb-key--w"></i>Gewicht <i class="rb-key rb-key--r"></i>Risikoanteil</span>
+        </div>
+        <div class="rbars" id="riskBars"></div>
+      </div>
+      <div class="card heat-card">
+        <div class="card-head">
+          <h3>Korrelation der Tagesrenditen</h3>
+          <span class="hm-avg" id="heatAvg"></span>
+        </div>
+        <div class="heat-scroll" id="heatScroll"><div id="heatmap"></div></div>
+        <div class="hm-legend" aria-hidden="true"><span>−1</span><i class="hm-grad"></i><span>+1</span><span class="hm-legend-note">Sortiert nach aktuellem Gewicht · Tage = gemeinsame Handelstage mit echten Kursen</span></div>
+      </div>
+    </section>
+
+    <footer class="notes" id="notes"></footer>
+  </div>
+
+  <script src="data/portfolio-data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
