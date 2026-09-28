@@ -767,3 +767,6 @@ th.is-sorted { color: var(--text); }
 @media (max-width: 380px) {
   .ltog { height: 28px; padding: 0 11px 0 9px; font-size: 13px; }
 }
+/* "nur Benchmarks" beside the Startwert field (user 28.09.): the list-toggle pill, smaller */
+.ltog.ltog--sm { height: 26px; padding: 0 10px 0 9px; gap: 6px; font-size: 12px; }
+.set-field--sv { flex-wrap: wrap; row-gap: 6px; }
