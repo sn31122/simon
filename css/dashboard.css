@@ -535,6 +535,10 @@ th.is-sorted { color: var(--text); }
 /* overview like the app: 259.783⁴⁴€ + "+19.051,71 € Monat ⓘ" left, sparkline right */
 .ov { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; margin-top: 38px; }
 .ov-val { flex: 1 1 auto; min-width: 0; }
+/* two blocks (user 29.09.): the real Yacht left, the real Scalable depot right of it; a small label above each */
+.ov-val--depot { flex: 0 1 auto; }
+.ov-lbl { margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.ov-lbl .weak { margin-left: 4px; font-weight: 500; }
 .bigval { display: flex; align-items: flex-start; color: #fff; line-height: 1; }
 .bv-int { font-size: 54px; font-weight: 700; letter-spacing: -.02em; }
 .bv-frac { display: inline-flex; flex-direction: column; align-items: flex-start; margin: 2px 0 0 4px; }
@@ -785,24 +789,31 @@ th.is-sorted { color: var(--text); }
 @media (max-width: 380px) {
   .ltog { height: 28px; padding: 0 11px 0 9px; font-size: 13px; }
 }
-/* "nur Benchmarks" beside the Startwert field (user 28.09.): the list-toggle pill, smaller */
-.ltog.ltog--sm { height: 26px; padding: 0 10px 0 9px; gap: 6px; font-size: 12px; }
+/* Startwert buttons (user 29.09.): "Yacht" = field empty, "Mein Depot" = the real depot's current value */
+.sv-btns { display: inline-flex; gap: 4px; }
+.sv-btn {
+  height: 26px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: none;
+  color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.sv-btn:hover { color: var(--text); border-color: #353a40; }
+.sv-btn.is-on { border-color: var(--accent); color: var(--accent); }
 .set-field--sv { flex-wrap: wrap; row-gap: 6px; }
-/* "Im Zeitraum" panel (user 28.09.): above the chart by default; .cmp-side (set by app.js when the window has room)
+/* "Statistik" panel (user 28./29.09.; was "Im Zeitraum"): above the chart by default; .cmp-side (set by app.js when the window has room)
    puts it into the free space right of the page column, top-aligned with the chart (user 28.09.) */
 .cmp { margin-bottom: 12px; }
 .cmp-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px 2px; }
 .cmp-t { color: #7d848a; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
 .cmp-sub { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .cmp .tscroll { border-radius: 0 0 var(--radius) var(--radius); }
-.tbl--cmp { font-size: 12px; }
-.tbl--cmp th, .tbl--cmp td { padding: 6px 6px; }
-.tbl--cmp th:first-child, .tbl--cmp td:first-child { padding-left: 10px; }
-.tbl--cmp th:last-child, .tbl--cmp td:last-child { padding-right: 10px; }
+.tbl--cmp { font-size: 11.5px; }
+.tbl--cmp th, .tbl--cmp td { padding: 6px 5px; }
+.tbl--cmp th:first-child, .tbl--cmp td:first-child { padding-left: 9px; }
+.tbl--cmp th:last-child, .tbl--cmp td:last-child { padding-right: 9px; }
 .tbl--cmp th { font-size: 11px; }
-.tbl--cmp td { vertical-align: top; }
-.cmp-nm { display: inline-block; max-width: 88px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
-.cmp-val { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.tbl--cmp .row-name { gap: 6px; }
+.tbl--cmp .row-name i { width: 10px; }
+.cmp-nm { display: inline-block; max-width: var(--cmp-nm, 64px); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.tbl--cmp td.cmp-val { color: var(--text); font-weight: 600; }
 .chart-block.cmp-side .cmp { position: absolute; top: 0; left: calc(100% + 16px); width: max-content; margin: 0; }
 /* Monatsrenditen over several years (history, user 28.09.): one block per year, year label in front of its first row */
 .my-year { display: inline-block; width: 36px; color: var(--text); font-weight: 700; }

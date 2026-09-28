@@ -1,0 +1,2 @@
+asof_utc,securities_value,total_value,gv_since_buy,source
+2026-09-28T21:00:00Z,293120.3,256679.9,58136.21,"Scalable get_portfolio_holdings + get_portfolio_overview (valuation.securities / valuation.total / performance MAX simpleAbsoluteReturn), read 29.09.2026 on user request"

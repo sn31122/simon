@@ -366,6 +366,26 @@
     return Object.keys(bench.holdings || {}).map((i) => [i, Number(bench.holdings[i])]).filter((h) => ctx.px[h[0]] && isNum(h[1]));
   }
 
+  /**
+   * depotNow(ctx) -> the user's real Scalable depot (data.depot, user 29.09.): { value = Σ shares × latest price, costBasis
+   * (= Scalable securities value − G/V seit Kauf at the snapshot), gl = value − costBasis, glPct, date, asof, refValue,
+   * refTotal, refGl } | null without depot data or with an ISIN without prices.
+   */
+  function depotNow(ctx) {
+    const d = ctx && ctx.data && ctx.data.depot;
+    if (!d || !d.holdings || !ctx.n) return null;
+    const e = ctx.n - 1;
+    let v = 0;
+    for (const i of Object.keys(d.holdings)) {
+      const q = Number(d.holdings[i]), px = ctx.px[i];
+      if (!px || !isNum(q)) return null;
+      v += q * px[e];
+    }
+    const cb = isNum(d.cost_basis) ? d.cost_basis : null;
+    return { value: v, costBasis: cb, gl: cb === null ? null : v - cb, glPct: cb > 0 ? (v - cb) / cb : null, date: ctx.dates[e],
+      asof: d.asof_utc || null, refValue: fin(d.securities_value), refTotal: fin(d.total_value), refGl: fin(d.gv_since_buy) };
+  }
+
   /** benchmarkValueNow(ctx, bench|id) -> Σ quantity × latest price (e.g. the real value of "Mein Depot" today) | null */
   function benchmarkValueNow(ctx, bench) {
     const h = benchHoldings(ctx, bench);
@@ -1064,7 +1084,7 @@
     version: '1.1.0',
     PRESETS, ANN, DEFAULT_RF,
     prepare, presetRange, customRange, portfolio, benchmark, drawdown, stats, relative, monthly, assets, groupSummary,
-    withShares, correlationMatrix, riskContribution, coverageStart, notQuoted,
+    withShares, correlationMatrix, riskContribution, coverageStart, notQuoted, depotNow,
     assetsTotal, chartInterval, gridCovers, gridFrame,
     intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },

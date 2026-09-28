@@ -49,7 +49,6 @@
   // ------------------------------------------------------------------ state
   var state = {
     preset: 'YTD', custom: null, mode: 'value', startValue: null, rf: 0.02,
-    benchOnly: false,                          // toggle "nur Benchmarks" (user 28.09.): Startwert sizes only the benchmarks, the Yacht keeps its real value
     fixedOn: {},                               // locked cards (benchmarks.csv "ISIN:qty") shown in the chart; none since 28.09.
     cards: [],                                 // own benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]}; not persisted
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
@@ -222,13 +221,13 @@
     // history back to ~2016: before the first quote a title counts flat, so a long range starts at the coverage date
     var cov = sel.size && E.coverageStart ? E.coverageStart(ctx, { selected: sel, share: COVER }) : 0, cover = null;
     if (R.start < cov && R.end - cov >= 1) { cover = { from: R.start, to: cov }; R = { start: cov, end: R.end }; }
-    // Startwert: scales the Yacht and the benchmarks start at the Yacht's (scaled) start value; with "nur Benchmarks"
-    // the Yacht keeps its real value and only the benchmarks start at the Startwert (their lines in true proportion)
-    var benchSV = state.benchOnly ? state.startValue : null, pSV = state.benchOnly ? null : state.startValue;
+    // Startwert (user 29.09.): empty = every line starts at the Yacht's value at the range start; a value = every line
+    // (Yacht and benchmarks) starts there (buttons "Yacht" / "Mein Depot" next to the field)
+    var pSV = state.startValue;
     var p = sel.size ? E.portfolio(ctx, { selected: sel, start: R.start, end: R.end, startValue: pSV }) : null;
     var ps = p ? E.stats(p, { rf: rf }) : null;
     var pdd = p ? E.drawdown(p.value) : null;
-    var base = benchSV != null ? benchSV : p && isNum(p.startValue) && p.startValue > 0 ? p.startValue : 1;
+    var base = p && isNum(p.startValue) && p.startValue > 0 ? p.startValue : 1;
     // every locked benchmark + every valid card (their returns show on the cards); selB = the ones shown in the chart
     var benches = benchDefs().map(function (d) {
       var s = E.benchmark(ctx, d.b, R.start, R.end, base);
@@ -267,7 +266,7 @@
       if (intra) {
         intra.oneDay = fr.sessions.length === 1;          // labels "Gestern, 20:00" / axis "Gestern · 15:15 · Heute …"
         intra.oneT = ivp === '1T';
-        intra.benches = selB.map(function (x) { return { x: x, s: E.intradayBenchmark(ctx, x.b, benchSV != null ? benchSV : intra.base, fr) }; })
+        intra.benches = selB.map(function (x) { return { x: x, s: E.intradayBenchmark(ctx, x.b, intra.base, fr) }; })
           .filter(function (o) { return o.s; });
         intra.benches.forEach(function (o) { o.dd = E.drawdown(o.s.value.slice(0, intra.last + 1)); });
         intra.orig = ctx !== ctx0 ? E.intraday(ctx0, { selected: sel, startValue: pSV, frame: fr }) : null;
@@ -750,15 +749,16 @@
     var hint = $('scaleHint');
     if (!inp.classList.contains('is-invalid')) {
       hint.classList.remove('is-error');
-      var k = state.benchOnly && M.p && M.p.raw && M.p.raw[0] > 0 ? state.startValue / M.p.raw[0] : null;
       hint.textContent = state.startValue == null || !M.p ? '' :
-        state.benchOnly ? (isNum(k) ? 'Benchmarks ×' + num(k, k < 0.1 ? 4 : 2) : '') :
         isNum(M.p.scale) ? '×' + num(M.p.scale, M.p.scale < 0.1 ? 4 : 2) + ' skaliert' : '';
     }
     $('startReset').hidden = state.startValue == null && !inp.value;
-    var bo = $('benchOnly');
-    bo.classList.toggle('is-on', state.benchOnly);
-    bo.setAttribute('aria-pressed', String(state.benchOnly));
+    var dv = depotStart(), onY = state.startValue == null && !inp.value, onD = isNum(dv) && state.startValue === dv;
+    [['svYacht', onY], ['svDepot', onD]].forEach(function (x) {
+      var b = $(x[0]); b.classList.toggle('is-on', x[1]); b.setAttribute('aria-pressed', String(x[1]));
+    });
+    $('svDepot').hidden = !isNum(dv);
+    $('svDepot').title = isNum(dv) ? 'Alle Linien starten beim aktuellen Wert deines Scalable-Depots (' + eur(dv, { dec: 0 }) + ')' : '';
     renderBenchCards(M);
   }
 
@@ -1487,18 +1487,26 @@
   }
 
   /**
-   * "Im Zeitraum" panel beside the chart (user 28.09.): the first six columns of the Benchmark-Vergleich (right of the chart) for the portfolio
-   * and every shown benchmark; the Rendite cell also shows the line's end value in € (as drawn: Startwert, "nur Benchmarks").
+   * "Statistik" panel beside the chart (user 28./29.09.): portfolio + every shown benchmark with end value (as drawn, incl.
+   * Startwert), Rendite, p.a., Vol. p.a., Sharpe, Max. DD.
    */
   function renderCmpPanel(M) {
     $('cmpSub').textContent = periodText(M.R);
     $('cmpSub').title = riskNote(M).replace(/^ · /, '');
-    var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + BENCH_COLS.slice(0, 6).map(function (c, k) {
-      return '<th title="' + esc(c[1] + (k === 0 ? '; darunter der Wert am Ende des Zeitraums' : '')) + '">' + esc(c[0]) + '</th>';
+    // user 29.09.: "Statistik" – end value, then the return; p.a., Vol. p.a., Sharpe, Max. DD (no Sortino)
+    var COLS = [['Wert', 'Wert am Ende des Zeitraums (wie im Chart: Startwert)'], ['Rendite', 'Gesamtrendite im Zeitraum'],
+      ['p.a.', 'annualisierte Rendite (CAGR)'], ['Vol. p.a.', 'annualisierte Volatilität'], ['Sharpe', 'Sharpe-Ratio'], ['Max. DD', 'maximaler Drawdown']];
+    var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + COLS.map(function (c) {
+      return '<th title="' + esc(c[1]) + '">' + esc(c[0]) + '</th>';
     }).join('') + '</tr></thead>';
     function row(name, color, title, st, s) {
-      var end = s && s.value && s.value.length ? s.value[s.value.length - 1] : null;
-      var cells = st ? statCells(st).replace('</td>', '<span class="cmp-val">' + (isNum(end) ? eur(end, { dec: 0 }) : '–') + '</span></td>')
+      var end = s && s.value && s.value.length ? s.value[s.value.length - 1] : null, weak = st && !st.cagrReliable;
+      var cells = st ? '<td class="cmp-val">' + (isNum(end) ? eur(end, { dec: 0 }) : '–') + '</td>' +
+        '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td>' +
+        '<td' + (weak ? ' class="dim" title="wenig aussagekräftig &lt; 3 Monate"' : '') + '>' +
+        (weak ? pct(get(st, 'cagr')) : colored(get(st, 'cagr'), pct(get(st, 'cagr')))) + '</td>' +
+        '<td>' + pctU(get(st, 'volAnn')) + '</td><td>' + ratio(get(st, 'sharpe')) + '</td>' +
+        '<td>' + colored(get(st, 'maxDD'), pctU(get(st, 'maxDD'))) + '</td>'
         : new Array(7).join('<td class="dash">–</td>');
       return '<tr><td class="l sticky"' + (title ? ' title="' + esc(title) + '"' : '') + '><span class="row-name"><i style="background:' + color +
         '"></i><span class="cmp-nm">' + esc(name) + '</span></span></td>' + cells + '</tr>';
@@ -1508,13 +1516,21 @@
     $('cmpTable').innerHTML = head + '<tbody>' + body + '</tbody>';
     placeCmpPanel();
   }
-  /** Right of the chart when the space beside the page column fits the panel's natural width, otherwise above the chart. */
+  /**
+   * Right of the chart when the space beside the page column fits the panel's natural width – then as wide as that space
+   * allows (user 29.09.: as wide as possible without touching the chart) –, otherwise above the chart.
+   */
   function placeCmpPanel() {
     var blk = $('cmpPanel').parentNode, el = $('cmpPanel');
+    el.style.width = '';
+    el.style.removeProperty('--cmp-nm');
     blk.classList.add('cmp-side');
-    var room = document.documentElement.clientWidth - blk.getBoundingClientRect().right;
-    var fits = el.offsetWidth + 22 <= room;                                  // 16px gap + 6px to the window edge
-    if (!fits) blk.classList.remove('cmp-side');
+    var room = document.documentElement.clientWidth - blk.getBoundingClientRect().right - 22;   // 16px gap + 6px to the window edge
+    var w0 = el.offsetWidth;
+    if (w0 <= room) {
+      el.style.width = Math.floor(room) + 'px';
+      el.style.setProperty('--cmp-nm', Math.floor(64 + room - w0) + 'px');     // the spare width goes to the names first
+    } else blk.classList.remove('cmp-side');
   }
 
   // ------------------------------------------------------------------ monthly table
@@ -1805,42 +1821,60 @@
       '</div>';
   }
 
+  /** "Mein Depot" beside the Yacht at the top: the real Scalable depot's value and its G/V seit Kauf (engine.depotNow). */
+  function renderDepotBlock() {
+    var d = E.depotNow ? E.depotNow(ctx0) : null, box = $('ovDepot');
+    box.hidden = !d;
+    if (!d) return;
+    $('depotTotal').innerHTML = bigValueHTML(d.value);
+    var asof = d.asof ? F.date(d.asof.slice(0, 10), 'short') : '';
+    var tip = pct(d.glPct) + ' gegenüber Einstand · G/V seit Kauf laut Scalable ' + (asof ? 'am ' + asof + ' ' : '') + eurS(d.refGl) +
+      ', seither mit den Kursen fortgeschrieben (Einstand ' + eur(d.costBasis, { dec: 0 }) + ') · Wert = Stückzahlen × letzter Kurs ' +
+      F.date(d.date, 'short') + ', nur Wertpapiere' + (isNum(d.refTotal) && isNum(d.refValue) ? ' (Scalable gesamt inkl. Guthaben ' +
+      eur(d.refTotal, { dec: 0 }) + (asof ? ' am ' + asof : '') + ')' : '');
+    $('depotChg').innerHTML = '<b class="' + sgn(d.gl) + '">' + eurS(d.gl) + '</b> <span class="hold-per">seit Kauf</span>' +
+      '<span class="info" tabindex="0" role="img" aria-label="Info" aria-describedby="depotTip"></span>' +
+      '<span class="info-tip" id="depotTip" role="tooltip">' + esc(tip) + '</span>';
+  }
+
   function renderHoldings() {
     var H = holdPeriod(), R = H.R, sk = H.sk, sel = state.selected;
     var rows = E.assets(ctx, { selected: sel, start: R.start, end: R.end, scale: 1 }) || [];
 
-    // header: Σ current value of the selected positions (sums of engine outputs only)
-    var total = 0, glSum = 0, costSum = 0, anySel = false, anyGl = false;
-    rows.forEach(function (r) {
-      if (!r.selected) return;
-      anySel = true;
-      if (isNum(r.v1)) total += r.v1;
-      if (isNum(r.glSinceBuy) && isNum(r.costBasis)) { glSum += r.glSinceBuy; costSum += r.costBasis; anyGl = true; }
-    });
-    $('holdTotal').innerHTML = bigValueHTML(anySel ? total : null);
+    // list header: Σ current value of the selected positions (sums of engine outputs only)
+    var total = 0, anySel = false;
+    rows.forEach(function (r) { if (r.selected) { anySel = true; if (isNum(r.v1)) total += r.v1; } });
     $('holdSub').textContent = anySel ? eur(total) : '';
 
+    // top block (user 29.09.): always the real Yacht – every position with its original shares, never Startwert,
+    // filter or what-if – and its change over the period (Seit Kauf: vs. Einstand)
+    var all0 = E.assets(ctx0, { selected: ALL, start: R.start, end: R.end, scale: 1 }) || [];
+    var yTotal = 0, glSum = 0, costSum = 0, anyGl = false;
+    all0.forEach(function (r) {
+      if (isNum(r.v1)) yTotal += r.v1;
+      if (isNum(r.glSinceBuy) && isNum(r.costBasis)) { glSum += r.glSinceBuy; costSum += r.costBasis; anyGl = true; }
+    });
+    $('holdTotal').innerHTML = bigValueHTML(all0.length ? yTotal : null);
     var chgEur = null, chgPct = null;
-    if (anySel && sk) {
+    if (sk) {
       chgEur = anyGl ? glSum : null;
       chgPct = anyGl && costSum > 0 ? glSum / costSum : null;
-    } else if (anySel) {
-      var ps = E.portfolio(ctx, { selected: sel, start: R.start, end: R.end, startValue: null });
+    } else {
+      var ps = E.portfolio(ctx0, { selected: ALL, start: R.start, end: R.end, startValue: null });
       var st = ps ? E.stats(ps, { rf: state.rf }) : null;
       chgEur = get(st, 'pl');
       chgPct = get(st, 'totalReturn');
     }
     var label = periodLabel(H);
     var tipText = pct(chgPct) + ' ' + (sk ? 'gegenüber Einstand' :
-      '· Wertänderung der ausgewählten Positionen im Zeitraum ' + periodText(R) +
+      '· Wertänderung des Yacht-Portfolios (alle Positionen, echte Stückzahlen) im Zeitraum ' + periodText(R) +
       (ctx.status[R.end] === 'intraday' ? ' (intraday' + (ASOF ? ' ' + ASOF : '') + ')' : '') + ', Rückrechnung mit aktuellen Stückzahlen');
     // as in the app: "+19.051,71 € Monat ⓘ" – the percentage sits in the info tooltip
-    $('holdChg').innerHTML = anySel ?
-      '<b class="' + sgn(chgEur) + '">' + eurS(chgEur) + '</b>' +
+    $('holdChg').innerHTML = '<b class="' + sgn(chgEur) + '">' + eurS(chgEur) + '</b>' +
       ' <span class="hold-per">' + esc(label) + '</span>' +
       '<span class="info" tabindex="0" role="img" aria-label="Info" aria-describedby="holdTip"></span>' +
-      '<span class="info-tip" id="holdTip" role="tooltip">' + esc(tipText) + '</span>' :
-      '<span class="weak">Keine Position ausgewählt</span>';
+      '<span class="info-tip" id="holdTip" role="tooltip">' + esc(tipText) + '</span>';
+    renderDepotBlock();
 
     Array.prototype.forEach.call($('holdPills').querySelectorAll('[data-hp]'), function (b) {
       var on = b.getAttribute('data-hp') === H.hp;
@@ -2099,6 +2133,11 @@
     update();
   }
 
+  /** The real depot's current value in whole euros (button "Mein Depot" next to Startwert); null without depot data. */
+  function depotStart() {
+    var d = E.depotNow ? E.depotNow(ctx0) : null;
+    return d && isNum(d.value) && d.value > 0 ? Math.round(d.value) : null;
+  }
   function onStartValue() {
     var inp = $('startValue'), s = inp.value.trim(), hint = $('scaleHint');
     if (!s) {
@@ -2166,7 +2205,13 @@
     });
     $('startValue').addEventListener('input', onStartValue);
     $('startReset').addEventListener('click', function () { $('startValue').value = ''; onStartValue(); $('startValue').focus(); });
-    $('benchOnly').addEventListener('click', function () { state.benchOnly = !state.benchOnly; update({ keepMeasure: true }); });
+    $('svYacht').addEventListener('click', function () { $('startValue').value = ''; onStartValue(); });
+    $('svDepot').addEventListener('click', function () {
+      var v = depotStart();
+      if (!isNum(v)) return;
+      $('startValue').value = F.num(v, 0);
+      onStartValue();
+    });
     $('rfInput').addEventListener('input', onRf);
     bindBench();                                 // benchmark cards + instrument search list
     $('applyMeasure').addEventListener('click', applyMeasure);
