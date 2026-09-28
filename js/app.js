@@ -38,7 +38,7 @@
   // --neg #e78e78 (the portfolio line below its start value) and the white "Mein Depot"; all twelve by ≥ 9.
   var BENCH_COLORS = ['#6ea8ff', '#ffb300', '#ba68c8', '#aeea00', '#ec407a', '#81d4fa',
     '#4caf50', '#a1887f', '#fff176', '#7986cb', '#e040fb', '#ff80ab'];
-  var DEPOT_ID = 'my_depot', DEPOT_COLOR = '#f2f3f4';          // "Mein Depot" (the real depot) is always white
+  var DEPOT_ID = 'my_depot', DEPOT_COLOR = '#f2f3f4';          // "Mein Depot" (preset of the real depot, an editable card) is white
   var CONTEXT_DAYS = 21;                       // holdings list, period 1T: grey history shown before the last day
   var ALL = ctx.positions.map(function (p) { return p.isin; });
   var BIDX = {};                               // locked benchmarks of data/benchmarks.csv other than Mein Depot -> colour slot
@@ -49,8 +49,7 @@
   // ------------------------------------------------------------------ state
   var state = {
     preset: 'YTD', custom: null, mode: 'value', startValue: null, rf: 0.02,
-    depotValue: null,                          // "Mein Depot (€)" field: real depot value for the "echt" € in the measure box (null = computed)
-    fixedOn: (function () { var o = {}; o[DEPOT_ID] = true; return o; })(),   // locked cards (benchmarks.csv) shown in the chart
+    fixedOn: {},                               // locked cards (benchmarks.csv "ISIN:qty") shown in the chart; none since 28.09.
     cards: [],                                 // own benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]}; not persisted
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
     selected: new Set(ALL), sort: { key: 'contrib', dir: -1 }, measure: null, hover: null,
@@ -476,33 +475,26 @@
       '<div class="tt-sub c3">' + colored(ret, pct(ret)) + '</div>' +
       '</div>';
   }
-  var REAL_ID = DEPOT_ID;                        // the benchmark that is the user's real depot
-  function depotDefault() { return E.benchmarkValueNow ? E.benchmarkValueNow(ctx0, REAL_ID) : null; }
-  function depotTarget() { return state.depotValue != null ? state.depotValue : depotDefault(); }
-  /**
-   * "Mein Depot" box beside the measure box (only while `my_depot` is selected and has a series). x: its selB entry;
-   * pValues/dValues: portfolio and depot VALUE series (also in Gesamtrendite); a/b: chart indices; i/j: daily indices
-   * into ctx, or points of the sub-daily frame `frame`, for the real change. % and "Gleicher Wert" = the depot at the
-   * portfolio's size at the start of the span; "Echt" = the real depot's € change, scaled to „Mein Depot (€)“.
-   */
-  function depotBoxHTML(x, pValues, dValues, a, b, i, j, frame) {
-    var w = E.equalValueWindow ? E.equalValueWindow(pValues, dValues, a, b) : null;
-    var ret = get(w, 'ret'), eq = get(w, 'pl'), tgt = depotTarget();
-    var real = E.benchmarkRealPl ? nv(E.benchmarkRealPl(ctx0, REAL_ID, i, j, { frame: frame || null, target: tgt })) : null;
-    var tgtTxt = isNum(tgt) ? eur(tgt, { dec: 0 }) : '';
-    function row(label, v, text, title) {
-      return '<div class="tt-dr" title="' + esc(title) + '">' + label + '<span class="tt-dv ' + sgn(v) + '">' + text + '</span></div>';
-    }
-    return '<div class="tt-d">' +
-      row('<span class="tt-dn" style="--c:' + x.color + '"><i></i>' + esc(x.name) + '</span>', ret, pct(ret),
+  function sideRow(label, v, text, title) {
+    return '<div class="tt-dr" title="' + esc(title) + '">' + label + '<span class="tt-dv ' + sgn(v) + '">' + text + '</span></div>';
+  }
+  /** Name + % and "Gleicher Wert" rows of a benchmark over [a, b] (pValues/bValues: VALUE series). */
+  function benchRows(x, pValues, bValues, a, b) {
+    var w = E.equalValueWindow ? E.equalValueWindow(pValues, bValues, a, b) : null;
+    var ret = get(w, 'ret'), eq = get(w, 'pl');
+    return sideRow('<span class="tt-dn" style="--c:' + x.color + '"><i></i>' + esc(x.name) + '</span>', ret, pct(ret),
         'Veränderung von „' + x.name + '“ im gemessenen Zeitraum') +
-      row('<span class="tt-dl">Gleicher Wert</span>', eq, eurS(eq),
+      sideRow('<span class="tt-dl">Gleicher Wert</span>', eq, eurS(eq),
         'Gleicher Wert: Veränderung von „' + x.name + '“, wenn es zu Beginn der Messung genauso groß gewesen wäre wie das Portfolio' +
-        (get(w, 'base') !== null ? ' (' + eur(w.base) + ')' : '')) +
-      row('<span class="tt-dl">Echt' + (tgtTxt ? ' (' + tgtTxt + ')' : '') + '</span>', real, eurS(real),
-        'Echt: tatsächliche Veränderung deines Depots, hochgerechnet auf den Wert aus „Mein Depot (€)“' +
-        (tgtTxt ? ' (' + tgtTxt + (state.depotValue == null ? ' = aktueller Depotwert' : '') + ')' : '')) +
-      '</div>';
+        (get(w, 'base') !== null ? ' (' + eur(w.base) + ')' : ''));
+  }
+  /**
+   * Side boxes of a measurement: one per benchmark shown in the chart, in card order ("Mein Depot" first), each with its
+   * % and "Gleicher Wert" over the span. list: [{ x, values }] (VALUE series); '' when empty.
+   */
+  function sideBoxesHTML(list, pValues, a, b) {
+    var h = list.map(function (o) { return '<div class="tt-d">' + benchRows(o.x, pValues, o.values, a, b) + '</div>'; });
+    return h.length ? '<div class="tt-sides">' + h.join('') + '</div>' : '';
   }
 
   function intraHoverHTML(i, maxBench) {
@@ -518,11 +510,11 @@
   function intraMeasureHTML(a, b) {
     var I = cur.intra, pl = state.mode === 'pl';
     var w = E.intradayWindow(I.value, a, b);
-    var d = I.benches.filter(function (o) { return o.x.id === REAL_ID && o.s; })[0];
+    var list = I.benches.filter(function (o) { return o.s; }).map(function (o) { return { x: o.x, values: o.s.value }; });
     return {
       main: measureBox(slotLabel(I, a), slotLabel(I, b), pl ? eurS(I.pl[a]) : eur(I.value[a]), pl ? eurS(I.pl[b]) : eur(I.value[b]),
         get(w, 'pl'), get(w, 'ret')),
-      side: d ? depotBoxHTML(d.x, I.value, d.s.value, a, b, Math.min(a, b), Math.max(a, b), I.frame) : ''
+      side: sideBoxesHTML(list, I.value, a, b)
     };
   }
 
@@ -549,11 +541,11 @@
     if (!p) return '';
     if (M.intra) return intraMeasureHTML(a, b);
     var pl = state.mode === 'pl';
-    var w = win(a, b), d = M.selB.filter(function (x) { return x.id === REAL_ID && x.s; })[0];
+    var w = win(a, b), list = M.selB.filter(function (x) { return x.s; }).map(function (x) { return { x: x, values: x.s.value }; });
     return {
       main: measureBox(dateLabel(M.R.start + a), dateLabel(M.R.start + b), pl ? eurS(p.pl[a]) : eur(p.value[a]), pl ? eurS(p.pl[b]) : eur(p.value[b]),
         get(w, 'pl'), get(w, 'totalReturn')),
-      side: d ? depotBoxHTML(d, p.value, d.s.value, a, b, M.R.start + Math.min(a, b), M.R.start + Math.max(a, b), null) : ''
+      side: sideBoxesHTML(list, p.value, a, b)
     };
   }
 
@@ -743,15 +735,13 @@
         '×' + num(M.p.scale, M.p.scale < 0.1 ? 4 : 2) + ' skaliert' : '';
     }
     $('startReset').hidden = state.startValue == null && !inp.value;
-    var dv = $('depotValue'), dd = depotDefault();
-    dv.placeholder = isNum(dd) ? num(dd, 2) : '–';
-    $('depotReset').hidden = state.depotValue == null && !dv.value;
     renderBenchCards(M);
   }
 
   // ------------------------------------------------------------------ benchmark builder (cards like testfolio.io)
   /*
-   * Locked cards = data/benchmarks.csv (Mein Depot: the real quantities, not editable, can only be shown / hidden).
+   * Locked cards = data/benchmarks.csv rows with quantities ("ISIN:qty", can only be shown / hidden; none since 28.09.,
+   * when "Mein Depot" became a weighting preset). Presets with percentages start as own cards.
    * Own cards = instruments with prices (D.instruments) + percentages. The engine buys them on the first day of the
    * selected period (1T: at the previous close) and holds them, no rebalancing. A card is drawn / used anywhere only
    * with a total of 100 % (± 0,01) and at least one instrument. Nothing is persisted.
@@ -775,14 +765,15 @@
     .sort(function (a, b) { return a.short.localeCompare(b.short, 'de'); });
   var INSTR_BY = {};
   INSTR.forEach(function (i) { INSTR_BY[i.isin] = i; });
-  // weighting presets (data/benchmarks.csv "ISIN:20%|…", e.g. "Energie"; user 27.09.): start as own cards – editable,
-  // deletable, hidden in the chart; a reload brings them back as defined
+  // weighting presets (data/benchmarks.csv "ISIN:20%|…", "Mein Depot" and "Energie"; user 27./28.09.): start as own cards –
+  // editable, deletable; "Mein Depot" shown in the chart, the others hidden; a reload brings them back as defined
   (Array.isArray(D.card_presets) ? D.card_presets : []).forEach(function (p) {
     var rows = Object.keys(p.weights || {}).filter(function (i) { return INSTR_BY[i]; })
       .map(function (i) { return newRow(i, fmtShare(p.weights[i])); });
     if (!rows.length) return;
     var name = String(p.name || nextName()).slice(0, 40);
-    state.cards.push({ id: 'bm' + (++cardSeq), name: name, defName: name, color: nextColor(), show: false, rows: rows });
+    var depot = p.id === DEPOT_ID;                                 // "Mein Depot" (user 28.09.): white and shown from the start
+    state.cards.push({ id: 'bm' + (++cardSeq), name: name, defName: name, color: depot ? DEPOT_COLOR : nextColor(), show: depot, rows: rows });
   });
   function instrSub(i) { return [i.name, i.isin, i.type].filter(Boolean).join(' · '); }
   function insTitle(i) { return i ? i.short + ' · ' + instrSub(i) : 'Name, Kürzel oder ISIN eingeben'; }
@@ -875,14 +866,14 @@
   }
   function showBtn() { return iconBtn('show', 'eye', 'Im Chart ausblenden', ' aria-pressed="true"'); }
   function fixedCardHTML(b) {
-    var isins = Object.keys(b.holdings || {}), depot = b.id === DEPOT_ID;
+    var isins = Object.keys(b.holdings || {});
     var names = isins.map(function (i) { return INSTR_BY[i] ? INSTR_BY[i].short : i; });
     var now = E.benchmarkValueNow ? nv(E.benchmarkValueNow(ctx0, b.id)) : null;
     return '<div class="bb-card bb-card--fixed" role="group" data-card="' + esc(b.id) + '" style="--c:' + colorOf(b.id) + '">' +
-      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i>' + (depot ? 'Echtes Depot · nicht änderbar' : 'Feste Stückzahlen') + '</span>' +
+      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i>' + 'Feste Stückzahlen' + '</span>' +
       '<span class="bb-icons">' + showBtn() + '</span></div>' +
       '<div class="bb-namerow" title="' + esc(b.description || '') + '"><span class="bb-fixname">' + esc(b.name || b.id) + '</span><b class="bb-ret"></b></div>' +
-      '<div class="bb-meta"' + (depot ? ' title="Stückzahlen × letzter Kurs, ohne Cash"' : '') + '>' + (depot ? 'Echte' : 'Feste') + ' Stückzahlen · ' +
+      '<div class="bb-meta" title="Stückzahlen × letzter Kurs, ohne Cash">Feste Stückzahlen · ' +
       isins.length + (isins.length === 1 ? ' Position' : ' Positionen') +
       (now !== null ? '<br>Wert <b>' + eur(now) + '</b> am ' + esc(F.date(ctx0.dates[ctx0.n - 1], 'short')) : '') + '</div>' +
       '<div class="bb-hold" title="' + esc(names.join(', ')) + '">' + esc(names.join(' · ')) + '</div></div>';
@@ -1969,18 +1960,6 @@
     update({ keepMeasure: true });
   }
 
-  /** "Mein Depot (€)": only the "echt" amount of the measure box uses it – no re-render of the charts. */
-  function onDepotValue() {
-    var inp = $('depotValue'), s = inp.value.trim(), v = s ? F.parseDE(s) : null, hint = $('depotHint');
-    if (s && (!isNum(v) || v <= 0)) { inp.classList.add('is-invalid'); hint.textContent = 'ungültiger Betrag'; $('depotReset').hidden = false; return; }
-    inp.classList.remove('is-invalid');
-    hint.textContent = '';
-    state.depotValue = s ? v : null;
-    $('depotReset').hidden = !s;
-    mainChart.tipKey = '';                        // rebuild an open measure box with the new value
-    sync.draw();
-  }
-
   function onRf() {
     var inp = $('rfInput'), s = inp.value.trim(), v = s ? F.parseDE(s) : null;
     if (!isNum(v) || v < -20 || v > 50) {
@@ -2026,8 +2005,6 @@
       update({ keepMeasure: true });
     });
     $('startValue').addEventListener('input', onStartValue);
-    $('depotValue').addEventListener('input', onDepotValue);
-    $('depotReset').addEventListener('click', function () { $('depotValue').value = ''; onDepotValue(); $('depotValue').focus(); });
     $('startReset').addEventListener('click', function () { $('startValue').value = ''; onStartValue(); $('startValue').focus(); });
     $('rfInput').addEventListener('input', onRf);
     bindBench();                                 // benchmark cards + instrument search list

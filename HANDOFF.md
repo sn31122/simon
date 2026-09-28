@@ -7,16 +7,17 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 28.09.2026 21:21 Berlin): 189 trading days 2026-01-02 … 2026-09-28; last row 2026-09-28 = intraday, asof 2026-09-28T19:20Z; 30-min (intraday.csv): 7 sessions 2026-09-18 … 2026-09-28; 2-h (intraday_2h.csv): 25 sessions 2026-08-25 … 2026-09-28; engine tests: 57 passed, 0 failed; crosscheck: 7584/7585 checks passed.
+- Data status (update 28.09.2026 23:42 Berlin): 189 trading days 2026-01-02 … 2026-09-28; last row 2026-09-28 = intraday, asof 2026-09-28T19:20Z; 30-min (intraday.csv): 7 sessions 2026-09-18 … 2026-09-28; 2-h (intraday_2h.csv): 25 sessions 2026-08-25 … 2026-09-28; engine tests: 57 passed, 0 failed; crosscheck: 7620/7621 checks passed.
 <!-- data-status:end -->
 (The block above is rewritten by `--finish` / `--finish-add`; do not edit it by hand.)
 
 - **Data:** 64 price series (46 + Coherent, Lumentum, Microsoft, NVIDIA + on 27.09. Nebius, CoreWeave, Core Scientific, IREN,
   GE Vernova, Vertiv, Constellation, AEP, Vistra, DTE, FirstEnergy, NRG, CMS, Solaris Energy), all selectable in the
   benchmark search and fetched by every update. Preset "Energie" (11 names with fixed weights incl. Bloom) starts as an
-  editable card, hidden in the chart. 32 Yacht positions and the 9-holding "Mein Depot" unchanged.
-- **Dashboard (27.09. requests, all verified in a browser):** benchmark cards (only "Mein Depot" as locked preset, custom
-  cards with instrument search and % rows, buy and hold), measurement boxes (Yacht + "Mein Depot" with Gleicher Wert / Echt),
+  editable card, hidden in the chart. 32 Yacht positions unchanged. 28.09.: + FR0010755611 Amundi MSCI USA Daily (2x)
+  Leveraged (65 series); "Mein Depot" is now an editable % card (share counts of 25.09. × prices of 28.09.), shown by default.
+- **Dashboard (27.09. requests, all verified in a browser):** benchmark cards (presets Mein Depot + Energie, custom
+  cards with instrument search and % rows, buy and hold), measurement boxes (Yacht + one box per shown benchmark with % / Gleicher Wert, 28.09.),
   hover band that keeps the plot height with up to 3 shown benchmarks, list toggles (Portfolio / Einzelwerte, side by side
   from ~1900 px), 3M/6M pills, section order Lists → Benchmark-Vergleich → Drawdown → Monatsrenditen → Kennzahlen → Risiko &
   Korrelation → Hinweise, touch: a tap outside the chart ends a tapped measurement. Details: `SPEC.md`.

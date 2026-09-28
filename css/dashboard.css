@@ -196,9 +196,9 @@ button { -webkit-tap-highlight-color: transparent; }
 .bb-bar { display: flex; align-items: center; justify-content: space-between; margin: 8px -2px 4px -3px; }
 .bb-mini { width: 26px; height: 22px; font-size: 18px; line-height: 1; }
 .bb-rows { display: grid; gap: 6px; }
-.bb-row, .bb-foot { display: grid; grid-template-columns: minmax(0, 1fr) 70px 22px; align-items: center; gap: 6px; }
+.bb-row, .bb-foot { display: grid; grid-template-columns: minmax(0, 1fr) 80px 22px; align-items: center; gap: 6px; }
 .bb-pctw { position: relative; display: block; min-width: 0; }
-.bb-pct { width: 100%; padding: 0 25px 0 6px; font-weight: 600; text-align: right; }
+.bb-pct { width: 100%; padding: 0 23px 0 5px; font-weight: 600; text-align: right; }
 .bb-pct.is-invalid { border-color: var(--neg); }
 .bb-pcts { position: absolute; top: 0; right: 8px; color: var(--muted); font-size: 16px; font-weight: 600; line-height: 32px; pointer-events: none; }
 .bb-x { width: 22px; height: 28px; font-size: 17px; line-height: 1; }
@@ -339,7 +339,20 @@ button { -webkit-tap-highlight-color: transparent; }
 .tt-dv.pos { color: var(--accent); }
 .tt-dv.neg { color: var(--neg); }
 .pc-tip--side.is-pinned .tt-dr { pointer-events: auto; cursor: help; }   /* pinned: rows show their title */
-.pc--compact .pc-tip--measure, .pc--compact .pc-tip--side { padding: 5px 9px 6px; line-height: 14px; }
+/* side element = transparent row of boxes ("Mein Depot" + one per other shown benchmark), all as tall as the measure
+   box (MainChart sets the element's height; the boxes stretch); wraps when the chart is too narrow */
+.pc-tip--side {
+  display: flex; flex-wrap: wrap; gap: 4px; align-items: stretch;
+  padding: 0; border: 0; background: none; box-shadow: none;
+}
+.tt-sides { display: contents; }
+.tt-sides > .tt-d {
+  flex: 1 0 auto; align-content: start; padding: 7px 12px 8px;
+  border: 1px solid var(--tooltip-border); border-radius: 4px; background: var(--tooltip);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+}
+.pc--compact .pc-tip--measure, .pc--compact .tt-sides > .tt-d { padding: 5px 9px 6px; line-height: 14px; }
+.pc--compact .pc-tip--side { line-height: 14px; }
 .pc--compact .tt-m { column-gap: 10px; row-gap: 2px; }
 .pc--compact .tt-d { row-gap: 2px; }
 .pc--compact .tt-dr { column-gap: 12px; }
@@ -680,7 +693,7 @@ th.is-sorted { color: var(--text); }
   .bb-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
   .bb-ico { width: 32px; height: 32px; }
   .bb-mini { width: 32px; height: 28px; }
-  .bb-row, .bb-foot { grid-template-columns: minmax(0, 1fr) 72px 28px; }
+  .bb-row, .bb-foot { grid-template-columns: minmax(0, 1fr) 82px 28px; }
   .bb-x { width: 28px; height: 32px; }
   .bb-add { min-height: 64px; }
   .headline { margin-top: 12px; }

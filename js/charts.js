@@ -527,7 +527,7 @@
     t1.style.visibility = t2.style.visibility = 'hidden';
     fillTip(t1, 'pc-tip pc-tip--measure', h.main);
     var w1 = t1.offsetWidth, h1 = t1.offsetHeight, w2 = 0, h2 = 0, hh = 0;
-    if (h.side) { fillTip(t2, 'pc-tip pc-tip--side', h.side); w2 = t2.offsetWidth; h2 = t2.offsetHeight; }
+    if (h.side) { fillTip(t2, 'pc-tip pc-tip--side', h.side); w2 = Math.ceil(t2.getBoundingClientRect().width); h2 = t2.offsetHeight; }
     if (M.hoverHTML) { fillTip(t1, 'pc-tip pc-tip--hover', tipParts(M.hoverHTML(lastI, BAND_BENCH_ROWS)).main); hh = t1.offsetHeight; }
     t1.style.visibility = t2.style.visibility = '';
     this.hideTip();
@@ -605,7 +605,7 @@
     this.sideOn = !!h.side;
     if (h.side) {
       fillTip(t2, 'pc-tip pc-tip--side', h.side);
-      this.tip2W = t2.offsetWidth;
+      this.tip2W = Math.ceil(t2.getBoundingClientRect().width);   // not offsetWidth: rounded down, the boxes would wrap
       this.tip2H = t2.offsetHeight;
     } else {
       t2.hidden = true;
@@ -670,12 +670,14 @@
       }
       t2.style.left = Math.round(sl) + 'px';
       t2.style.top = top2 + 'px';
-      if (w2 !== this.tip2SetW) { t2.style.width = w2 + 'px'; this.tip2SetW = w2; }
       if (!stack) {                                                    // same height as the measure box
+        if (w2 !== this.tip2SetW) { t2.style.width = w2 + 'px'; this.tip2SetW = w2; }
         var hh = Math.max(this.tipH, this.tip2H);
         tip.style.height = t2.style.height = hh + 'px';
       } else {
         tip.style.height = t2.style.height = '';
+        // the side boxes may wrap into more rows at the stacked width: read their height again
+        if (w2 !== this.tip2SetW) { t2.style.width = w2 + 'px'; this.tip2SetW = w2; this.tip2H = t2.offsetHeight; }
       }
       t2.classList.toggle('is-pinned', !!pinned);                     // pinned: rows take the pointer (title)
       t2.hidden = false;

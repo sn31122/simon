@@ -134,7 +134,7 @@ if (ref.grid_cases && typeof E.gridFrame === 'function') {
       const b = E.intradayBenchmark(ctx, benchDef(id, g.bench_defs[id]), s.base, f);
       vals.forEach((v, k) => cmp(`${g.name} ${id} point ${k}`, b.value[k], v));
     }
-    for (const [a, b, v] of g.realpl) cmp(`${g.name} my_depot real pl ${a}..${b}`, E.benchmarkRealPl(ctx, 'my_depot', a, b, { frame: f }), v);
+    for (const [a, b, v] of g.realpl) cmp(`${g.name} depot_qty real pl ${a}..${b}`, E.benchmarkRealPl(ctx, { id: 'depot_qty', holdings: g.realpl_def }, a, b, { frame: f }), v);
     const daily = ref.cases.find(c => c.start === g.start && c.end === g.end && c.isins.length === all.length);
     if (daily) cmp(`${g.name} end = daily reference end`, s.value[s.last], daily.stats.endValue);
   }
