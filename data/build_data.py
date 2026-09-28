@@ -48,8 +48,9 @@ for j, i in enumerate(isins):
                              + (f' SPLIT 1:{split}? divide the history before {d} if confirmed' if split else ' check value'))
         last = v
     if last is None: errors.append(f'{i}: column has no prices')
-# holdings "ISIN:qty|…" = locked preset with fixed quantities (Mein Depot); "ISIN:20%|…" = weighting preset that starts as an
-# editable own card (hidden in the chart, reset on reload; user 27.09.2026), must total 100 %
+# holdings "ISIN:qty|…" = locked preset with fixed quantities; "ISIN:20%|…" = weighting preset (must total 100 %), offered in
+# the "+ Benchmark" menu; start "card" = also an editable own card at load, shown in the chart (user 28.09.2026: only Mein
+# Depot), "menu" (or empty) = only in the menu
 benchmarks, card_presets = [], []
 for b in bench:
     parts = [x.split(':') for x in b['holdings'].split('|') if x.strip()]
@@ -60,7 +61,9 @@ for b in bench:
         if abs(sum(w.values()) - 100) > 0.01: errors.append(f"benchmarks.csv {b['id']}: weights total {sum(w.values()):g} %, not 100 %")
         for i in w:
             if i not in prices: errors.append(f"benchmarks.csv {b['id']}: {i} is not a price column")
-        card_presets.append({'id': b['id'], 'name': b['name'], 'description': b['description'], 'weights': w})
+        start = (b.get('start') or 'menu').strip()
+        if start not in ('card', 'menu'): errors.append(f"benchmarks.csv {b['id']}: start must be card or menu, not {start!r}")
+        card_presets.append({'id': b['id'], 'name': b['name'], 'description': b['description'], 'weights': w, 'start': start})
     else:
         benchmarks.append({'id': b['id'], 'name': b['name'], 'description': b['description'],
                            'holdings': {i.strip(): float(v) for i, v in parts}})
