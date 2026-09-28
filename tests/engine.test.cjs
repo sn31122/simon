@@ -913,6 +913,17 @@ test('coverageStart / notQuoted: the long range starts once enough of the value 
   assert.deepStrictEqual(E.notQuoted(c, { start: 0 }).map((x) => x.isin), ['B', 'C']);
 });
 
+test('depotNow: real depot value at the latest price and G/V seit Kauf from the Scalable snapshot', () => {
+  const d = dataOf(['2026-03-02', '2026-03-03'], { prices: { A: [10, 12], B: [5, 4] } });
+  d.depot = { holdings: { A: 3, B: 10 }, asof_utc: '2026-03-02T21:00:00Z', securities_value: 80, total_value: 70, gv_since_buy: 20, cost_basis: 60 };
+  const r = E.depotNow(E.prepare(d));
+  approx(r.value, 3 * 12 + 10 * 4); approx(r.gl, 76 - 60); approx(r.glPct, 16 / 60);
+  assert.strictEqual(r.date, '2026-03-03'); assert.strictEqual(r.refGl, 20); assert.strictEqual(r.refTotal, 70);
+  assert.strictEqual(E.depotNow(ctxOf(['2026-03-02'])), null, 'no depot data');
+  d.depot.holdings.X = 1;
+  assert.strictEqual(E.depotNow(E.prepare(d)), null, 'unknown ISIN');
+});
+
 test('prepare without res: everything counts as daily (dailyFrom 0)', () => {
   const c = ctxOf(['2026-03-02', '2026-03-03']);
   assert.strictEqual(c.dailyFrom, 0); assert.deepStrictEqual(c.res, ['d', 'd']);

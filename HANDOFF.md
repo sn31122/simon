@@ -11,6 +11,11 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 <!-- data-status:end -->
 (The block above is rewritten by `--finish` / `--finish-add`; do not edit it by hand.)
 
+- **Depot + Startwert (29.09.):** `data/depot.csv` / `depot_ref.csv` = the real Scalable depot (9 positions, read with
+  get_portfolio_holdings/overview on 29.09.; "update depot" refreshes them). The top shows the real Yacht and "Mein Depot"
+  (value + G/V seit Kauf) side by side. Startwert: empty = all lines start at the Yacht's value, buttons "Yacht" / "Mein
+  Depot", a typed value applies to all lines ("nur Benchmarks" removed). "Statistik" panel: Wert, Rendite, p.a., Vol.,
+  Sharpe, Max. DD, as wide as the space right of the chart.
 - **History (28.09.):** `data/prices_history.csv` – month-end closes back to ~2016 and every 2nd trading day
   29.09.–29.12.2025 for all columns (except SpaceX); long ranges start where ≥ 90 % of today's value has quotes (all
   positions: 31.05.2021), risk metrics use only the daily data from 02.01.2026. 28.09.: + 9 instruments for the preset

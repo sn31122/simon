@@ -42,8 +42,15 @@
     <!-- overview like the app: big value + change over the selected period -->
     <section class="ov" aria-label="Portfoliowert">
       <div class="ov-val">
+        <div class="ov-lbl">Yacht-Portfolio</div>
         <div class="bigval" id="holdTotal"></div>
         <div class="hold-chg" id="holdChg"></div>
+      </div>
+      <!-- the real Scalable depot (user 29.09.): its actual value and G/V seit Kauf, independent of range, filters and Startwert -->
+      <div class="ov-val ov-val--depot" id="ovDepot" hidden>
+        <div class="ov-lbl">Mein Depot <span class="weak">Scalable</span></div>
+        <div class="bigval" id="depotTotal"></div>
+        <div class="hold-chg" id="depotChg"></div>
       </div>
     </section>
 
@@ -72,8 +79,8 @@
 
     <section class="chart-block" aria-label="Wertentwicklung">
       <!-- "Im Zeitraum" of the Benchmark-Vergleich beside the chart (user 28.09.): left of it when the window has room, else above it -->
-      <aside class="card cmp" id="cmpPanel" aria-label="Kennzahlen im Zeitraum">
-        <div class="cmp-h"><span class="cmp-t">Im Zeitraum</span><span class="cmp-sub" id="cmpSub"></span></div>
+      <aside class="card cmp" id="cmpPanel" aria-label="Statistik">
+        <div class="cmp-h"><span class="cmp-t">Statistik</span><span class="cmp-sub" id="cmpSub"></span></div>
         <div class="tscroll"><table class="tbl tbl--cmp" id="cmpTable"></table></div>
       </aside>
       <div id="mainChart"></div>
@@ -108,12 +115,14 @@
         <label for="startValue">Startwert (€)</label>
         <span class="inp-wrap">
           <input type="text" id="startValue" inputmode="decimal" autocomplete="off" spellcheck="false"
-                 title="Portfolio auf diesen Startwert skalieren (leer = tatsächlicher Wert)">
+                 title="Alle Linien (Yacht und Benchmarks) starten bei diesem Wert (leer = Wert des Yacht-Portfolios am Beginn des Zeitraums)">
           <button type="button" class="inp-reset" id="startReset" title="Startwert zurücksetzen" aria-label="Startwert zurücksetzen">×</button>
         </span>
         <span class="set-hint" id="scaleHint" aria-live="polite"></span>
-        <button type="button" class="ltog ltog--sm" id="benchOnly" aria-pressed="false"
-                title="Startwert nur für die Benchmarks: das Yacht-Portfolio bleibt bei seinem echten Wert, die Benchmarks starten beim Startwert – so stehen die Linien im echten Größenverhältnis. Aus = Startwert skaliert das Yacht-Portfolio, Benchmarks starten gleich groß."><i aria-hidden="true"></i>nur Benchmarks</button>
+        <span class="sv-btns" role="group" aria-label="Startwert setzen">
+          <button type="button" class="sv-btn" id="svYacht" aria-pressed="true" title="Alle Linien starten beim Wert des Yacht-Portfolios am Beginn des Zeitraums (Feld leer)">Yacht</button>
+          <button type="button" class="sv-btn" id="svDepot" aria-pressed="false" title="Alle Linien starten beim aktuellen Wert deines Scalable-Depots">Mein Depot</button>
+        </span>
       </div>
       <div class="set-field">
         <label for="rfInput">Risikofreier Zins</label>
