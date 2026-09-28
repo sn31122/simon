@@ -13,8 +13,9 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 
 - **Data:** 64 price series (46 + Coherent, Lumentum, Microsoft, NVIDIA + on 27.09. Nebius, CoreWeave, Core Scientific, IREN,
   GE Vernova, Vertiv, Constellation, AEP, Vistra, DTE, FirstEnergy, NRG, CMS, Solaris Energy), all selectable in the
-  benchmark search and fetched by every update. Preset "Energie" (11 names with fixed weights incl. Bloom) starts as an
-  editable card, hidden in the chart. 32 Yacht positions unchanged. 28.09.: + FR0010755611 Amundi MSCI USA Daily (2x)
+  benchmark search and fetched by every update. Presets (28.09.): only "Mein Depot" is a card at load; "Energie" (11 names incl. Bloom) and
+  "Old portfolio" (60 % MSCI USA 2x, 16 % NVIDIA, 14 % Microsoft, 10 % Alphabet) are picked from the "+ Benchmark" menu;
+  preset fields show whole %, the exact weights count until edited. 32 Yacht positions unchanged. 28.09.: + FR0010755611 Amundi MSCI USA Daily (2x)
   Leveraged (65 series); "Mein Depot" is now an editable % card (share counts of 25.09. × prices of 28.09.), shown by default.
 - **Dashboard (27.09. requests, all verified in a browser):** benchmark cards (presets Mein Depot + Energie, custom
   cards with instrument search and % rows, buy and hold), measurement boxes (Yacht + one box per shown benchmark with % / Gleicher Wert, 28.09.),

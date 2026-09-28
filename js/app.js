@@ -774,16 +774,20 @@
     .sort(function (a, b) { return a.short.localeCompare(b.short, 'de'); });
   var INSTR_BY = {};
   INSTR.forEach(function (i) { INSTR_BY[i.isin] = i; });
-  // weighting presets (data/benchmarks.csv "ISIN:20%|…", "Mein Depot" and "Energie"; user 27./28.09.): start as own cards –
-  // editable, deletable; "Mein Depot" shown in the chart, the others hidden; a reload brings them back as defined
-  (Array.isArray(D.card_presets) ? D.card_presets : []).forEach(function (p) {
-    var rows = Object.keys(p.weights || {}).filter(function (i) { return INSTR_BY[i]; })
-      .map(function (i) { return newRow(i, fmtShare(p.weights[i])); });
-    if (!rows.length) return;
-    var name = String(p.name || nextName()).slice(0, 40);
-    var depot = p.id === DEPOT_ID;                                 // "Mein Depot" (user 28.09.): white and shown from the start
-    state.cards.push({ id: 'bm' + (++cardSeq), name: name, defName: name, color: depot ? DEPOT_COLOR : nextColor(), show: depot, rows: rows });
+  // weighting presets (data/benchmarks.csv "ISIN:20%|…"; user 28.09.): every preset is offered in the "+ Benchmark" menu and
+  // becomes an ordinary own card (editable, deletable, shown); start "card" ("Mein Depot") is also a card at load. The
+  // fields show whole percentages, the exact weight stays behind a field until it is typed in (row.exact)
+  var PRESETS = (Array.isArray(D.card_presets) ? D.card_presets : []).filter(function (p) {
+    return Object.keys(p.weights || {}).some(function (i) { return INSTR_BY[i]; });
   });
+  function presetCard(p) {
+    var rows = Object.keys(p.weights).filter(function (i) { return INSTR_BY[i]; })
+      .map(function (i) { return newRow(i, fmtShare(Math.round(p.weights[i])), p.weights[i]); });
+    var name = String(p.name || nextName()).slice(0, 40);
+    var color = p.id === DEPOT_ID && !state.cards.some(function (c) { return c.color === DEPOT_COLOR; }) ? DEPOT_COLOR : nextColor();
+    return { id: 'bm' + (++cardSeq), name: name, defName: name, color: color, show: true, rows: rows, preset: p.id };
+  }
+  PRESETS.forEach(function (p) { if (p.start === 'card') state.cards.push(presetCard(p)); });
   function instrSub(i) { return [i.name, i.isin, i.type].filter(Boolean).join(' · '); }
   function insTitle(i) { return i ? i.short + ' · ' + instrSub(i) : 'Name, Kürzel oder ISIN eingeben'; }
   function words(s) { return ' ' + s.replace(/[^a-z0-9äöüß]+/g, ' '); }
@@ -804,10 +808,13 @@
 
   function cardById(id) { for (var k = 0; k < state.cards.length; k++) if (state.cards[k].id === id) return state.cards[k]; return null; }
   function rowById(c, id) { for (var k = 0; k < c.rows.length; k++) if (c.rows[k].id === id) return c.rows[k]; return null; }
-  function newRow(isin, pctText) {
+  /** exact: the preset's weight behind a rounded field (null once the field is typed in, or for a typed row). */
+  function newRow(isin, pctText, exact) {
     var i = isin ? INSTR_BY[isin] : null;
-    return { id: 'r' + (++rowSeq), isin: i ? i.isin : null, q: i ? i.short : '', pct: pctText || '' };
+    return { id: 'r' + (++rowSeq), isin: i ? i.isin : null, q: i ? i.short : '', pct: pctText || '', exact: isNum(exact) ? exact : null };
   }
+  /** The row's percentage: the exact preset weight while the field is untouched, else the typed value (null = invalid). */
+  function rowVal(r) { return r.exact !== null && r.exact !== undefined ? r.exact : pctVal(r.pct); }
   function nextColor() {
     var used = {};
     ctx.benchmarks.forEach(function (b) { used[colorOf(b.id)] = 1; });
@@ -842,7 +849,7 @@
   function cardInfo(c) {
     var total = 0, weights = {}, nIns = 0, bad = false, orphan = false;
     c.rows.forEach(function (r) {
-      var v = pctVal(r.pct);
+      var v = rowVal(r);
       if (v === null) { bad = true; return; }
       total += v;
       if (v > 0 && r.isin) { weights[r.isin] = (weights[r.isin] || 0) + v; nIns++; } else if (v > 0) orphan = true;
@@ -861,8 +868,8 @@
     state.cards.forEach(function (c) {
       var info = cardInfo(c);
       if (!info.valid) return;
-      var desc = c.rows.filter(function (r) { return r.isin && pctVal(r.pct) > 0; }).map(function (r) {
-        return fmtShare(pctVal(r.pct)) + ' % ' + INSTR_BY[r.isin].short;
+      var desc = c.rows.filter(function (r) { return r.isin && rowVal(r) > 0; }).map(function (r) {
+        return fmtShare(rowVal(r)) + ' % ' + INSTR_BY[r.isin].short;
       }).join(' · ') + ' – am ersten Tag des Zeitraums gekauft, dann gehalten';
       out.push({ b: { id: c.id, name: cardName(c), weights: info.weights, description: desc }, id: c.id, name: cardName(c), color: c.color, show: c.show });
     });
@@ -893,6 +900,7 @@
       '<input type="text" class="bb-ins" data-f="ins" value="' + esc(r.q) + '" placeholder="Instrument suchen" autocomplete="off" spellcheck="false"' +
       ' role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="bbDrop" aria-label="Instrument ' + (k + 1) + '" title="' + esc(insTitle(i)) + '">' +
       '<span class="bb-pctw"><input type="text" class="bb-pct" data-f="pct" value="' + esc(r.pct) + '" placeholder="0" inputmode="decimal" autocomplete="off"' +
+      (r.exact !== null && fmtShare(r.exact) !== r.pct ? ' title="genau ' + esc(fmtShare(r.exact)) + ' % (gerundet angezeigt, bis du den Wert änderst)"' : '') +
       ' spellcheck="false" aria-label="Anteil ' + (k + 1) + ' in Prozent"><span class="bb-pcts" aria-hidden="true">%</span></span>' +
       '<button type="button" class="bb-x" data-act="delrow" title="Zeile entfernen" aria-label="Zeile ' + (k + 1) + ' entfernen">×</button></div>';
   }
@@ -906,6 +914,42 @@
       '<button type="button" class="bb-mini" data-act="clear" title="Alle Zeilen leeren" aria-label="Alle Zeilen leeren">×</button></div>' +
       '<div class="bb-rows">' + c.rows.map(rowHTML).join('') + '</div>' +
       '<div class="bb-foot"><span class="bb-hint" aria-live="polite"></span><span class="bb-total"></span></div></div>';
+  }
+  /** "+ Benchmark" tile with its menu: an empty card or one of the saved presets (data/benchmarks.csv). */
+  function addTileHTML() {
+    return '<div class="bb-addw"><button type="button" class="bb-add" data-act="new" aria-haspopup="menu" aria-expanded="false" aria-controls="bbMenu"' +
+      ' title="Leere Karte oder gespeicherte Vorlage hinzufügen"><span aria-hidden="true">+</span>Benchmark</button>' +
+      '<div class="bb-menu" id="bbMenu" role="menu" hidden>' +
+      '<button type="button" class="bb-mi" role="menuitem" data-act="empty"><b>Leere Karte</b><span>Instrumente und Anteile selbst wählen</span></button>' +
+      (PRESETS.length ? '<div class="bb-msep">Vorlagen</div>' : '') +
+      PRESETS.map(function (p) {
+        var ws = Object.keys(p.weights).filter(function (i) { return INSTR_BY[i]; }).sort(function (a, b) { return p.weights[b] - p.weights[a]; });
+        var sub = ws.slice(0, 3).map(function (i) { return fmtShare(Math.round(p.weights[i])) + ' % ' + INSTR_BY[i].short; }).join(' · ') +
+          (ws.length > 3 ? ' · +' + (ws.length - 3) : '');
+        return '<button type="button" class="bb-mi" role="menuitem" data-act="preset" data-p="' + esc(p.id) + '" title="' + esc(p.description || '') + '">' +
+          '<b>' + esc(p.name) + '</b><span>' + esc(sub) + '</span></button>';
+      }).join('') + '</div></div>';
+  }
+  function menuOpen() { var m = $('bbMenu'); return !!(m && !m.hidden); }
+  function setMenu(open) {
+    var m = $('bbMenu'), b = m && m.parentNode.querySelector('.bb-add');
+    if (!m) return;
+    m.hidden = !open;
+    b.setAttribute('aria-expanded', String(open));
+    if (open) {                                                      // opens upward when there is more room above
+      var r = b.getBoundingClientRect();
+      m.classList.toggle('is-up', window.innerHeight - r.bottom < m.offsetHeight + 8 && r.top > window.innerHeight - r.bottom);
+      var first = m.querySelector('.bb-mi');
+      if (first) first.focus();
+    }
+  }
+  function addPresetCard(id) {
+    var p = PRESETS.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    var c = presetCard(p);
+    state.cards.push(c);
+    benchChanged();
+    focusCard(c.id, '.bb-name', false, true);
   }
   function makeEl(html) { var t = document.createElement('div'); t.innerHTML = html; return t.firstChild; }
   function cardSig(c) { return c ? c.rows.map(function (r) { return r.id; }).join(',') : 'fixed'; }
@@ -931,9 +975,7 @@
       patchCard(el, o, M);
     });
     Object.keys(old).forEach(function (id) { box.removeChild(old[id]); });
-    var add = box.querySelector('.bb-add') ||
-      makeEl('<button type="button" class="bb-add" data-act="new" title="Eigene Benchmark aus Instrumenten und Anteilen anlegen">' +
-        '<span aria-hidden="true">+</span>Benchmark</button>');
+    var add = box.querySelector('.bb-addw') || makeEl(addTileHTML());
     if (box.lastChild !== add) box.appendChild(add);
     if (drop) {
       if (!drop.inp.isConnected) closeDrop();
@@ -966,7 +1008,7 @@
     c.rows.forEach(function (rw) {
       var p = el.querySelector('[data-row="' + rw.id + '"] .bb-pct');
       if (!p) return;
-      var bad = pctVal(rw.pct) === null;
+      var bad = rowVal(rw) === null;
       p.classList.toggle('is-invalid', bad);
       if (bad) p.setAttribute('aria-invalid', 'true'); else p.removeAttribute('aria-invalid');
     });
@@ -992,7 +1034,7 @@
   }
   function dupCard(c) {
     var d = { id: 'bm' + (++cardSeq), name: (cardName(c) + ' (Kopie)').slice(0, 40), defName: nextName(), color: nextColor(), show: true,
-      rows: c.rows.map(function (r) { return newRow(r.isin, r.pct); }) };
+      rows: c.rows.map(function (r) { return newRow(r.isin, r.pct, r.exact); }) };
     state.cards.splice(state.cards.indexOf(c) + 1, 0, d);
     benchChanged();
     focusCard(d.id, '.bb-name', false, true);
@@ -1156,7 +1198,12 @@
         return;
       }
       var act = b.getAttribute('data-act'), o = ctxOf(b);
-      if (act === 'new') { addCard(); return; }
+      if (act === 'new') { setMenu(!menuOpen()); return; }
+      if (act === 'empty' || act === 'preset') {
+        setMenu(false);
+        if (act === 'empty') addCard(); else addPresetCard(b.getAttribute('data-p'));
+        return;
+      }
       if (act === 'show') {
         if (o.c) o.c.show = !o.c.show; else if (o.id) state.fixedOn[o.id] = !state.fixedOn[o.id];
         benchChanged();
@@ -1175,13 +1222,22 @@
       if (f === 'ins' && o.r) { o.r.q = t.value; openDrop(t); return; }
       was = cardInfo(o.c).valid;
       if (f === 'name') o.c.name = t.value;
-      else if (f === 'pct' && o.r) o.r.pct = t.value;
+      else if (f === 'pct' && o.r) { o.r.pct = t.value; o.r.exact = null; t.removeAttribute('title'); }   // typed: the field's value counts
       else return;
       if (was || cardInfo(o.c).valid) benchChanged();              // an invalid card stays out of everything: only its footer changes
       else patchCard(t.closest('[data-card]'), { id: o.c.id, c: o.c }, cur);
     });
     box.addEventListener('keydown', function (ev) {
       var t = ev.target, f = t.getAttribute('data-f'), o;
+      if (menuOpen() && t.closest('.bb-addw')) {                  // menu: Esc closes, ↑/↓ move between the entries
+        var its = Array.prototype.slice.call($('bbMenu').querySelectorAll('.bb-mi')), k = its.indexOf(t);
+        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); setMenu(false); box.querySelector('.bb-add').focus(); }
+        else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+          ev.preventDefault();
+          its[(k + (ev.key === 'ArrowDown' ? 1 : its.length - 1)) % its.length].focus();
+        }
+        return;
+      }
       if (f === 'ins') { insKey(ev, t); return; }
       if (ev.key !== 'Enter' || (f !== 'pct' && f !== 'name')) return;
       o = ctxOf(t);
@@ -1208,6 +1264,15 @@
         o = ctxOf(t);
         if (o.c && !o.c.name.trim()) { o.c.name = o.c.defName = defaultName(o.c); t.value = o.c.name; t.placeholder = o.c.defName; benchChanged(); }
       }
+    });
+    document.addEventListener('pointerdown', function (ev) {      // a press outside the "+ Benchmark" tile closes its menu
+      if (menuOpen() && !ev.target.closest('.bb-addw')) setMenu(false);
+    }, true);
+    box.addEventListener('focusout', function (ev) {
+      var w = box.querySelector('.bb-addw');
+      if (menuOpen() && w && w.contains(ev.target) && !(ev.relatedTarget && w.contains(ev.relatedTarget))) setTimeout(function () {
+        if (!w.contains(document.activeElement)) setMenu(false);
+      }, 0);
     });
     dropEl.addEventListener('mousedown', function (ev) { ev.preventDefault(); });          // the field keeps the focus
     dropEl.addEventListener('click', function (ev) {
