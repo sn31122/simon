@@ -1465,7 +1465,7 @@
   }
 
   /**
-   * "Im Zeitraum" panel beside the chart (user 28.09.): the first six columns of the Benchmark-Vergleich for the portfolio
+   * "Im Zeitraum" panel beside the chart (user 28.09.): the first six columns of the Benchmark-Vergleich (right of the chart) for the portfolio
    * and every shown benchmark; the Rendite cell also shows the line's end value in € (as drawn: Startwert, "nur Benchmarks").
    */
   function renderCmpPanel(M) {
@@ -1485,11 +1485,12 @@
     $('cmpTable').innerHTML = head + '<tbody>' + body + '</tbody>';
     placeCmpPanel();
   }
-  /** Left of the chart when the space beside the page column fits the panel's natural width, otherwise above the chart. */
+  /** Right of the chart when the space beside the page column fits the panel's natural width, otherwise above the chart. */
   function placeCmpPanel() {
     var blk = $('cmpPanel').parentNode, el = $('cmpPanel');
     blk.classList.add('cmp-side');
-    var fits = el.offsetWidth + 28 <= blk.getBoundingClientRect().left;       // 20px gap + 8px to the window edge
+    var room = document.documentElement.clientWidth - blk.getBoundingClientRect().right;
+    var fits = el.offsetWidth + 22 <= room;                                  // 16px gap + 6px to the window edge
     if (!fits) blk.classList.remove('cmp-side');
   }
 
