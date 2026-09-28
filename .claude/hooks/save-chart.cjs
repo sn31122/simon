@@ -6,6 +6,8 @@
 //   one_month    -> data/incoming/2h/<ISIN>.csv   2-hour points (~1 month): 2-h history
 //   three_months -> data/incoming/3m/<ISIN>.csv   daily closes: gap fill after a longer break
 //   year_to_date -> data/incoming/ytd/<ISIN>.csv  daily closes since 1 January: new-instrument backfill
+//   one_year     -> data/incoming/1y/<ISIN>.csv   every 2nd trading day of the last year: history before 2026 (--plan-history)
+//   max          -> data/incoming/max/<ISIN>.csv  month-end closes back to ~2016: history before 2026 (--plan-history)
 // File format (read by data/update_prices.py): first line "timestamp_utc,price", then "<timestampUtc>,<midPrice>" ascending,
 // values verbatim from the tool. Other timeframes, errors and anything unexpected pass through unchanged.
 // Plain Node, no dependencies; paths are built with path.join, so it also runs on Windows.
@@ -15,7 +17,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DEST = { seven_days: 'incoming', one_month: path.join('incoming', '2h'), three_months: path.join('incoming', '3m'),
-               year_to_date: path.join('incoming', 'ytd') };
+               year_to_date: path.join('incoming', 'ytd'), one_year: path.join('incoming', '1y'), max: path.join('incoming', 'max') };
 const TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}\d$/;
 

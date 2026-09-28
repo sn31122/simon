@@ -7,10 +7,15 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 28.09.2026 23:42 Berlin): 189 trading days 2026-01-02 … 2026-09-28; last row 2026-09-28 = intraday, asof 2026-09-28T19:20Z; 30-min (intraday.csv): 7 sessions 2026-09-18 … 2026-09-28; 2-h (intraday_2h.csv): 25 sessions 2026-08-25 … 2026-09-28; engine tests: 57 passed, 0 failed; crosscheck: 7620/7621 checks passed.
+- Data status (update 29.09.2026 00:59 Berlin): 189 trading days 2026-01-02 … 2026-09-28; last row 2026-09-28 = intraday, asof 2026-09-28T19:20Z; 30-min (intraday.csv): 7 sessions 2026-09-18 … 2026-09-28; 2-h (intraday_2h.csv): 25 sessions 2026-08-25 … 2026-09-28; engine tests: 60 passed, 0 failed; crosscheck: 7968/7969 checks passed.
 <!-- data-status:end -->
 (The block above is rewritten by `--finish` / `--finish-add`; do not edit it by hand.)
 
+- **History (28.09.):** `data/prices_history.csv` – month-end closes back to ~2016 and every 2nd trading day
+  29.09.–29.12.2025 for all columns (except SpaceX); long ranges start where ≥ 90 % of today's value has quotes (all
+  positions: 31.05.2021), risk metrics use only the daily data from 02.01.2026. 28.09.: + 9 instruments for the preset
+  "Situational Awareness" (SanDisk, STMicro, Applied Digital, Riot, CleanSpark, Keel Infrastructure, WhiteFiber, Bitdeer,
+  T1 Energy; 74 series; SharonAI is not on Scalable, its 2.3 % and the missing 1 % went to SanDisk/Micron).
 - **Data:** 64 price series (46 + Coherent, Lumentum, Microsoft, NVIDIA + on 27.09. Nebius, CoreWeave, Core Scientific, IREN,
   GE Vernova, Vertiv, Constellation, AEP, Vistra, DTE, FirstEnergy, NRG, CMS, Solaris Energy), all selectable in the
   benchmark search and fetched by every update. Presets (28.09.): only "Mein Depot" is a card at load; "Energie" (11 names incl. Bloom) and

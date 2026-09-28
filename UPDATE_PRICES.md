@@ -69,6 +69,12 @@ Every price column is fetched by every normal update and can be picked in the da
    and runs the tests. `FETCH AGAIN` → run the printed prompt, then `--finish-add` again. `CHECK WITH USER:` → show the line.
 A new *position* also needs its row in `positions.csv` and a logo `company-logos/<ISIN>.png` (user instruction only).
 
+## History before 2026 (only on user instruction; done 28.09.2026 for all columns)
+`python data/update_prices.py --plan-history [ISIN,…]` (default: every column) → one `price-fetcher` agent per printed prompt
+(TIMEFRAMES `one_year max`; the hook writes `data/incoming/1y/` and `data/incoming/max/`) → `--finish-history` (checks the
+points against the final daily closes, writes `data/prices_history.csv`, archives the raw files in
+`data/source/history_<date>/`, rebuilds, tests). New instruments get their history in `--plan-add` / `--finish-add`.
+
 ## Steps for a fetch agent (one batch)
 Your task names the TIMEFRAMES and your ISINs. The hook saves every result; you only make the calls.
 1. For **each** ISIN and **each** timeframe, call `get_security_chart` with `isin` = the ISIN and `timeframe` = the timeframe.
@@ -81,4 +87,5 @@ Your task names the TIMEFRAMES and your ISINs. The hook saves every result; you 
    that did not start with `SAVED` (ISIN, timeframe and the message). Do not run any scripts; the orchestrator does that.
 
 ## Steps for a backfill agent (new ISIN)
-Same as a fetch agent, with the three timeframes `year_to_date`, `seven_days` and `one_month` for each ISIN of your task.
+Same as a fetch agent, with the five timeframes `year_to_date`, `seven_days`, `one_month`, `one_year` and `max` for each ISIN
+of your task (the last two are the history before 2026: every 2nd trading day of the last year and month-end closes).

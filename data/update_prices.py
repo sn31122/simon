@@ -18,7 +18,8 @@
 #         python update_prices.py --plan      empties incoming/, prints one ready agent prompt per batch
 #         python update_prices.py --finish    check -> merge -> rebuild -> tests -> HANDOFF status block -> short report
 #   new instrument (only on user instruction; row in instruments.csv first):
-#         python update_prices.py --plan-add ISIN[,ISIN]    prints the backfill prompts (year_to_date + seven_days + one_month)
+#         python update_prices.py --plan-add ISIN[,ISIN]    prints the backfill prompts (year_to_date + seven_days + one_month
+#                                                           + one_year + max: the history before 2026, prices_history.csv)
 #         python update_prices.py --finish-add ISIN[,ISIN]  checks the backfill files, adds the columns, merges, rebuilds, tests
 #   single steps (debugging):
 #         python update_prices.py --check     validates incoming/*.csv, lists the ISINs to fetch again (exit 1 if any)
@@ -31,6 +32,8 @@ D = pathlib.Path(__file__).resolve().parent
 INC = D / 'incoming'
 INC2H, INC3M = INC / '2h', INC / '3m'
 STORE_30M, STORE_2H = D / 'intraday.csv', D / 'intraday_2h.csv'
+INC1Y, INCMAX = INC / '1y', INC / 'max'           # one_year / max fetches: history before 2026 (prices_history.csv)
+HIST = D / 'prices_history.csv'
 CLOSE_HOUR_BERLIN = 23   # a day's last point counts as the close once Berlin time is past 23:00
 BATCH = 25               # ISINs per fetch agent (the hook shrinks every result to one line: ~2 x 25 short calls per agent)
 GAP_DAYS = 5             # more weekdays since the last final close: also fetch three_months (seven_days covers ~5 sessions)
@@ -180,9 +183,13 @@ def tests_status_report(alerts, step=''):
     def span(ds): return f'{len(ds)} sessions {ds[0]} … {ds[-1]}' if ds else 'none'
     idays, hdays = sessions(STORE_30M), sessions(STORE_2H)
     asof = f', asof {last[2]}' if last[2] else ''
+    hist = ''
+    if HIST.exists():
+        hr = [r for r in csv.reader(open(HIST, encoding='utf-8')) if r][1:]
+        if hr: hist = f'history (prices_history.csv): {len(hr)} rows {hr[0][0]} … {hr[-1][0]} (month-end + every 2nd trading day); '
     status = (f'<!-- data-status:start (written by update_prices.py --finish) -->\n'
               f'- Data status (update {now_berlin:%d.%m.%Y %H:%M} Berlin): {len(rr)} trading days {rr[0][0]} … {last[0]}; '
-              f'last row {last[0]} = {last[1]}{asof}; 30-min (intraday.csv): {span(idays)}; 2-h (intraday_2h.csv): {span(hdays)}; '
+              f'last row {last[0]} = {last[1]}{asof}; {hist}30-min (intraday.csv): {span(idays)}; 2-h (intraday_2h.csv): {span(hdays)}; '
               f'{t1}; {t3}.\n<!-- data-status:end -->')
     hf = root/'HANDOFF.md'
     h = hf.read_text(encoding='utf-8')
@@ -298,13 +305,47 @@ def store_info(store):
     return f'{sum(len(v) for v in store.values())} points, {len(days)} sessions' + (f' {days[0]} .. {days[-1]}' if days else '')
 
 
+def add_history(new):
+    """new {isin: (one_year points, max points)} -> merged into prices_history.csv: one_year points before the daily data go
+    to their date (a "2d" row), max points before the first "2d" date into the row of their month ("m"; new rows as needed).
+    Columns follow prices_daily.csv. -> one summary line"""
+    first_daily = rows[0][0]
+    table = {}
+    if HIST.exists():
+        with open(HIST, encoding='utf-8') as f:
+            rd = csv.reader(f); hh = next(rd)
+            for r in rd:
+                if r: table[r[0]] = dict({'res': r[1]}, **{hh[k]: r[k] for k in range(2, len(r)) if r[k]})
+    month_row = {d[:7]: d for d, v in table.items() if v['res'] == 'm'}
+    two = [d for d, v in table.items() if v['res'] == '2d']
+    starts = [to_berlin(y[0][0]).date().isoformat() for y, _ in new.values() if y]
+    y_start = min(two) if two else (min(starts) if starts else first_daily)
+    n = 0
+    for i, (y, m) in new.items():
+        for ts, p in y:
+            d = to_berlin(ts).date()
+            if d.isoformat() < first_daily and d.weekday() < 5:
+                table.setdefault(d.isoformat(), {'res': '2d'})[i] = '%.10g' % p; n += 1
+        for ts, p in m:
+            d = to_berlin(ts).date()
+            if d.isoformat() >= y_start: continue
+            while d.weekday() > 4: d -= datetime.timedelta(1)
+            key = d.isoformat()[:7]
+            rd = month_row.setdefault(key, d.isoformat())
+            table.setdefault(rd, {'res': 'm'})[i] = '%.10g' % p; n += 1
+    with open(HIST, 'w', encoding='utf-8', newline='') as f:
+        w = csv.writer(f); w.writerow(['date', 'res'] + head[3:])
+        for d in sorted(table): w.writerow([d, table[d]['res']] + [table[d].get(i, '') for i in head[3:]])
+    return f'prices_history.csv: {n} history points of {len(new)} new ISIN(s) merged ({len(table)} rows)'
+
+
 if '--plan-add' in sys.argv:
     new, ins = arg_isins('--plan-add'), instruments()
     have = [i for i in new if i in col]
     if have: print('already price columns (they are fetched by the normal update):', ', '.join(have)); sys.exit(1)
     YTD.mkdir(parents=True, exist_ok=True)
     for i in new:                           # leftovers of an earlier attempt are fetched again
-        for p in (YTD/f'{i}.csv', INC/f'{i}.csv', INC2H/f'{i}.csv'):
+        for p in (YTD/f'{i}.csv', INC/f'{i}.csv', INC2H/f'{i}.csv', INC/'1y'/f'{i}.csv', INC/'max'/f'{i}.csv'):
             if p.exists(): p.unlink()
     k = math.ceil(len(new) / ADD_BATCH)
     size = math.ceil(len(new) / k)
@@ -329,19 +370,32 @@ if '--finish-add' in sys.argv:
         y, py = read_points(YTD/f'{i}.csv')
         s7, p7 = read_points(INC/f'{i}.csv')
         s2, p2 = read_points(INC2H/f'{i}.csv')
+        h1, p1y = read_points(INC/'1y'/f'{i}.csv')
+        hm, pmx = read_points(INC/'max'/f'{i}.csv')
         prob = ([f'incoming/ytd/{i}.csv: {x}' for x in py] + [f'incoming/{i}.csv: {x}' for x in p7]
-                + [f'incoming/2h/{i}.csv: {x}' for x in p2])
+                + [f'incoming/2h/{i}.csv: {x}' for x in p2] + [f'incoming/1y/{i}.csv: {x}' for x in p1y]
+                + [f'incoming/max/{i}.csv: {x}' for x in pmx])
         if prob: redo.append(i); errs.append(f'{i}: ' + '; '.join(prob[:3])); continue
         close, last7 = last_per_day(y), last_per_day(s7)
+        # a thinly traded title's close can come from a trade after the last 30-min point: then the year_to_date close stays
+        ts_y = {to_berlin(t).date().isoformat(): t for t, _ in y}
+        ts_7 = {to_berlin(t).date().isoformat(): t for t, _ in s7}
+        later = {d for d in last7 if d in ts_y and ts_y[d] > ts_7[d] and d < today}
+        for d in later: del last7[d]
         for d, p in sorted(last7.items()):   # both calls come from the same source: the closes must agree
             if d in close and abs(p / close[d] - 1) > 0.005:
                 errs.append(f'{i} {d}: seven_days close {p:g} differs from year_to_date {close[d]:g} (copy error?)')
+                if i not in redo: redo.append(i)
+        for src, P in (('one_year', h1), ('max', hm)):   # history calls: their 2026 points are closes of year_to_date too
+            bad = [d for d, p in last_per_day(P).items() if d in close and d < today and abs(p / close[d] - 1) > 0.005]
+            if bad:
+                errs.append(f'{i}: {src} differs from year_to_date on {len(bad)} days, e.g. {bad[0]}')
                 if i not in redo: redo.append(i)
         ref = sorted(d for d in by_date if d >= min(close))
         gaps = [d for d in ref if d not in close and d not in last7]
         if len(gaps) > 5: errs.append(f'{i}: no close on {len(gaps)} trading days after its first quote (e.g. {", ".join(gaps[:4])}) - lines skipped?')
         close.update(last7)                  # an open day's latest price comes from seven_days
-        got[i] = (close, s7, y, gaps, s2)
+        got[i] = (close, s7, y, gaps, s2, h1, hm)
     if errs:
         print('ERRORS (nothing written):', *errs, sep='\n  ')
         if redo:
@@ -350,7 +404,7 @@ if '--finish-add' in sys.argv:
         sys.exit(1)
     alerts = []
     for i in new:
-        close, s7, y, gaps, _ = got[i]
+        close, s7, y, gaps = got[i][:4]
         head.append(i)
         for r in rows: r.append('%.10g' % close[r[0]] if r[0] in close else '')
         n_fill = sum(1 for r in rows if r[0] in close)
@@ -366,6 +420,7 @@ if '--finish-add' in sys.argv:
         w = csv.writer(f); w.writerow(head); w.writerows(rows)
     write_store(STORE_30M, s30); write_store(STORE_2H, s2h)
     print(f'prices_daily.csv: {len(head) - 3} columns; intraday.csv: {store_info(s30)}; intraday_2h.csv: {store_info(s2h)}')
+    print(add_history({i: (got[i][5], got[i][6]) for i in new}))
     # the raw year_to_date files stay as history in source/ (like the earlier backfills), the seven_days files are temporary
     meta = D/'source'/'ytd_meta.csv'
     new_meta = not meta.exists()
@@ -379,11 +434,102 @@ if '--finish-add' in sys.argv:
             if dst.exists(): dst = D/'source'/f'ytd_{i}_{today}.csv'
             (YTD/f'{i}.csv').replace(dst)
             (INC/f'{i}.csv').unlink(); (INC2H/f'{i}.csv').unlink()
+            for sub, name in (('1y', 'one_year'), ('max', 'max')):
+                dh = D/'source'/f'history_{today}'/name
+                dh.mkdir(parents=True, exist_ok=True)
+                (INC/sub/f'{i}.csv').replace(dh/f'{i}.csv')
     print('\n== rebuild ==')
     code, out = run_cmd([sys.executable, str(D/'build_data.py')])
     if code: print('\nSTOP: build_data.py failed (prices_daily.csv / intraday*.csv are already written). Show this to the user.'); sys.exit(1)
     alerts = [ln.strip() for ln in out.splitlines() if any(i in ln for i in new) and ('SPLIT' in ln or 'check value' in ln)]
     sys.exit(tests_status_report(alerts))
+
+
+# ------------------------------------------------------------------ history before the daily data: --plan-history / --finish-history
+# (user 28.09.2026) one_year = every 2nd trading day of the last year, max = month-end closes back to ~2016; both go to
+# prices_history.csv (date,res,<ISIN>…; res "2d" / "m"), only for dates before the first row of prices_daily.csv.
+
+if '--plan-history' in sys.argv:
+    i = sys.argv.index('--plan-history')
+    isins = arg_isins('--plan-history') if i + 1 < len(sys.argv) and not sys.argv[i + 1].startswith('--') else head[3:]
+    for d in (INC1Y, INCMAX):
+        d.mkdir(parents=True, exist_ok=True)
+        for x in isins:
+            if (d/f'{x}.csv').exists(): (d/f'{x}.csv').unlink()
+    k = math.ceil(len(isins) / ADD_BATCH)
+    size = math.ceil(len(isins) / k)
+    batches = [isins[j:j + size] for j in range(0, len(isins), size)]
+    print(f'HISTORY PLAN for {len(isins)} ISINs (one_year + max; the hook writes data/incoming/1y/ and data/incoming/max/):')
+    print(f'\nAGENT PROMPTS - start {len(batches)} agents at once: agent type price-fetcher, model haiku, one prompt each:')
+    for j, b in enumerate(batches, 1): print(f'--- prompt {j}/{len(batches)} ---\n' + agent_prompt(['one_year', 'max'], b))
+    print('--- end of prompts --- then: python data/update_prices.py --finish-history')
+    sys.exit(0)
+
+def history_rows(y_pts, m_pts, first_daily):
+    """one_year points {isin: [(ts, price)]} + max points -> {date: [res, {isin: price}]} before first_daily:
+    every one_year point before the daily data ("2d"), and for the months before the first one_year date one row per month
+    ("m", dated on the month's latest point over all ISINs; each ISIN's own month-end close)."""
+    out = {}
+    starts = [to_berlin(y[0][0]).date().isoformat() for y in y_pts.values() if y]
+    y_start = min(starts) if starts else first_daily
+    for i, y in y_pts.items():
+        for ts, p in y:
+            d = to_berlin(ts).date()
+            if d.isoformat() < first_daily and d.weekday() < 5: out.setdefault(d.isoformat(), ['2d', {}])[1][i] = p
+    months = {}
+    for i, m in m_pts.items():
+        for ts, p in m:
+            d = to_berlin(ts).date().isoformat()
+            if d < y_start: months.setdefault(d[:7], {})[i] = (d, p)
+    for mon, v in months.items():
+        d = max(x[0] for x in v.values())
+        while datetime.date.fromisoformat(d).weekday() > 4: d = (datetime.date.fromisoformat(d) - datetime.timedelta(1)).isoformat()
+        if d in out: continue
+        out[d] = ['m', {i: p for i, (_, p) in v.items()}]
+    return out
+
+if '--finish-history' in sys.argv:
+    first_daily = rows[0][0]
+    errs, redo, y_pts, m_pts = [], [], {}, {}
+    for i in head[3:]:
+        y, py = read_points(INC1Y/f'{i}.csv')
+        m, pm = read_points(INCMAX/f'{i}.csv')
+        prob = [f'incoming/1y/{i}.csv: {x}' for x in py] + [f'incoming/max/{i}.csv: {x}' for x in pm]
+        if prob: redo.append(i); errs.append(f'{i}: ' + '; '.join(prob[:3])); continue
+        off = []                                   # same source as the daily closes: final days must agree
+        for src, P in (('one_year', y), ('max', m)):
+            for ts, p in P:
+                r = by_date.get(to_berlin(ts).date().isoformat())
+                if r and r[1] == 'final' and r[col[i]] and abs(p / float(r[col[i]]) - 1) > 0.005:
+                    off.append(f'{src} {r[0]} {p:g} vs daily {r[col[i]]}')
+        if off: redo.append(i); errs.append(f'{i}: differs from prices_daily.csv on {len(off)} days, e.g. ' + '; '.join(off[:2]))
+        y_pts[i], m_pts[i] = y, m
+    if errs:
+        print('ERRORS (nothing written):', *errs, sep='\n  ')
+        if redo:
+            parts = [redo[j:j + ADD_BATCH] for j in range(0, len(redo), ADD_BATCH)]
+            print(f'\nFETCH AGAIN: start {len(parts)} agent(s) at once (price-fetcher, haiku), one prompt each, then --finish-history again:')
+            for j, b in enumerate(parts, 1): print(f'--- prompt {j}/{len(parts)} ---\n' + agent_prompt(['one_year', 'max'], b))
+            print('--- end of prompts ---')
+        sys.exit(1)
+    hist = history_rows(y_pts, m_pts, first_daily)
+    with open(HIST, 'w', encoding='utf-8', newline='') as f:
+        w = csv.writer(f); w.writerow(['date', 'res'] + head[3:])
+        for d in sorted(hist):
+            res, v = hist[d]
+            w.writerow([d, res] + ['%.10g' % v[i] if i in v else '' for i in head[3:]])
+    nm, n2 = sum(1 for v in hist.values() if v[0] == 'm'), sum(1 for v in hist.values() if v[0] == '2d')
+    firsts = sorted((min(d for d, v in hist.items() if i in v[1]), i) for i in head[3:] if any(i in v[1] for v in hist.values()))
+    print(f'prices_history.csv: {len(hist)} rows {min(hist)} .. {max(hist)} ({nm} month-end + {n2} every-2nd-day rows) for '
+          f'{len(firsts)} of {len(head) - 3} ISINs; latest first quote: ' + ', '.join(f'{i} {d}' for d, i in firsts[-5:]))
+    src = D/'source'/f'history_{today}'                  # the raw fetches stay as history, like the ytd backfills
+    for d, sub in ((INC1Y, 'one_year'), (INCMAX, 'max')):
+        (src/sub).mkdir(parents=True, exist_ok=True)
+        for p in d.glob('*.csv'): p.replace(src/sub/p.name)
+    print('\n== rebuild ==')
+    code, out = run_cmd([sys.executable, str(D/'build_data.py')])
+    if code: print('\nSTOP: build_data.py failed (prices_history.csv is written). Show this to the user.'); sys.exit(1)
+    sys.exit(tests_status_report([ln.strip() for ln in out.splitlines() if 'SPLIT' in ln and 'history' in ln]))
 
 
 # ------------------------------------------------------------------ read the hook's fetch files (+ validation)

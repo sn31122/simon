@@ -804,3 +804,7 @@ th.is-sorted { color: var(--text); }
 .cmp-nm { display: inline-block; max-width: 88px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .cmp-val { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .chart-block.cmp-side .cmp { position: absolute; top: 0; left: calc(100% + 16px); width: max-content; margin: 0; }
+/* Monatsrenditen over several years (history, user 28.09.): one block per year, year label in front of its first row */
+.my-year { display: inline-block; width: 36px; color: var(--text); font-weight: 700; }
+#monthTable tr.my-first td { border-top: 1px solid #2e3236; }
+#monthTable tbody tr.my-first:first-child td { border-top: 0; }

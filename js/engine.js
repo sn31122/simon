@@ -112,6 +112,10 @@
     const dates = Array.isArray(data.dates) ? data.dates : [];
     const n = dates.length;
     const status = dates.map((_, k) => (Array.isArray(data.status) && data.status[k]) || 'final');
+    // resolution per date (user 28.09.): 'm' month-end / '2d' every 2nd trading day (history before the daily data), 'd'
+    // daily; dailyFrom = first daily index – risk metrics (volatility, Sharpe, VaR, beta, correlation …) start there
+    const res = dates.map((_, k) => (Array.isArray(data.res) && data.res[k]) || 'd');
+    const dailyFrom = Math.max(0, res.indexOf('d') < 0 ? n : res.indexOf('d'));
     const positions = Array.isArray(data.positions) ? data.positions : [];
     const benchmarks = Array.isArray(data.benchmarks) ? data.benchmarks : [];
     const groups = (Array.isArray(data.groups) ? data.groups : []).slice();
@@ -123,7 +127,7 @@
     const px = {}, firstIdx = {};
     isins.forEach((isin) => { const f = fillPrices(prices[isin], n); px[isin] = f.px; firstIdx[isin] = f.first; });
     const ctx = {
-      data, meta: data.meta || {}, dates, n, status, positions, benchmarks, groups, px, firstIdx, lastIdx: n - 1,
+      data, meta: data.meta || {}, dates, n, status, res, dailyFrom, positions, benchmarks, groups, px, firstIdx, lastIdx: n - 1,
       day: dates.map(dayNumber),                                           // extra: day numbers for calendar math
     };
     ctx.grids = prepareGrids(data, ctx);                                 // sub-daily grids (30 min / 2 h) for the chart
@@ -431,6 +435,8 @@
       const y = String(ctx.dates[end]).slice(0, 4);
       let s = 0;
       while (s < end && String(ctx.dates[s]).slice(0, 4) !== y) s++;
+      // with history before the year: from the previous year's last price (the year's first day counts as a return)
+      if (s > 0 && s < end && String(ctx.dates[s - 1]).slice(0, 4) < y) s--;
       return { start: s, end };
     }
     let lim;
@@ -439,6 +445,8 @@
     else return { start: 0, end };
     let s = 0;                                                             // none found -> 0
     for (let k = end; k >= 0; k--) if (ctx.day[k] !== null && ctx.day[k] <= lim) { s = k; break; }
+    // a month-end history row far before the target: the nearer later date is the better start (1J -> 29.09.2025)
+    if (ctx.res && ctx.res[s] === 'm' && s < end && ctx.day[s + 1] !== null && ctx.day[s + 1] - lim < lim - ctx.day[s]) s++;
     return { start: s, end };
   }
 
@@ -451,6 +459,39 @@
     for (let k = ctx.n - 1; k >= 0; k--) if (ctx.day[k] !== null && ctx.day[k] <= b) { end = k; break; }
     if (start < 0 || end < 0 || end - start < 1) return null;
     return { start, end };
+  }
+
+  /** First index of daily data at or after s (risk metrics use returns from there on). */
+  function riskStart(ctx, s) { return Math.max(s, isNum(ctx.dailyFrom) ? ctx.dailyFrom : 0); }
+
+  /**
+   * coverageStart(ctx, {selected, share = 0.9, end}) -> first index k at which the selected positions that already have a
+   * real quote (firstIdx <= k) make up at least `share` of the selection's value at `end` (default: last date); 0 when
+   * nothing is selected. Long ranges start there (user 28.09.: a 10-year backcast with flat, not yet quoted titles misleads).
+   */
+  function coverageStart(ctx, opts) {
+    opts = opts || {};
+    const sel = selectionSet(ctx, opts.selected), share = isNum(opts.share) ? opts.share : 0.9;
+    const e = isNum(opts.end) ? clamp(Math.round(opts.end), 0, ctx.n - 1) : ctx.n - 1;
+    const list = ctx.positions.filter((p) => sel.has(p.isin)).map((p) => ({ f: ctx.firstIdx[p.isin], v: sharesOf(p) * ctx.px[p.isin][e] }));
+    const V = sum(list.map((x) => x.v));
+    if (!list.length || !(V > 0)) return 0;
+    list.sort((a, b) => a.f - b.f);
+    let c = 0;
+    for (const x of list) { c += x.v; if (c >= share * V - 1e-9) return Math.min(Math.max(0, x.f), e); }
+    return 0;
+  }
+  /** notQuoted(ctx, {selected, start, end}) -> [{isin, short, first, share}] selected positions without a real quote at start (held flat) */
+  function notQuoted(ctx, opts) {
+    opts = opts || {};
+    const sel = selectionSet(ctx, opts.selected);
+    const e = isNum(opts.end) ? clamp(Math.round(opts.end), 0, ctx.n - 1) : ctx.n - 1, s = isNum(opts.start) ? opts.start : 0;
+    const list = ctx.positions.filter((p) => sel.has(p.isin));
+    const V = sum(list.map((p) => sharesOf(p) * ctx.px[p.isin][e]));
+    return list.filter((p) => ctx.firstIdx[p.isin] > s).map((p) => ({
+      isin: p.isin, short: p.short, first: ctx.firstIdx[p.isin] < ctx.n ? ctx.dates[ctx.firstIdx[p.isin]] : null,
+      share: V > 0 ? sharesOf(p) * ctx.px[p.isin][e] / V : null,
+    })).sort((a, b) => (b.share || 0) - (a.share || 0));
   }
 
   function normRange(ctx, start, end) {
@@ -474,7 +515,8 @@
   function makeSeries(ctx, s, e, raw, scale, value, base) {
     const idx = [], dates = [];
     for (let k = s; k <= e; k++) { idx.push(k); dates.push(ctx.dates[k]); }
-    return { start: s, end: e, dates, idx, raw, scale, value, pl: value.map((v) => v - base), ret: returnsOf(value), startValue: value[0] };
+    return { start: s, end: e, dates, idx, raw, scale, value, pl: value.map((v) => v - base), ret: returnsOf(value), startValue: value[0],
+      dailyOff: riskStart(ctx, s) - s > e - s ? e - s : riskStart(ctx, s) - s };   // points before the daily data (risk metrics skip them)
   }
 
   /** portfolio(ctx, {selected, start, end, startValue}) -> series | null (null if nothing selected) */
@@ -562,7 +604,9 @@
     if (!series || !Array.isArray(series.value) || !series.value.length) return null;
     const { rf, rfd } = rfDaily(opts);
     const v = series.value, ds = Array.isArray(series.dates) ? series.dates : [];
-    const r = retsOf(series), n = r.length;
+    // returns of the daily part only: history points are a month / 2 days apart (totalReturn, CAGR and drawdown use all)
+    const off = isNum(series.dailyOff) ? series.dailyOff : 0;
+    const r = retsOf(series).slice(off), n = r.length;
     const startValue = fin(v[0]), endValue = fin(v[v.length - 1]);
     const q = div(endValue, startValue);
     const totalReturn = q === null ? null : q - 1;
@@ -594,13 +638,14 @@
       maxDD: d.maxDD, maxDDPeakDate: dateAt(d.peak), maxDDTroughDate: dateAt(d.trough), maxDDRecoveryDate: dateAt(d.recovery),
       currentDD: fin(d.current),
       calmar: d.maxDD < 0 && cagr !== null ? fin(cagr / Math.abs(d.maxDD)) : null,
-      bestDay: iBest < 0 ? { ret: null, date: null } : { ret: fin(r[iBest]), date: dateAt(iBest + 1) },
-      worstDay: iWorst < 0 ? { ret: null, date: null } : { ret: fin(r[iWorst]), date: dateAt(iWorst + 1) },
+      bestDay: iBest < 0 ? { ret: null, date: null } : { ret: fin(r[iBest]), date: dateAt(iBest + 1 + off) },
+      worstDay: iWorst < 0 ? { ret: null, date: null } : { ret: fin(r[iWorst]), date: dateAt(iWorst + 1 + off) },
       pctPositive: n ? pos / n : null,
       var95, cvar95,
       var95EUR: var95 === null || endValue === null ? null : fin(var95 * endValue),
       cvar95EUR: cvar95 === null || endValue === null ? null : fin(cvar95 * endValue),
       n, rf,                                                               // extras: number of daily returns, rf used
+      riskFrom: off > 0 ? dateAt(off) : null,                              // extra: date the risk metrics start (history before it)
     };
   }
 
@@ -611,14 +656,17 @@
     if (!pSeries || !bSeries || !Array.isArray(pSeries.value) || !Array.isArray(bSeries.value)) return out;
     const { rfd } = rfDaily(opts);
     const P = pSeries.value, B = bSeries.value, RP = retsOf(pSeries), RB = retsOf(bSeries);
-    let op = 0, ob = 0, len;                                               // align on the common index range
+    let op = 0, ob = 0, len, sh = 0;                                       // align on the common index range
     if (isNum(pSeries.start) && isNum(bSeries.start)) {
       const s = Math.max(pSeries.start, bSeries.start);
       const e = Math.min(pSeries.start + P.length - 1, bSeries.start + B.length - 1);
       op = s - pSeries.start; ob = s - bSeries.start; len = e - s + 1;
+      // returns only from the daily data on (history points are a month / 2 days apart)
+      const d = Math.max(pSeries.start + (pSeries.dailyOff || 0), bSeries.start + (bSeries.dailyOff || 0));
+      sh = Math.min(Math.max(0, d - s), Math.max(0, len - 1));
     } else len = Math.min(P.length, B.length);
     if (!(len >= 1)) return out;
-    const rp = RP.slice(op, op + len - 1), rb = RB.slice(ob, ob + len - 1), n = rp.length;
+    const rp = RP.slice(op + sh, op + len - 1), rb = RB.slice(ob + sh, ob + len - 1), n = rp.length;
     out.n = n;
     const trP = div(P[op + len - 1], P[op]), trB = div(B[ob + len - 1], B[ob]);
     out.excessReturn = trP === null || trB === null ? null : fin((trP - 1) - (trB - 1));
@@ -698,7 +746,7 @@
       const p0 = fin(px[s]), p1 = fin(px[e]);
       const v0 = p0 === null ? null : shares * p0 * scale, v1 = p1 === null ? null : shares * p1 * scale;
       const q = div(p1, p0);
-      const r = returnsOf(spark), sd = sampleSd(r);
+      const r = returnsOf(px.slice(riskStart(ctx, s), e + 1)), sd = sampleSd(r);   // volatility: daily data only
       const fi = ctx.firstIdx[p.isin];
       const cost = isNum(Number(p.cost_basis)) && p.cost_basis !== null && p.cost_basis !== '' ? Number(p.cost_basis) : null;
       const pNow = fin(px[lastData]);
@@ -835,7 +883,8 @@
   function correlationMatrix(ctx, opts) {
     opts = opts || {};
     const isins = isinList(ctx, opts.isins), k = isins.length;
-    const [s, e] = ctx.n ? normRange(ctx, opts.start, opts.end) : [0, -1];
+    const [s0, e] = ctx.n ? normRange(ctx, opts.start, opts.end) : [0, -1];
+    const s = ctx.n ? Math.min(riskStart(ctx, s0), Math.max(s0, e)) : s0;   // daily returns only (history before dailyFrom)
     const R = isins.map((i) => returnsOf(ctx.px[i].slice(s, e + 1)));        // R[a][j] = return at index s+1+j
     const j0 = isins.map((i) => { const f = ctx.firstIdx[i]; return Math.max(0, (isNum(f) ? f : 0) - s); });
     const m = [], n = [];
@@ -868,7 +917,8 @@
     const sel = selectionSet(ctx, opts.selected);
     const list = ctx.positions.filter((p) => sel.has(p.isin));
     if (!list.length || ctx.n < 2) return null;
-    const [s, e] = normRange(ctx, opts.start, opts.end);
+    const [s0, e] = normRange(ctx, opts.start, opts.end);
+    const s = Math.min(riskStart(ctx, s0), e);                             // daily returns only (history before dailyFrom)
     const T = e - s;
     if (T < 2) return null;
     const vEnd = list.map((p) => sharesOf(p) * ctx.px[p.isin][e]);
@@ -1014,7 +1064,7 @@
     version: '1.1.0',
     PRESETS, ANN, DEFAULT_RF,
     prepare, presetRange, customRange, portfolio, benchmark, drawdown, stats, relative, monthly, assets, groupSummary,
-    withShares, correlationMatrix, riskContribution,
+    withShares, correlationMatrix, riskContribution, coverageStart, notQuoted,
     assetsTotal, chartInterval, gridCovers, gridFrame,
     intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },

@@ -98,8 +98,24 @@
   }
 
   /** Shared x layout: trading-day index -> px (no weekend gaps). */
-  function xLayout(W, m, padL, padR) {
+  /**
+   * x scale: one slot per point, or – with xs (a number per point, e.g. day numbers; ranges with month-end history) – by
+   * that value, so a month between two points takes a month of width. idx(px) = nearest point.
+   */
+  function xLayout(W, m, padL, padR, xs) {
     var plotW = Math.max(10, W - padL - padR);
+    if (xs && xs.length === m && m > 1 && xs[m - 1] > xs[0]) {
+      var x0 = xs[0], span = xs[m - 1] - xs[0];
+      var xOf = function (i) { var k = clamp(Math.round(i), 0, m - 1); return padL + (xs[k] - x0) / span * plotW; };
+      return {
+        padL: padL, padR: padR, plotW: plotW, m: m, x: xOf,
+        idx: function (px) {
+          var t = x0 + (px - padL) / plotW * span, lo = 0, hi = m - 1;
+          while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (xs[mid] <= t) lo = mid; else hi = mid; }
+          return t - xs[lo] <= xs[hi] - t ? lo : hi;
+        }
+      };
+    }
     return {
       padL: padL, padR: padR, plotW: plotW, m: m,
       x: function (i) { return m > 1 ? padL + i * plotW / (m - 1) : padL + plotW / 2; },
@@ -119,7 +135,14 @@
       });
     } else if (m < 2) {
       return out;
-    } else if (m >= 45) {
+    } else if (M.xs && M.xs[m - 1] - M.xs[0] > 800) {
+      // several years (history): one label per year at its first point ("2022"), the first point only at a year start
+      for (i = 0; i < m; i++) {
+        if (i > 0 ? dates[i].slice(0, 4) === dates[i - 1].slice(0, 4) : dates[0].slice(5, 7) !== '01') continue;
+        var ty = dates[i].slice(0, 4);
+        out.push({ x: L.x(i), text: ty, anchor: 'start', w: textW(ty, font) });
+      }
+    } else if (m >= 45 || (M.xs && M.xs[m - 1] - M.xs[0] > 60)) {
       var multiYear = dates[0].slice(0, 4) !== dates[m - 1].slice(0, 4);
       for (i = 0; i < m; i++) {
         var isStart = i === 0 ? !!M.firstIsMonthStart : dates[i].slice(0, 7) !== dates[i - 1].slice(0, 7);
@@ -434,7 +457,7 @@
     var lastTxt = isNum(lastV) && M.lastLabel ? M.lastLabel(lastV) : '';
     var boxFont = '600 11px ' + ff;
     var boxW = lastTxt ? Math.ceil(textW(lastTxt, boxFont)) + 10 : 0;
-    var X = xLayout(W, m, 1, lastTxt ? boxW + 10 : 8);
+    var X = xLayout(W, m, 1, lastTxt ? boxW + 10 : 8, M.xs);
 
     var span = ext.hi - ext.lo;
     if (span <= 0) span = Math.abs(ext.hi) * 0.02 || 1;
@@ -719,7 +742,7 @@
 
     var ff = root.getComputedStyle ? root.getComputedStyle(this.el).fontFamily : 'sans-serif';
     var m = dd.length, top = 20, bottom = H - 26;
-    var X = xLayout(W, m, 1, isNum(M.padR) ? M.padR : 60);
+    var X = xLayout(W, m, 1, isNum(M.padR) ? M.padR : 60, M.xs);
     var lo = Math.min(ext.lo, 0);
     var dLo = lo < -0.0025 ? lo * 1.12 : -0.01;
     var yOf = function (v) { return top + (0 - v) / (0 - dLo) * (bottom - top); };

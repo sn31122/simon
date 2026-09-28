@@ -116,7 +116,7 @@ test('presetRange: dense calendar ending 2026-03-31 (month-end clamping)', () =>
   assert.strictEqual(at('3M'), '2025-12-31');
   assert.strictEqual(at('6M'), '2025-09-30');   // 09-31 does not exist -> 09-30
   assert.strictEqual(at('1J'), '2025-03-31');
-  assert.strictEqual(at('YTD'), '2026-01-01');
+  assert.strictEqual(at('YTD'), '2025-12-31');   // from the previous year's last price (user 28.09.)
   assert.strictEqual(E.presetRange(ctx, 'MAX').start, 0);
 });
 
@@ -140,14 +140,19 @@ test('presetRange: leap year, year wrap, week across month end, YTD across years
   assert.strictEqual(d[E.presetRange(c, '1M').start], '2024-01-29');
   d = calendar('2025-11-01', '2026-01-15'); c = ctxOf(d);
   assert.strictEqual(d[E.presetRange(c, '1M').start], '2025-12-15');
-  assert.strictEqual(d[E.presetRange(c, 'YTD').start], '2026-01-01');
+  assert.strictEqual(d[E.presetRange(c, 'YTD').start], '2025-12-31');
   assert.strictEqual(d[E.presetRange(c, '1W').start], '2026-01-08');
   d = calendar('2025-12-01', '2026-05-31'); c = ctxOf(d);
   assert.strictEqual(d[E.presetRange(c, '3M').start], '2026-02-28');
   d = calendar('2026-02-01', '2026-03-03'); c = ctxOf(d);
   assert.strictEqual(d[E.presetRange(c, '1W').start], '2026-02-24');
   d = ['2025-12-30', '2025-12-31', '2026-01-02', '2026-01-05']; c = ctxOf(d);
-  assert.strictEqual(E.presetRange(c, 'YTD').start, 2);
+  assert.strictEqual(E.presetRange(c, 'YTD').start, 1, 'YTD from the last price of 2025');
+  d = ['2026-01-02', '2026-01-05']; c = ctxOf(d);
+  assert.strictEqual(E.presetRange(c, 'YTD').start, 0, 'no earlier year: from the first day');
+  d = ['2025-08-29', '2025-09-30', '2025-10-31', '2026-09-28'];                 // month-end history, then daily
+  c = E.prepare(Object.assign(dataOf(d), { res: ['m', 'm', 'm', 'd'] }));
+  assert.strictEqual(d[E.presetRange(c, '1J').start], '2025-09-30', '1J: the month-end row nearest to the target 28.09.2025');
   assert.strictEqual(E.presetRange(c, 'unknown').start, 0, 'unknown preset -> MAX');
 });
 
@@ -786,8 +791,8 @@ test('real data: riskContribution identities (sum pctr = 1, DR >= 1, vol_i = ass
   const sx = 'US84615Q1031', c = E.correlationMatrix(ctx, { isins: ALL, start: 0, end: ctx.n - 1 });
   const a = c.isins.indexOf(sx), b = c.isins.indexOf(ALL.find((i) => i !== sx));
   assert.strictEqual(c.n[a][b], ctx.n - 1 - ctx.firstIdx[sx], 'SpaceX pairs only after its listing');
-  const full0 = c.isins.map((_, x) => x).filter((x) => ctx.firstIdx[c.isins[x]] === 0);
-  assert.strictEqual(c.n[full0[0]][full0[1]], ctx.n - 1, 'instruments quoted from day 0 use every return');
+  const full0 = c.isins.map((_, x) => x).filter((x) => ctx.firstIdx[c.isins[x]] <= ctx.dailyFrom);
+  assert.strictEqual(c.n[full0[0]][full0[1]], ctx.n - 1 - ctx.dailyFrom, 'instruments quoted before the daily data use every daily return');
   c.m.forEach((row, x) => row.forEach((v, y) => {
     assert.ok(v === null || (v >= -1 && v <= 1), 'in [-1, 1]');
     assert.strictEqual(v, c.m[y][x]);
@@ -853,6 +858,64 @@ test('sweep: degenerate synthetic data (flat prices, never-quoted instrument, ze
   }));
   const ranges = [['max', { start: 0, end: c.n - 1 }], ['1pt', { start: 3, end: 3 }], ['2pt', { start: 3, end: 4 }]];
   sweep(c, 'degenerate', [['F', ['F']], ['N', ['N']], ['U', ['U']], ['all', ['F', 'N', 'U']], ['none', []]], ranges);
+});
+
+// ---------- history before the daily data (res 'm' / '2d', user 28.09.)
+test('history rows: totalReturn/CAGR/maxDD use every point, risk metrics only the daily part', () => {
+  const dates = ['2025-10-31', '2025-11-28', '2025-12-29', '2026-01-02', '2026-01-05', '2026-01-06', '2026-01-07'];
+  const A = [100, 50, 80, 100, 110, 99, 108.9], B = [10, 12, 11, 10, 10.5, 10.5, 11];
+  const d = dataOf(dates, { prices: { A, B }, positions: [{ isin: 'A', name: 'A', short: 'A', group: 'G1', shares: 1, cost_basis: 1 }] });
+  d.res = ['m', 'm', '2d', 'd', 'd', 'd', 'd'];
+  const c = E.prepare(d);
+  assert.strictEqual(c.dailyFrom, 3);
+  const s = E.portfolio(c, { start: 0, end: 6 });
+  assert.strictEqual(s.dailyOff, 3);
+  const st = E.stats(s, { rf: 0 });
+  approx(st.totalReturn, 0.089, 1e-12, 'total over all points');
+  approx(st.maxDD, -0.5, 1e-12, 'drawdown over all points (the month-end low)');
+  const r = [0.1, -0.1, 0.1];                                     // daily returns only (not -50 % / +60 % / +25 %)
+  assert.strictEqual(st.n, 3);
+  approx(st.volAnn, sdRef(r) * S252, 1e-12, 'vol of the daily part');
+  approx(st.worstDay.ret, -0.1, 1e-12); assert.strictEqual(st.worstDay.date, '2026-01-06');
+  assert.strictEqual(st.riskFrom, '2026-01-02');
+  const b = E.benchmark(c, { id: 'b', name: 'b', weights: { B: 100 } }, 0, 6, s.value[0]);
+  const rel = E.relative(s, b, { rf: 0 });
+  assert.strictEqual(rel.n, 3, 'relative: daily returns only');
+  approx(rel.excessReturn, 0.089 - 0.1, 1e-12, 'excess return over all points');
+  const s2 = E.portfolio(c, { start: 3, end: 6 });
+  assert.strictEqual(s2.dailyOff, 0);
+  approx(E.stats(s2, { rf: 0 }).volAnn, st.volAnn, 1e-12, 'same daily part');
+  assert.strictEqual(E.stats(s2).riskFrom, null);
+  const s3 = E.portfolio(c, { start: 0, end: 2 });               // history only: no daily returns
+  assert.strictEqual(s3.dailyOff, 2); assert.strictEqual(E.stats(s3).n, 0); assert.strictEqual(E.stats(s3).volAnn, null);
+  approx(E.assets(c, { start: 0, end: 6 })[0].vol, sdRef(r) * S252, 1e-12, 'assets vol: daily part');
+  const cm = E.correlationMatrix(c, { isins: ['A', 'B'], start: 0, end: 6 });
+  assert.strictEqual(cm.n[0][1], 3, 'correlation: daily returns only');
+  const rc = E.riskContribution(c, { selected: ['A'], start: 0, end: 6 });
+  assert.strictEqual(rc.n, 3);
+});
+
+test('coverageStart / notQuoted: the long range starts once enough of the value has real quotes', () => {
+  const dates = ['2025-10-31', '2025-11-28', '2025-12-29', '2026-01-02'];
+  const d = dataOf(dates, {
+    prices: { A: [1, 1, 1, 1], B: [null, 2, 2, 2], C: [null, null, null, 5] },
+    positions: [['A', 50], ['B', 20], ['C', 2]].map(([i, q]) => ({ isin: i, name: i, short: i, group: 'G1', shares: q, cost_basis: 1 })),
+  });                                                             // values at the end: A 50, B 40, C 10 (of 100)
+  const c = E.prepare(d);
+  assert.strictEqual(E.coverageStart(c, { share: 0.9 }), 1);      // A + B = 90 % from index 1
+  assert.strictEqual(E.coverageStart(c, { share: 0.5 }), 0);
+  assert.strictEqual(E.coverageStart(c, { share: 0.95 }), 3);
+  assert.strictEqual(E.coverageStart(c, { selected: ['A'] }), 0);
+  assert.strictEqual(E.coverageStart(c, { selected: [] }), 0);
+  const nq = E.notQuoted(c, { start: 1 });
+  assert.deepStrictEqual(nq.map((x) => x.isin), ['C']);
+  approx(nq[0].share, 0.1); assert.strictEqual(nq[0].first, '2026-01-02');
+  assert.deepStrictEqual(E.notQuoted(c, { start: 0 }).map((x) => x.isin), ['B', 'C']);
+});
+
+test('prepare without res: everything counts as daily (dailyFrom 0)', () => {
+  const c = ctxOf(['2026-03-02', '2026-03-03']);
+  assert.strictEqual(c.dailyFrom, 0); assert.deepStrictEqual(c.res, ['d', 'd']);
 });
 
 // ---------- real-data smoke print
