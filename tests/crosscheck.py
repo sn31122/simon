@@ -29,6 +29,17 @@ BENCH = {
 }
 rows = list(csv.reader(open(R/'data/prices_daily.csv', encoding='utf-8')))
 head, rows = rows[0], rows[1:]
+# history before the daily data (prices_history.csv: date,res,<ISIN>…, month-end / every 2nd trading day): prepended as
+# final rows; risk metrics (vol, Sharpe, Sortino, VaR, best/worst day, beta, correlation, tracking error …) use only the
+# returns from DAILY on, totalReturn / CAGR / drawdown / monthly returns every point (user, 28.09.)
+hist = []
+if (R/'data/prices_history.csv').exists():
+    hr = list(csv.reader(open(R/'data/prices_history.csv', encoding='utf-8')))
+    hpos = {i: k for k, i in enumerate(hr[0])}
+    hist = [[r[0], 'final', ''] + [r[hpos[i]] if i in hpos else '' for i in head[3:]] for r in hr[1:] if r]
+rows = hist + rows
+DAILY = len(hist)                                  # first daily index
+RES = [r[1] for r in hr[1:] if r] + ['d'] * (len(rows) - DAILY) if hist else ['d'] * len(rows)
 dates, status = [r[0] for r in rows], [r[1] for r in rows]
 n = len(dates)
 
@@ -53,11 +64,15 @@ def preset(p):
     end = n - 1
     if p == '1T': return end - 1, end
     if p == 'MAX': return 0, end
-    if p == 'YTD': return next(k for k in range(n) if dates[k][:4] == dates[end][:4]), end
+    if p == 'YTD':                                   # from the previous year's last price when there is one
+        s = next(k for k in range(n) if dates[k][:4] == dates[end][:4])
+        return (s - 1 if 0 < s < end else s), end
     e = D(dates[end])
     lim = e - datetime.timedelta(7) if p == '1W' else minus_months(e, {'1M': 1, '3M': 3, '6M': 6, '1J': 12}[p])
     ks = [k for k in range(n) if D(dates[k]) <= lim]
-    return (ks[-1] if ks else 0), end
+    s = ks[-1] if ks else 0
+    if s < DAILY and RES[s] == 'm' and s < end and (D(dates[s + 1]) - lim).days < (lim - D(dates[s])).days: s += 1   # nearer date
+    return s, end
 
 def custom(a, b):
     s = next(k for k in range(n) if dates[k] >= a)
@@ -92,8 +107,8 @@ def drawdown(v):
     rec = next((k for k in range(t + 1, len(v)) if v[k] >= v[p]), None) if dd[t] < 0 else None
     return dd, dd[t], p, t, rec
 
-def stats(v, ds, rf=0.02):
-    r = [v[k] / v[k - 1] - 1 for k in range(1, len(v))]
+def stats(v, ds, rf=0.02, off=0):          # off = points before the daily data (their returns are left out)
+    r = [v[k] / v[k - 1] - 1 for k in range(off + 1, len(v))]
     rfd = (1 + rf) ** (1 / 252) - 1
     ex = [x - rfd for x in r]
     tr = v[-1] / v[0] - 1
@@ -109,9 +124,9 @@ def stats(v, ds, rf=0.02):
                 calmar=cagr / abs(mdd) if mdd < 0 else None, pctPositive=sum(x > 0 for x in r) / len(r),
                 bestDay=max(r), worstDay=min(r), var95=-q, cvar95=-mean([x for x in r if x <= q]))
 
-def relative(vp, vb, rf=0.02):
-    rp = [vp[k] / vp[k - 1] - 1 for k in range(1, len(vp))]
-    rb = [vb[k] / vb[k - 1] - 1 for k in range(1, len(vb))]
+def relative(vp, vb, rf=0.02, off=0):
+    rp = [vp[k] / vp[k - 1] - 1 for k in range(off + 1, len(vp))]
+    rb = [vb[k] / vb[k - 1] - 1 for k in range(off + 1, len(vb))]
     rfd = (1 + rf) ** (1 / 252) - 1
     beta = cov(rp, rb) / cov(rb, rb)
     corr = cov(rp, rb) / (sd(rp) * sd(rb))
@@ -135,6 +150,7 @@ ALL = {p['isin']: float(p['shares']) for p in pos}
 SEMI = {p['isin']: float(p['shares']) for p in pos if p['group'] == 'High Players Semiconductors'}
 cases = [
     dict(name='all_MAX', hold=ALL, rng=preset('MAX'), startValue=None, bench=['msci_world', 'proxy9', 'sp500', 'mix_w', 'spacex_w', 'energie']),
+    dict(name='all_1J', hold=ALL, rng=preset('1J'), startValue=None, bench=['msci_world', 'nasdaq100', 'energie']),
     dict(name='all_3M', hold=ALL, rng=preset('3M'), startValue=None, bench=['nasdaq100', 'mix_w']),
     dict(name='all_1M', hold=ALL, rng=preset('1M'), startValue=None, bench=['semis', 'my_depot']),
     dict(name='all_1W', hold=ALL, rng=preset('1W'), startValue=None, bench=['dax']),
@@ -148,22 +164,31 @@ for c in cases:
     scale = c['startValue'] / raw[0] if c['startValue'] else 1.0
     v = [x * scale for x in raw]
     ds = dates[s:e + 1]
+    off = min(max(0, DAILY - s), e - s)
     res = dict(name=c['name'], isins=sorted(c['hold']), start=s, end=e, startDate=ds[0], endDate=ds[-1],
-               startValueInput=c['startValue'], scale=scale, stats=stats(v, ds), bench={}, contrib_sum=None)
+               startValueInput=c['startValue'], scale=scale, stats=stats(v, ds, off=off), bench={}, contrib_sum=None)
     for b in c['bench']:
         bv = bench_value(b, s, e, v[0])
-        res['bench'][b] = dict(defn=dict(kind=BENCH[b][0], h=BENCH[b][1]), stats=stats(bv, ds), relative=relative(v, bv))
+        res['bench'][b] = dict(defn=dict(kind=BENCH[b][0], h=BENCH[b][1]), stats=stats(bv, ds, off=off), relative=relative(v, bv, off=off))
     contrib = {i: q * (px[i][e] - px[i][s]) * scale / v[0] for i, q in c['hold'].items()}
     res['contrib_sum'] = sum(contrib.values())
     res['top_contrib'] = sorted(contrib.items(), key=lambda kv: -kv[1])[:5]
     out['cases'].append(res)
 out['monthly_all'] = monthly(raw_value(ALL, 0, n - 1))
+# coverage (long ranges start where >= 90 % of today's value has real quotes): first index by value, ascending first quote
+def coverage(hold, share=0.9):
+    fq = {i: next(k for k, r in enumerate(rows) if r[3 + head[3:].index(i)]) for i in hold}
+    val = {i: q * px[i][n - 1] for i, q in hold.items()}; V = sum(val.values()); c = 0
+    for i in sorted(hold, key=lambda i: fq[i]):
+        c += val[i]
+        if c >= share * V - 1e-9: return fq[i]
+out['coverage'] = dict(all_90=coverage(ALL), semis_90=coverage(SEMI), all_50=coverage(ALL, 0.5), daily_from=DAILY)
 
 # --- correlationMatrix (pairwise, real quotes only), riskContribution (filled returns), withShares ---
 first = {i: next(k for k, r in enumerate(rows) if r[3 + j]) for j, i in enumerate(head[3:])}
 
 def corr_pair(a, b, s, e):
-    ks = [k for k in range(s + 1, e + 1) if k - 1 >= first[a] and k - 1 >= first[b]]
+    ks = [k for k in range(max(s, DAILY) + 1, e + 1) if k - 1 >= first[a] and k - 1 >= first[b]]   # daily returns only
     if len(ks) < 3: return None, len(ks)
     ra = [px[a][k] / px[a][k - 1] - 1 for k in ks]; rb = [px[b][k] / px[b][k - 1] - 1 for k in ks]
     sa, sb = sd(ra), sd(rb)
@@ -177,7 +202,7 @@ def corr_matrix(isins, s, e):
 def risk(hold, s, e):
     isins = [p['isin'] for p in pos if p['isin'] in hold]
     v = [hold[i] * px[i][e] for i in isins]; V = sum(v); w = [x / V for x in v]
-    R = [[px[i][k] / px[i][k - 1] - 1 for k in range(s + 1, e + 1)] for i in isins]
+    R = [[px[i][k] / px[i][k - 1] - 1 for k in range(max(s, DAILY) + 1, e + 1)] for i in isins]   # daily returns only
     S = [[cov(R[a], R[b]) for b in range(len(isins))] for a in range(len(isins))]
     Sw = [sum(S[a][b] * w[b] for b in range(len(isins))) for a in range(len(isins))]
     var = sum(w[a] * Sw[a] for a in range(len(isins)))
@@ -197,7 +222,7 @@ WHATIF = {'US5951121038': 0.0, 'AT0000969985': 100.0, 'US4581401001': 500.0}
 wi_hold = {i: WHATIF.get(i, q) for i, q in ALL.items()}
 v = raw_value(wi_hold, 0, n - 1)
 cb = {p['isin']: float(p['cost_basis']) * (WHATIF[p['isin']] / float(p['shares'])) for p in pos if p['isin'] in WHATIF}
-out['whatif'] = dict(overrides=WHATIF, stats=stats(v, dates), risk=risk({i: q for i, q in wi_hold.items() if q > 0}, 0, n - 1),
+out['whatif'] = dict(overrides=WHATIF, stats=stats(v, dates, off=DAILY), risk=risk({i: q for i, q in wi_hold.items() if q > 0}, 0, n - 1),
                      cost_basis=cb, gl_since_buy={i: WHATIF[i] * px[i][n - 1] - cb[i] for i in WHATIF})
 print('risk MAX all: vol %.2f%%  DR %.2f  top pctr %s' % (out['risk_MAX_all']['volAnn'] * 100, out['risk_MAX_all']['diversificationRatio'],
       sorted(((r['isin'], round(r['pctr'] * 100, 1)) for r in out['risk_MAX_all']['rows']), key=lambda x: -x[1])[:5]))

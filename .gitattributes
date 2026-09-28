@@ -6,3 +6,4 @@
 *.html text eol=lf
 *.css text eol=lf
 *.png binary
+*.bat text eol=crlf

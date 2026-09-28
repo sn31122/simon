@@ -53,6 +53,13 @@ const all = ctx.positions.map(p => p.isin);
 const full = E.portfolio(ctx, { selected: all, start: 0, end: ctx.n - 1, startValue: null });
 const m = E.monthly(ctx, full.value);
 cmp('monthly count', m.length, ref.monthly_all.length);
+if (ref.coverage) {                                   // long ranges start where >= 90 % of today's value has real quotes
+  const all0 = ctx.positions.map((p) => p.isin);
+  cmp('coverage daily_from', ctx.dailyFrom, ref.coverage.daily_from);
+  cmp('coverage all 90 %', E.coverageStart(ctx, { selected: all0, share: 0.9 }), ref.coverage.all_90);
+  cmp('coverage all 50 %', E.coverageStart(ctx, { selected: all0, share: 0.5 }), ref.coverage.all_50);
+  cmp('coverage semis 90 %', E.coverageStart(ctx, { selected: ref.cases.find((c) => c.name === 'semis_custom_100k').isins, share: 0.9 }), ref.coverage.semis_90);
+}
 ref.monthly_all.forEach((r, k) => { cmp(`monthly ${r.month} key`, m[k] && m[k].month, r.month); cmp(`monthly ${r.month} ret`, m[k] && m[k].ret, r.ret); });
 cmp('empty selection -> null', E.portfolio(ctx, { selected: [], start: 0, end: ctx.n - 1, startValue: null }), null);
 

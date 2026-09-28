@@ -89,6 +89,7 @@
   function dayLabel(iso) { return F.date(iso, 'dayMonthShort'); }
   /** Tooltip date like the app ("08.09.2026"; the open intraday day gets its time: "25.09.2026, 11:20"). */
   function dateLabel(k) {
+    if (ctx.res && ctx.res[k] === 'm') return F.date(ctx.dates[k], 'short') + ' (Monatsschluss)';
     return F.date(ctx.dates[k], 'short') + (ctx.status[k] === 'intraday' ? (ASOF ? ', ' + ASOF : '') + ' (intraday)' : '');
   }
   /** Berlin calendar date of "now" (for "Heute" / "Gestern"). */
@@ -170,7 +171,8 @@
   function clipNote(preset, R) {
     if (!preset || !R) return '';
     var first = ctx.dates[0];
-    if (preset === 'YTD' && R.start === 0) return 'YTD ab Schlusskurs ' + F.date(first, 'short') + ', kein Jahresschluss ' + (+first.slice(0, 4) - 1);
+    if (preset === 'YTD' && R.start === 0 && first.slice(0, 4) === ctx.dates[R.end].slice(0, 4))
+      return 'YTD ab Schlusskurs ' + F.date(first, 'short') + ', kein Jahresschluss ' + (+first.slice(0, 4) - 1);
     var t = presetTarget(ctx.dates[R.end], preset);
     if (t && R.start === 0 && t < first) return preset + ': Daten erst ab ' + F.date(first, 'short');
     return '';
@@ -214,8 +216,12 @@
   var IV_KURSE = { m30: '30-Min-Kurse', h2: '2-Std-Kurse' };
   var IV_LONG = { m30: '30-Minuten-Kurse', h2: '2-Stunden-Kurse' };
 
+  var COVER = 0.9;                             // long ranges start where >= 90 % of today's value has real quotes (user 28.09.)
   function compute() {
     var R = currentRange(), rf = state.rf, sel = state.selected, n = ctx.n;
+    // history back to ~2016: before the first quote a title counts flat, so a long range starts at the coverage date
+    var cov = sel.size && E.coverageStart ? E.coverageStart(ctx, { selected: sel, share: COVER }) : 0, cover = null;
+    if (R.start < cov && R.end - cov >= 1) { cover = { from: R.start, to: cov }; R = { start: cov, end: R.end }; }
     // Startwert: scales the Yacht and the benchmarks start at the Yacht's (scaled) start value; with "nur Benchmarks"
     // the Yacht keeps its real value and only the benchmarks start at the Startwert (their lines in true proportion)
     var benchSV = state.benchOnly ? state.startValue : null, pSV = state.benchOnly ? null : state.startValue;
@@ -235,15 +241,15 @@
     selB.forEach(function (x) {
       x.rel = p && x.s ? E.relative(p, x.s, { rf: rf }) : null;
       x.dd = x.s ? E.drawdown(x.s.value) : null;
-      var fs = E.benchmark(ctx, x.b, 0, n - 1, 1);
-      x.monthly = fs ? E.monthly(ctx, fs.value) : null;
+      var fs = E.benchmark(ctx, x.b, cov, n - 1, 1);                     // Monatsrenditen: from the coverage date on
+      x.monthly = fs ? E.monthly(ctx, fs) : null;
     });
-    var full = sel.size ? E.portfolio(ctx, { selected: sel, start: 0, end: n - 1, startValue: null }) : null;
-    var monthlyP = full ? E.monthly(ctx, full.value) : null;
+    var full = sel.size ? E.portfolio(ctx, { selected: sel, start: cov, end: n - 1, startValue: null }) : null;
+    var monthlyP = full ? E.monthly(ctx, full) : null;
     var monthsRef = monthlyP || (selB[0] && selB[0].monthly) || null;
     if (!monthsRef && ctx.benchmarks.length) {
       var fb = E.benchmark(ctx, ctx.benchmarks[0], 0, n - 1, 1);
-      monthsRef = fb ? E.monthly(ctx, fb.value) : null;
+      monthsRef = fb ? E.monthly(ctx, fb) : null;
     }
     var assets = E.assets(ctx, { selected: sel, start: R.start, end: R.end, scale: p && isNum(p.scale) ? p.scale : 1 }) || [];
     var groups = E.groupSummary(ctx, assets) || [];
@@ -269,7 +275,8 @@
       }
     }
     return {
-      R: R, p: p, ps: ps, pdd: pdd, benches: benches, byId: byId, selB: selB,
+      R: R, cover: cover, flat: sel.size && E.notQuoted ? E.notQuoted(ctx, { selected: sel, start: R.start }) : [],
+      p: p, ps: ps, pdd: pdd, benches: benches, byId: byId, selB: selB,
       monthlyP: monthlyP, monthsRef: monthsRef || [], assets: assets, groups: groups,
       orig: orig, origStats: orig ? E.stats(orig, { rf: rf }) : null, iv: iv, intra: intra
     };
@@ -610,6 +617,8 @@
     var common = {
       dates: dates,
       firstIsMonthStart: R.start === 0 || ctx.dates[R.start - 1].slice(0, 7) !== ctx.dates[R.start].slice(0, 7),
+      // a range with history points (a month / 2 days apart): x by calendar time instead of one slot per point
+      xs: R.start < (ctx.dailyFrom || 0) ? ctx.day.slice(R.start, R.end + 1) : null,
       monthLabel: monthLabel, dayLabel: dayLabel, emptyText: emptyText()
     };
     var benches = p ? M.selB.filter(function (x) { return x.s; }) : [];
@@ -681,6 +690,12 @@
     if (!el) return;
     if (!iv) { el.textContent = ''; return; }
     var why = iv.stepped && iv.skipped.length ? 'keine ' + (iv.skipped.length > 1 ? '30-Min- oder 2-Std-Kurse' : IV_KURSE[iv.skipped[0]]) + ' für diesen Zeitraum' : '';
+    if (iv.key === 'day' && !M.intra && M.R.start < (ctx.dailyFrom || 0)) {        // history in the range: coarser before 2026
+      var hasM = false, has2 = false, lastM = null;
+      for (var k = M.R.start; k < ctx.dailyFrom; k++) { if (ctx.res[k] === 'm') { hasM = true; lastM = ctx.dates[k]; } else has2 = true; }
+      why = 'davor ' + [has2 ? 'jeder 2. Handelstag' : '', hasM ? 'Monatsschluss' + (has2 && lastM ? ' bis ' + F.date(lastM, 'monthYear') : '') : '']
+        .filter(Boolean).join(', ') + ' (ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') + ' täglich)';
+    }
     el.innerHTML = 'Intervall: <b>' + esc(IV_SHORT[iv.key]) + '</b>' + (why ? '<span class="chart-iv-why"> · ' + esc(why) + '</span>' : '');
     var have = ['m30', 'h2'].map(function (k) {
       var G = ctx.grids && ctx.grids[k];
@@ -1289,6 +1304,9 @@
 
   function renderHeadline(M) {
     var s = M.ps, R = M.R, main = $('hlMain'), sub = $('hlSub'), note = state.custom ? '' : clipNote(state.preset, R);
+    if (M.cover) note = 'Beginn ' + F.date(ctx.dates[R.start], 'short') + ': erst ab da haben ≥ 90 % des heutigen Werts Kurse' +
+      (M.flat.length ? '; ohne Kurs, flach gerechnet: ' + M.flat.slice(0, 3).map(function (x) { return x.short + (x.first ? ' ab ' + F.date(x.first, 'short') : ''); }).join(', ') +
+        (M.flat.length > 3 ? ' +' + (M.flat.length - 3) : '') : '');
     if (M.intra && M.intra.oneT) note = IV_LONG[M.intra.key] + ' bis ' + F.asofBerlin(M.intra.asof) + ' Uhr' +
       (M.intra.missing.length ? ', ' + M.intra.missing.length + ' Werte ohne Intraday-Kurse' : '');
     var period = 'im Zeitraum ' + periodText(R) + (note ? ' <span class="weak">(' + esc(note) + ')</span>' : '');
@@ -1342,9 +1360,13 @@
     return '';
   }
 
+  /** " · Risiko ab 02.01.2026 (Tageskurse)" when the range reaches into the history (risk metrics use daily data only). */
+  function riskNote(M) {
+    return M && M.R && M.R.start < (ctx.dailyFrom || 0) ? ' · Vol., Sharpe, Beta usw. ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') + ' (Tageskurse)' : '';
+  }
   function renderKpis(M) {
     var s = M.ps, x0 = M.selB[0] || null, b = x0 ? x0.st : null;
-    $('kpiSub').textContent = 'Zeitraum ' + periodText(M.R) + (x0 ? ' · untere Zeile: ' + x0.name : '');
+    $('kpiSub').textContent = 'Zeitraum ' + periodText(M.R) + (x0 ? ' · untere Zeile: ' + x0.name : '') + riskNote(M);
     function bench(text) {
       return x0 ? '<i style="background:' + x0.color + '"></i><span>' + esc(x0.name) + ': ' + text + '</span>' : '';
     }
@@ -1448,7 +1470,7 @@
       '<td>' + colored(get(rel, 'excessReturn'), pct(get(rel, 'excessReturn'))) + '</td>';
   }
   function renderBenchTable(M) {
-    $('benchSub').textContent = 'Zeitraum ' + periodText(M.R) + ' · rf ' + pctU(state.rf, 1);
+    $('benchSub').textContent = 'Zeitraum ' + periodText(M.R) + ' · rf ' + pctU(state.rf, 1) + riskNote(M);
     var head = '<thead><tr class="th-group"><th class="sticky"></th><th colspan="6">im Zeitraum</th>' +
       '<th colspan="7" class="th-rel">Portfolio ggü. Benchmark</th></tr><tr><th class="l sticky">&nbsp;</th>' +
       BENCH_COLS.map(function (c, k) {
@@ -1470,6 +1492,7 @@
    */
   function renderCmpPanel(M) {
     $('cmpSub').textContent = periodText(M.R);
+    $('cmpSub').title = riskNote(M).replace(/^ · /, '');
     var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + BENCH_COLS.slice(0, 6).map(function (c, k) {
       return '<th title="' + esc(c[1] + (k === 0 ? '; darunter der Wert am Ende des Zeitraums' : '')) + '">' + esc(c[0]) + '</th>';
     }).join('') + '</tr></thead>';
@@ -1506,6 +1529,38 @@
     rows.forEach(function (rw) {
       (rw.data || []).forEach(function (c) { if (c && isNum(c.ret)) maxAbs = Math.max(maxAbs, Math.abs(c.ret)); });
     });
+    function cell(r) {
+      if (!isNum(r)) return '<td><span class="mcell dash">–</span></td>';
+      var a = (0.10 + 0.45 * Math.min(1, Math.abs(r) / maxAbs)).toFixed(3);
+      var bg = 'rgba(var(' + (r >= 0 ? '--accent-rgb' : '--neg-rgb') + '),' + a + ')';   // colours from the CSS tokens
+      return '<td><span class="mcell" style="background:' + bg + '">' + pct(r) + '</span></td>';
+    }
+    if (months.length > 13) {             // history (user 28.09.): one block per year (newest first), Jan–Dez + the year
+      var years = [];
+      months.forEach(function (m) { if (years.indexOf(m.slice(0, 4)) < 0) years.push(m.slice(0, 4)); });
+      years.reverse();
+      var MN = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+      var hd = '<thead><tr><th class="l sticky">&nbsp;</th>' + MN.map(function (mm) { return '<th>' + esc(monthLabel('2026-' + mm + '-01', false)) + '</th>'; }).join('') +
+        '<th class="bl" title="Rendite des Kalenderjahrs (Monate verkettet; Teiljahr am Anfang und Ende)">Jahr</th></tr></thead>';
+      var bd = '';
+      years.forEach(function (y) {
+        rows.forEach(function (rw, k) {
+          var map = {};
+          (rw.data || []).forEach(function (c) { if (c) map[c.month] = c.ret; });
+          var q = 1, any = false;
+          MN.forEach(function (mm) { var r = map[y + '-' + mm]; if (isNum(r)) { q *= 1 + r; any = true; } });
+          bd += '<tr' + (k === 0 ? ' class="my-first"' : '') + '><td class="l sticky"><span class="row-name">' + (k === 0 ? '<b class="my-year">' + y + '</b>' : '<b class="my-year"></b>') +
+            '<i style="background:' + rw.color + '"></i>' + esc(rw.name) + '</span></td>' +
+            MN.map(function (mm) {
+              var key = y + '-' + mm;
+              return months.indexOf(key) < 0 ? '<td></td>' : cell(map[key]).replace('<td>', partial[key] ? '<td title="Teilmonat">' : '<td>');
+            }).join('') + '<td class="bl">' + (any ? cell(q - 1).replace(/^<td>|<\/td>$/g, '') : '<span class="mcell dash">–</span>') + '</td></tr>';
+        });
+      });
+      $('monthTable').innerHTML = hd + '<tbody>' + bd + '</tbody>';
+      $('monthNote').hidden = !months.some(function (m) { return partial[m]; });
+      return;
+    }
     var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + months.map(function (m) {
       return '<th' + (partial[m] ? ' title="Teilmonat"' : '') + '>' + esc(monthLabel(m + '-01', multiYear)) + (partial[m] ? '*' : '') + '</th>';
     }).join('') + '</tr></thead>';
@@ -1924,7 +1979,7 @@
   function renderRisk(M) {
     var kp = $('riskKpis'), bars = $('riskBars'), avgEl = $('heatAvg');
     $('riskSub').textContent = 'Zeitraum ' + periodText(M.R) + ' · Gewichte am ' + F.date(ctx.dates[M.R.end], 'short') +
-      (ctx !== ctx0 ? ' · Was-wäre-wenn' : '');
+      (ctx !== ctx0 ? ' · Was-wäre-wenn' : '') + (M.R.start < (ctx.dailyFrom || 0) ? ' · Tagesrenditen ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') : '');
     var rc = HAS_RISK && M.p ? E.riskContribution(ctx, { selected: state.selected, start: M.R.start, end: M.R.end }) : null;
     var rows = rc && rc.rows ? rc.rows.filter(function (r) { return isNum(r.weight) && r.weight > 0; }) : [];
     if (!rc || !rows.length) {
