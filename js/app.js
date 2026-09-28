@@ -1399,6 +1399,35 @@
     $('benchTable').innerHTML = head + '<tbody>' + body + '</tbody>';
   }
 
+  /**
+   * "Im Zeitraum" panel beside the chart (user 28.09.): the first six columns of the Benchmark-Vergleich for the portfolio
+   * and every shown benchmark; the Rendite cell also shows the line's end value in € (as drawn: Startwert, "nur Benchmarks").
+   */
+  function renderCmpPanel(M) {
+    $('cmpSub').textContent = periodText(M.R);
+    var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + BENCH_COLS.slice(0, 6).map(function (c, k) {
+      return '<th title="' + esc(c[1] + (k === 0 ? '; darunter der Wert am Ende des Zeitraums' : '')) + '">' + esc(c[0]) + '</th>';
+    }).join('') + '</tr></thead>';
+    function row(name, color, title, st, s) {
+      var end = s && s.value && s.value.length ? s.value[s.value.length - 1] : null;
+      var cells = st ? statCells(st).replace('</td>', '<span class="cmp-val">' + (isNum(end) ? eur(end, { dec: 0 }) : '–') + '</span></td>')
+        : new Array(7).join('<td class="dash">–</td>');
+      return '<tr><td class="l sticky"' + (title ? ' title="' + esc(title) + '"' : '') + '><span class="row-name"><i style="background:' + color +
+        '"></i><span class="cmp-nm">' + esc(name) + '</span></span></td>' + cells + '</tr>';
+    }
+    var body = row('Portfolio', 'var(--accent)', '', M.ps, M.p);
+    M.selB.forEach(function (x) { body += row(x.name, x.color, x.name + (x.b.description ? ' · ' + x.b.description : ''), x.st, x.s); });
+    $('cmpTable').innerHTML = head + '<tbody>' + body + '</tbody>';
+    placeCmpPanel();
+  }
+  /** Left of the chart when the space beside the page column fits the panel's natural width, otherwise above the chart. */
+  function placeCmpPanel() {
+    var blk = $('cmpPanel').parentNode, el = $('cmpPanel');
+    blk.classList.add('cmp-side');
+    var fits = el.offsetWidth + 28 <= blk.getBoundingClientRect().left;       // 20px gap + 8px to the window edge
+    if (!fits) blk.classList.remove('cmp-side');
+  }
+
   // ------------------------------------------------------------------ monthly table
   function renderMonthly(M) {
     var ref = M.monthsRef || [], months = ref.map(function (r) { return r.month; }), partial = {};
@@ -1911,6 +1940,7 @@
     renderHoldings();
     renderKpis(cur);
     renderBenchTable(cur);
+    renderCmpPanel(cur);
     renderMonthly(cur);
     renderAssets(cur);
     renderRisk(cur);
@@ -2119,6 +2149,7 @@
     }
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(box);
     else window.addEventListener('resize', onResize);
+    window.addEventListener('resize', placeCmpPanel);
   }
 
   // ------------------------------------------------------------------ start
