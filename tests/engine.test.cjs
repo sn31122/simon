@@ -737,6 +737,8 @@ test('real data: sum of contributions = portfolio totalReturn (all presets, sele
   }
 });
 
+// first preset of benchmarks.csv ("Mein Depot", a weighting card since 28.09.)
+const PRESET0 = { id: 'p0', name: 'p0', weights: D.card_presets[0].weights };
 test('real data: %-metrics invariant to startValue scaling, EUR metrics scale', () => {
   const PCT = ['totalReturn', 'days', 'cagr', 'volAnn', 'sharpe', 'sortino', 'maxDD', 'currentDD', 'calmar', 'pctPositive', 'var95', 'cvar95'];
   const EUR = ['startValue', 'endValue', 'pl', 'var95EUR', 'cvar95EUR'];
@@ -744,7 +746,7 @@ test('real data: %-metrics invariant to startValue scaling, EUR metrics scale', 
     const r = E.presetRange(ctx, p);
     const base = E.portfolio(ctx, { selected: ALL, start: r.start, end: r.end });
     const st0 = E.stats(base);
-    const b0 = E.benchmark(ctx, ctx.benchmarks[0], r.start, r.end, base.value[0]);
+    const b0 = E.benchmark(ctx, PRESET0, r.start, r.end, base.value[0]);
     const rel0 = E.relative(base, b0), rows0 = E.assets(ctx, { selected: ALL, start: r.start, end: r.end, scale: base.scale });
     for (const sv of [12345.67, 5e6]) {
       const s = E.portfolio(ctx, { selected: ALL, start: r.start, end: r.end, startValue: sv });
@@ -755,7 +757,7 @@ test('real data: %-metrics invariant to startValue scaling, EUR metrics scale', 
       for (const key of EUR) approx(st[key], st0[key] * k, 1e-9, `${p} ${key}`);
       approx(st.bestDay.ret, st0.bestDay.ret, 1e-9); approx(st.worstDay.ret, st0.worstDay.ret, 1e-9);
       for (const key of ['maxDDPeakDate', 'maxDDTroughDate', 'maxDDRecoveryDate']) assert.strictEqual(st[key], st0[key], key);
-      const b = E.benchmark(ctx, ctx.benchmarks[0], r.start, r.end, s.value[0]);
+      const b = E.benchmark(ctx, PRESET0, r.start, r.end, s.value[0]);
       const rel = E.relative(s, b);
       for (const key of Object.keys(rel0)) if (rel0[key] !== null) approx(rel[key], rel0[key], 1e-9, `${p} relative.${key}`);
       approx(E.stats(b).totalReturn, E.stats(b0).totalReturn, 1e-12);
@@ -856,7 +858,7 @@ test('sweep: degenerate synthetic data (flat prices, never-quoted instrument, ze
 // ---------- real-data smoke print
 (function smoke() {
   const s = E.portfolio(ctx, { selected: ALL, start: 0, end: ctx.n - 1 });
-  const rows = [['Portfolio', E.stats(s)]].concat(ctx.benchmarks.map((b) => [b.name, E.stats(E.benchmark(ctx, b, 0, ctx.n - 1, s.value[0]))]));
+  const rows = [['Portfolio', E.stats(s)]].concat(ctx.benchmarks.concat(D.card_presets).map((b) => [b.name, E.stats(E.benchmark(ctx, b, 0, ctx.n - 1, s.value[0]))]));
   const pad = (x, n) => String(x).padStart(n);
   console.log(`\nReal data ${ctx.dates[0]}..${ctx.dates[ctx.n - 1]} (${ctx.status[ctx.n - 1]}), ${ctx.positions.length} positions, full range:`);
   console.log(`  ${'Serie'.padEnd(16)}${pad('Rendite', 11)}${pad('p.a.', 11)}${pad('Vol. p.a.', 11)}${pad('Sharpe', 8)}${pad('Max. DD', 11)}`);

@@ -11,6 +11,9 @@ def parse_preset(h):   # benchmarks.csv: "ISIN:qty|…" = fixed quantities (Mein
 presets = {b['id']: parse_preset(b['holdings']) for b in csv.DictReader(open(R/'data/benchmarks.csv', encoding='utf-8'))}
 # fixed test benchmarks, independent of the UI: ('holdings', {ISIN: qty}) = constant quantities,
 # ('weights', {ISIN: %}) = benchmark card, bought at the range start and held (buy and hold)
+# the real depot's share counts of 25.09.2026 (locked "Mein Depot" until 28.09.): tests the quantity path of benchmarkRealPl
+DEPOT_QTY = {'FR0010342592': 9764.0, 'IE00BF4RFH31': 1.0, 'JE00B24DK975': 39.0, 'US11135F1012': 1.0, 'US1912161007': 4.0,
+             'US5738741041': 2.0, 'IE00BF01VY89': 160.0, 'IE00BK5BZX59': 1020.0, 'US02079K3059': 34.0}
 P9 = 'US5951121038:191.032|AT0000969985:482.8456|IE00B53SZB19:37.1794|FR0010342592:4707.2392|US5128073062:123.3333|IE00BMC38736:326.1522|US0079031078:58.9772|US4581401001:252.9732|IE00BKVD2N49:32.9963'
 BENCH = {
     'msci_world': ('holdings', {'IE00B4L5Y983': 1.0}), 'sp500': ('holdings', {'IE00B3YCGJ38': 1.0}),
@@ -18,7 +21,8 @@ BENCH = {
     'dax': ('holdings', {'DE0005933931': 1.0}), 'gold': ('holdings', {'IE00B4ND3602': 1.0}),
     'ftse_all_world': ('holdings', {'IE00BK5BQT80': 1.0}),
     'proxy9': ('holdings', {x.split(':')[0]: float(x.split(':')[1]) for x in P9.split('|')}),
-    'my_depot': presets['my_depot'],
+    'my_depot': presets['my_depot'],                                             # weighting preset since 28.09.
+    'depot_qty': ('holdings', DEPOT_QTY),
     'mix_w': ('weights', {'IE00B4L5Y983': 40.0, 'FR0010342592': 35.0, 'US5951121038': 25.0}),
     'spacex_w': ('weights', {'US84615Q1031': 50.0, 'IE00B53SZB19': 50.0}),     # SpaceX quoted from 12.06. (flat before)
     'energie': presets['energie'],                                               # weighting preset of benchmarks.csv
@@ -283,13 +287,13 @@ def grid_case(name, key, s, e, benches, context=False):
     base = sum(q * px[i][s] for i, q in allp)
     res = dict(name=name, key=key, start=s, end=e, m=len(pts), last=len(pts) - 1, days=sorted({pt[0] for pt in pts if pt[0] != 'close'}),
                base_all=base, value_all=fval(g, pts, allp), sub_isins=[i for i, _ in semis],
-               sub_base=sum(q * px[i][s] for i, q in semis), value_sub=fval(g, pts, semis), bench={}, bench_defs={}, realpl=[])
+               sub_base=sum(q * px[i][s] for i, q in semis), value_sub=fval(g, pts, semis), bench={}, bench_defs={}, realpl=[], realpl_def=DEPOT_QTY)
     for bid in benches:
         h = bench_hold(bid, s)
         r0 = sum(q * px[i][s] for i, q in h)
         res['bench'][bid] = [base * v / r0 for v in fval(g, pts, h)]
         res['bench_defs'][bid] = dict(kind=BENCH[bid][0], h=BENCH[bid][1])
-    vd = fval(g, pts, list(BENCH['my_depot'][1].items()))     # real € change of the depot's own holdings
+    vd = fval(g, pts, list(DEPOT_QTY.items()))                 # real € change of the depot's own holdings
     for a, b in [(0, len(pts) - 1), (10, len(pts) // 2), (len(pts) - 3, 3)]:
         res['realpl'].append([a, b, vd[max(a, b)] - vd[min(a, b)]])
     if status[e] == 'final' and not context:                   # finished sessions end exactly on the daily value
