@@ -38,6 +38,9 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
   session continues from there.
 - To look at the dashboard: ask Claude for screenshots, or download the branch (GitHub → Code → Download ZIP) and open
   `dashboard.html` (works offline, no install).
+- Live view on Windows (user 28.09.): `tools/yacht-live.bat` (copy anywhere, e.g. Downloads, and double-click; needs Git for
+  Windows) clones the repo once to `%USERPROFILE%\yacht-live`, opens `dashboard.html` and pulls `main` every 60 s while
+  its window stays open – F5 in the browser shows every merged change. `BRANCH`/`WAIT`/`DIR` are set at the top.
 
 ## Going local again (optional)
 1. Install Claude Code (CLI or Desktop app) on the PC and sign in with the same claude.ai account; Node.js and Python must
