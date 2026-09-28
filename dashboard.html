@@ -71,6 +71,11 @@
     </section>
 
     <section class="chart-block" aria-label="Wertentwicklung">
+      <!-- "Im Zeitraum" of the Benchmark-Vergleich beside the chart (user 28.09.): left of it when the window has room, else above it -->
+      <aside class="card cmp" id="cmpPanel" aria-label="Kennzahlen im Zeitraum">
+        <div class="cmp-h"><span class="cmp-t">Im Zeitraum</span><span class="cmp-sub" id="cmpSub"></span></div>
+        <div class="tscroll"><table class="tbl tbl--cmp" id="cmpTable"></table></div>
+      </aside>
       <div id="mainChart"></div>
       <div class="chart-foot">
         <button type="button" class="btn btn--accent" id="applyMeasure" hidden>Zeitraum auf Auswahl setzen</button>
@@ -99,7 +104,7 @@
         </div>
         <span class="dr-hint" id="rangeHint" role="status" aria-live="polite"></span>
       </div>
-      <div class="set-field">
+      <div class="set-field set-field--sv">
         <label for="startValue">Startwert (€)</label>
         <span class="inp-wrap">
           <input type="text" id="startValue" inputmode="decimal" autocomplete="off" spellcheck="false"
@@ -107,6 +112,8 @@
           <button type="button" class="inp-reset" id="startReset" title="Startwert zurücksetzen" aria-label="Startwert zurücksetzen">×</button>
         </span>
         <span class="set-hint" id="scaleHint" aria-live="polite"></span>
+        <button type="button" class="ltog ltog--sm" id="benchOnly" aria-pressed="false"
+                title="Startwert nur für die Benchmarks: das Yacht-Portfolio bleibt bei seinem echten Wert, die Benchmarks starten beim Startwert – so stehen die Linien im echten Größenverhältnis. Aus = Startwert skaliert das Yacht-Portfolio, Benchmarks starten gleich groß."><i aria-hidden="true"></i>nur Benchmarks</button>
       </div>
       <div class="set-field">
         <label for="rfInput">Risikofreier Zins</label>

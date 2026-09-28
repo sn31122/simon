@@ -767,3 +767,22 @@ th.is-sorted { color: var(--text); }
 @media (max-width: 380px) {
   .ltog { height: 28px; padding: 0 11px 0 9px; font-size: 13px; }
 }
+/* "nur Benchmarks" beside the Startwert field (user 28.09.): the list-toggle pill, smaller */
+.ltog.ltog--sm { height: 26px; padding: 0 10px 0 9px; gap: 6px; font-size: 12px; }
+.set-field--sv { flex-wrap: wrap; row-gap: 6px; }
+/* "Im Zeitraum" panel (user 28.09.): above the chart by default; .cmp-side (set by app.js when the window has room)
+   puts it into the free space left of the page column, top-aligned with the chart */
+.cmp { margin-bottom: 12px; }
+.cmp-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px 2px; }
+.cmp-t { color: #7d848a; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.cmp-sub { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.cmp .tscroll { border-radius: 0 0 var(--radius) var(--radius); }
+.tbl--cmp { font-size: 12px; }
+.tbl--cmp th, .tbl--cmp td { padding: 6px 6px; }
+.tbl--cmp th:first-child, .tbl--cmp td:first-child { padding-left: 10px; }
+.tbl--cmp th:last-child, .tbl--cmp td:last-child { padding-right: 10px; }
+.tbl--cmp th { font-size: 11px; }
+.tbl--cmp td { vertical-align: top; }
+.cmp-nm { display: inline-block; max-width: 96px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.cmp-val { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.chart-block.cmp-side .cmp { position: absolute; top: 0; right: calc(100% + 20px); width: max-content; margin: 0; }

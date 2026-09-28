@@ -49,6 +49,7 @@
   // ------------------------------------------------------------------ state
   var state = {
     preset: 'YTD', custom: null, mode: 'value', startValue: null, rf: 0.02,
+    benchOnly: false,                          // toggle "nur Benchmarks" (user 28.09.): Startwert sizes only the benchmarks, the Yacht keeps its real value
     fixedOn: {},                               // locked cards (benchmarks.csv "ISIN:qty") shown in the chart; none since 28.09.
     cards: [],                                 // own benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]}; not persisted
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
@@ -215,10 +216,13 @@
 
   function compute() {
     var R = currentRange(), rf = state.rf, sel = state.selected, n = ctx.n;
-    var p = sel.size ? E.portfolio(ctx, { selected: sel, start: R.start, end: R.end, startValue: state.startValue }) : null;
+    // Startwert: scales the Yacht and the benchmarks start at the Yacht's (scaled) start value; with "nur Benchmarks"
+    // the Yacht keeps its real value and only the benchmarks start at the Startwert (their lines in true proportion)
+    var benchSV = state.benchOnly ? state.startValue : null, pSV = state.benchOnly ? null : state.startValue;
+    var p = sel.size ? E.portfolio(ctx, { selected: sel, start: R.start, end: R.end, startValue: pSV }) : null;
     var ps = p ? E.stats(p, { rf: rf }) : null;
     var pdd = p ? E.drawdown(p.value) : null;
-    var base = p && isNum(p.startValue) && p.startValue > 0 ? p.startValue : 1;
+    var base = benchSV != null ? benchSV : p && isNum(p.startValue) && p.startValue > 0 ? p.startValue : 1;
     // every locked benchmark + every valid card (their returns show on the cards); selB = the ones shown in the chart
     var benches = benchDefs().map(function (d) {
       var s = E.benchmark(ctx, d.b, R.start, R.end, base);
@@ -244,7 +248,7 @@
     var assets = E.assets(ctx, { selected: sel, start: R.start, end: R.end, scale: p && isNum(p.scale) ? p.scale : 1 }) || [];
     var groups = E.groupSummary(ctx, assets) || [];
     // what-if: the original portfolio (same selection, range and Startwert) for the dashed comparison line
-    var orig = ctx !== ctx0 && sel.size ? E.portfolio(ctx0, { selected: sel, start: R.start, end: R.end, startValue: state.startValue }) : null;
+    var orig = ctx !== ctx0 && sel.size ? E.portfolio(ctx0, { selected: sel, start: R.start, end: R.end, startValue: pSV }) : null;
     // chart interval (engine.chartInterval): 1T/1W 30 min, 1M 2 h, custom by length, stepping down where the finer grid
     // lacks a session; main chart + drawdown then run on the sub-daily frame (1T: previous session grey as context,
     // x spans the whole day; several sessions: trimmed at the last point). Everything else stays daily.
@@ -253,14 +257,14 @@
     var intra = null;
     if (iv.key !== 'day' && sel.size) {
       var fr = E.gridFrame(ctx, iv.key, R.start, R.end, { context: ivp === '1T', trim: R.end - R.start > 1 });
-      intra = fr ? E.intraday(ctx, { selected: sel, startValue: state.startValue, frame: fr }) : null;
+      intra = fr ? E.intraday(ctx, { selected: sel, startValue: pSV, frame: fr }) : null;
       if (intra) {
         intra.oneDay = fr.sessions.length === 1;          // labels "Gestern, 20:00" / axis "Gestern · 15:15 · Heute …"
         intra.oneT = ivp === '1T';
-        intra.benches = selB.map(function (x) { return { x: x, s: E.intradayBenchmark(ctx, x.b, intra.base, fr) }; })
+        intra.benches = selB.map(function (x) { return { x: x, s: E.intradayBenchmark(ctx, x.b, benchSV != null ? benchSV : intra.base, fr) }; })
           .filter(function (o) { return o.s; });
         intra.benches.forEach(function (o) { o.dd = E.drawdown(o.s.value.slice(0, intra.last + 1)); });
-        intra.orig = ctx !== ctx0 ? E.intraday(ctx0, { selected: sel, startValue: state.startValue, frame: fr }) : null;
+        intra.orig = ctx !== ctx0 ? E.intraday(ctx0, { selected: sel, startValue: pSV, frame: fr }) : null;
         intra.dd = E.drawdown(intra.value.slice(0, intra.last + 1));
       }
     }
@@ -731,10 +735,15 @@
     var hint = $('scaleHint');
     if (!inp.classList.contains('is-invalid')) {
       hint.classList.remove('is-error');
-      hint.textContent = state.startValue != null && M.p && isNum(M.p.scale) ?
-        '×' + num(M.p.scale, M.p.scale < 0.1 ? 4 : 2) + ' skaliert' : '';
+      var k = state.benchOnly && M.p && M.p.raw && M.p.raw[0] > 0 ? state.startValue / M.p.raw[0] : null;
+      hint.textContent = state.startValue == null || !M.p ? '' :
+        state.benchOnly ? (isNum(k) ? 'Benchmarks ×' + num(k, k < 0.1 ? 4 : 2) : '') :
+        isNum(M.p.scale) ? '×' + num(M.p.scale, M.p.scale < 0.1 ? 4 : 2) + ' skaliert' : '';
     }
     $('startReset').hidden = state.startValue == null && !inp.value;
+    var bo = $('benchOnly');
+    bo.classList.toggle('is-on', state.benchOnly);
+    bo.setAttribute('aria-pressed', String(state.benchOnly));
     renderBenchCards(M);
   }
 
@@ -1390,6 +1399,35 @@
     $('benchTable').innerHTML = head + '<tbody>' + body + '</tbody>';
   }
 
+  /**
+   * "Im Zeitraum" panel beside the chart (user 28.09.): the first six columns of the Benchmark-Vergleich for the portfolio
+   * and every shown benchmark; the Rendite cell also shows the line's end value in € (as drawn: Startwert, "nur Benchmarks").
+   */
+  function renderCmpPanel(M) {
+    $('cmpSub').textContent = periodText(M.R);
+    var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + BENCH_COLS.slice(0, 6).map(function (c, k) {
+      return '<th title="' + esc(c[1] + (k === 0 ? '; darunter der Wert am Ende des Zeitraums' : '')) + '">' + esc(c[0]) + '</th>';
+    }).join('') + '</tr></thead>';
+    function row(name, color, title, st, s) {
+      var end = s && s.value && s.value.length ? s.value[s.value.length - 1] : null;
+      var cells = st ? statCells(st).replace('</td>', '<span class="cmp-val">' + (isNum(end) ? eur(end, { dec: 0 }) : '–') + '</span></td>')
+        : new Array(7).join('<td class="dash">–</td>');
+      return '<tr><td class="l sticky"' + (title ? ' title="' + esc(title) + '"' : '') + '><span class="row-name"><i style="background:' + color +
+        '"></i><span class="cmp-nm">' + esc(name) + '</span></span></td>' + cells + '</tr>';
+    }
+    var body = row('Portfolio', 'var(--accent)', '', M.ps, M.p);
+    M.selB.forEach(function (x) { body += row(x.name, x.color, x.name + (x.b.description ? ' · ' + x.b.description : ''), x.st, x.s); });
+    $('cmpTable').innerHTML = head + '<tbody>' + body + '</tbody>';
+    placeCmpPanel();
+  }
+  /** Left of the chart when the space beside the page column fits the panel's natural width, otherwise above the chart. */
+  function placeCmpPanel() {
+    var blk = $('cmpPanel').parentNode, el = $('cmpPanel');
+    blk.classList.add('cmp-side');
+    var fits = el.offsetWidth + 28 <= blk.getBoundingClientRect().left;       // 20px gap + 8px to the window edge
+    if (!fits) blk.classList.remove('cmp-side');
+  }
+
   // ------------------------------------------------------------------ monthly table
   function renderMonthly(M) {
     var ref = M.monthsRef || [], months = ref.map(function (r) { return r.month; }), partial = {};
@@ -1902,6 +1940,7 @@
     renderHoldings();
     renderKpis(cur);
     renderBenchTable(cur);
+    renderCmpPanel(cur);
     renderMonthly(cur);
     renderAssets(cur);
     renderRisk(cur);
@@ -2006,6 +2045,7 @@
     });
     $('startValue').addEventListener('input', onStartValue);
     $('startReset').addEventListener('click', function () { $('startValue').value = ''; onStartValue(); $('startValue').focus(); });
+    $('benchOnly').addEventListener('click', function () { state.benchOnly = !state.benchOnly; update({ keepMeasure: true }); });
     $('rfInput').addEventListener('input', onRf);
     bindBench();                                 // benchmark cards + instrument search list
     $('applyMeasure').addEventListener('click', applyMeasure);
@@ -2109,6 +2149,7 @@
     }
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(box);
     else window.addEventListener('resize', onResize);
+    window.addEventListener('resize', placeCmpPanel);
   }
 
   // ------------------------------------------------------------------ start
