@@ -372,21 +372,19 @@
    *   benches: [{ id, color, values: [number] }],
    *   baseline: number,                              – start value (Portfoliowert) or 0 (Gesamtrendite)
    *   axisLabel(v, step), lastLabel(v), monthLabel(iso, withYear), dayLabel(iso),
-   *   hoverHTML(i, maxBench), measureHTML(a, b) -> html | { main: html, side: html|'' }, emptyText
+   *   hoverHTML(i, maxBench), measureHTML(a, b) -> html, emptyText
    * }
-   * measureHTML's `side` is an optional second box ("Mein Depot") placed beside the measure box (same top, same
-   * height), or stacked under it on narrow charts. hoverHTML's optional maxBench caps the benchmark rows (used to size
-   * the band). The band above the plot is sized from the real box heights: the measure box(es) and the hover box with
-   * up to BAND_BENCH_ROWS benchmarks. When the hover box needs more room than the measure boxes, the chart element
+   * measureHTML returns ONE block: a caption line with the measured span and a row of equal boxes (Portfolio + every
+   * shown benchmark) that wraps when the chart is too narrow. The block is centred on the span and clamped to the
+   * chart. hoverHTML's optional maxBench caps the benchmark rows (used to size the band). The band above the plot is
+   * sized from the real heights: the measure block (probed with the full range) and the hover box with up to
+   * BAND_BENCH_ROWS benchmarks. When the hover box needs more room than the measure block, the chart element
    * grows by the difference (CSS var --band-extra), so the plot keeps its height.
    */
   var TIP_TOP = 2;          // px from the chart top to the tooltip boxes
-  var TIP_GAP = 4;          // px between the measure box and the side box
-  var BAND_MARGIN = 18;     // px between the lowest box and the plot top (keeps a y-label at the plot top clear)
+  var BAND_GAP = 3;         // px between the caption and the boxes (= .pc-tip--measure gap)
+  var BAND_MARGIN = 18;    // px between the lowest box and the plot top (keeps a y-label at the plot top clear)
   var BAND_BENCH_ROWS = 3;  // hover box rows kept out of the plot (user, 27.09.: more benchmarks may overlap)
-  function tipParts(h) {
-    return h && typeof h === 'object' ? { main: h.main || '', side: h.side || '' } : { main: h || '', side: '' };
-  }
   function fillTip(tip, cls, html) {
     tip.className = cls;
     tip.innerHTML = html;
@@ -404,14 +402,8 @@
     this.tip.className = 'pc-tip';
     this.tip.hidden = true;
     el.appendChild(this.tip);
-    this.tip2 = document.createElement('div');        // side box of a measurement ("Mein Depot")
-    this.tip2.className = 'pc-tip';
-    this.tip2.hidden = true;
-    el.appendChild(this.tip2);
     this.tipKey = '';
-    this.tipW = 0; this.tipH = 0; this.tip2W = 0; this.tip2H = 0;
-    this.sideOn = false;
-    this.stack = false;
+    this.tipW = 0; this.tipH = 0;
     this.tipBottom = TIP_TOP;
     this.bandExtra = 0;      // px the element is taller than its CSS height (--band-extra, see _band)
     this.size = null;        // { W, H } of the last render
@@ -537,26 +529,29 @@
     this.drawOverlay(this.sync);
   };
 
-  MainChart.prototype.hideTip = function () { this.tip.hidden = true; this.tip2.hidden = true; this.tipKey = ''; };
+  MainChart.prototype.hideTip = function () { this.tip.hidden = true; this.tipKey = ''; };
 
   /**
-   * Band above the plot for the current content: { top, extra }. top = the taller of the measure block (measure box
-   * + side box: beside it, or stacked under it when both do not fit next to each other; probed with the full range)
-   * and the hover box with at most BAND_BENCH_ROWS benchmark rows, plus a margin. extra = how much taller the hover
-   * box is than the measure block: the chart element grows by that, so the plot height does not depend on it.
+   * Band above the plot for the current content: { top, extra }. top = the taller of the measure block (caption + the
+   * wrapped row of boxes, probed with the full range) and the hover box with at most BAND_BENCH_ROWS benchmark rows,
+   * plus a margin. extra = how much taller that is than one row of boxes (caption + box) – a taller hover box or a
+   * second row of wrapped boxes: the chart element grows by that, so the plot height does not depend on it.
    */
   MainChart.prototype._band = function (M, lastI, W, compact) {
-    var t1 = this.tip, t2 = this.tip2, h = tipParts(M.measureHTML ? M.measureHTML(0, lastI) : '');
-    t1.style.visibility = t2.style.visibility = 'hidden';
-    fillTip(t1, 'pc-tip pc-tip--measure', h.main);
-    var w1 = t1.offsetWidth, h1 = t1.offsetHeight, w2 = 0, h2 = 0, hh = 0;
-    if (h.side) { fillTip(t2, 'pc-tip pc-tip--side', h.side); w2 = Math.ceil(t2.getBoundingClientRect().width); h2 = t2.offsetHeight; }
-    if (M.hoverHTML) { fillTip(t1, 'pc-tip pc-tip--hover', tipParts(M.hoverHTML(lastI, BAND_BENCH_ROWS)).main); hh = t1.offsetHeight; }
-    t1.style.visibility = t2.style.visibility = '';
+    var t1 = this.tip, html = M.measureHTML ? M.measureHTML(0, lastI) : '';
+    t1.style.visibility = 'hidden';
+    fillTip(t1, 'pc-tip pc-tip--measure', html);
+    var h1 = t1.offsetHeight, hh = 0;
+    // one row of boxes (caption + the tallest box): what the plot height is calibrated to; a second row of wrapped
+    // boxes (narrow charts, many benchmarks) grows the chart element instead of eating into the plot
+    var cap = t1.querySelector('.tt-cap'), box = t1.querySelector('.tt-d');
+    var one = cap && box ? cap.offsetHeight + BAND_GAP + box.offsetHeight : h1;
+    if (M.hoverHTML) { fillTip(t1, 'pc-tip pc-tip--hover', M.hoverHTML(lastI, BAND_BENCH_ROWS)); hh = t1.offsetHeight; }
+    t1.style.visibility = '';
     this.hideTip();
-    this.stack = !!h.side && (compact || w1 + TIP_GAP + w2 > W);
-    var block = !(h1 > 0) ? (compact ? 62 : 80) - TIP_TOP - BAND_MARGIN : !h.side ? h1 : this.stack ? h1 + TIP_GAP + h2 : Math.max(h1, h2);
-    return { top: Math.ceil(TIP_TOP + Math.max(block, hh) + BAND_MARGIN), extra: Math.max(0, Math.ceil(hh - block)) };
+    var block = !(h1 > 0) ? (compact ? 62 : 80) - TIP_TOP - BAND_MARGIN : h1;
+    if (!(h1 > 0)) one = block;
+    return { top: Math.ceil(TIP_TOP + Math.max(block, hh) + BAND_MARGIN), extra: Math.max(0, Math.ceil(Math.max(block, hh) - one)) };
   };
 
   /**
@@ -618,22 +613,14 @@
     }
   };
 
-  /** Fills the box(es) when the content key changes (tipKey = '' forces a rebuild) and reads their natural size. */
+  /** Fills the box when the content key changes (tipKey = '' forces a rebuild) and reads its natural size. */
   MainChart.prototype._setTip = function (key, cls, html) {
     if (this.tipKey === key) return;
-    var h = tipParts(html), tip = this.tip, t2 = this.tip2;
-    fillTip(tip, 'pc-tip ' + cls, h.main);
-    this.tipW = tip.offsetWidth;            // natural size (layout read only when the index changes)
+    var tip = this.tip;
+    fillTip(tip, 'pc-tip ' + cls, html || '');
+    // natural size (layout read only when the index changes); ceil of the real width, not offsetWidth (rounded down: the boxes would wrap)
+    this.tipW = Math.ceil(tip.getBoundingClientRect().width);
     this.tipH = tip.offsetHeight;
-    this.sideOn = !!h.side;
-    if (h.side) {
-      fillTip(t2, 'pc-tip pc-tip--side', h.side);
-      this.tip2W = Math.ceil(t2.getBoundingClientRect().width);   // not offsetWidth: rounded down, the boxes would wrap
-      this.tip2H = t2.offsetHeight;
-    } else {
-      t2.hidden = true;
-    }
-    this.tipSetW = this.tip2SetW = null;
     this.tipKey = key;
   };
 
@@ -648,65 +635,19 @@
   };
 
   /**
-   * Measure box at the top (reaches 40px past both lines, as in the app; centred when narrower than its content;
-   * clamped to the chart). The side box goes right of it, or left when there is no room on the right; if neither fits,
-   * the pair shifts by the smaller amount. Narrow charts (this.stack, from render) put the side box under it.
+   * Measure block at the top: caption with the span + the row of boxes (Portfolio and every shown benchmark; wraps at
+   * the chart width). Centred on the measured span, clamped to the chart. While pinned its rows take the pointer (titles).
    */
   MainChart.prototype.showMeasureTip = function (a, b, xa, xb, pinned) {
-    var L = this.L, M = this.model, W = L.W, tip = this.tip, t2 = this.tip2;
+    var L = this.L, M = this.model, W = L.W, tip = this.tip;
     this._setTip('m' + a + '-' + b, 'pc-tip--measure', M.measureHTML ? M.measureHTML(a, b) : '');
-    var side = this.sideOn, sw = side ? Math.min(this.tip2W, W) : 0, natural = Math.min(this.tipW, W);
-    var stack = side && (this.stack || natural + TIP_GAP + sw > W);
-    var room = side && !stack ? W - sw - TIP_GAP : W;                 // width left for the measure box
-    var mid = (xa + xb) / 2, left = xa - 40, right = xb + 40;
-    if (right - left < natural) { left = mid - natural / 2; right = mid + natural / 2; }
-    else if (right - left > room) { left = mid - room / 2; right = mid + room / 2; }
-    if (left < 0) { right -= left; left = 0; }
-    if (right > W) { left -= right - W; right = W; }
-    left = Math.round(Math.max(0, left));
-    right = Math.round(right);
-    var sl = 0;
-    if (side && !stack) {
-      if (right + TIP_GAP + sw <= W) sl = right + TIP_GAP;
-      else if (left - TIP_GAP - sw >= 0) sl = left - TIP_GAP - sw;
-      else {
-        var dR = right + TIP_GAP + sw - W, dL = TIP_GAP + sw - left;
-        if (dR <= dL) { left -= dR; right -= dR; sl = right + TIP_GAP; }
-        else { left += dL; right += dL; sl = left - TIP_GAP - sw; }
-      }
-    }
-    var w = right - left;
-    tip.style.left = left + 'px';
-    if (w !== this.tipSetW) {
-      tip.style.width = w + 'px';
-      this.tipSetW = w;
-      this.tipH = tip.offsetHeight;
-    }
+    var w = Math.min(this.tipW, W), mid = (xa + xb) / 2;
+    tip.style.width = w + 'px';
+    tip.style.left = Math.round(clamp(mid - w / 2, 0, Math.max(0, W - w))) + 'px';
+    tip.classList.toggle('is-pinned', !!pinned);
     tip.hidden = false;
-    var bottom = L.tipTop + this.tipH;
-    if (side) {
-      var w2 = sw, top2 = L.tipTop;
-      if (stack) {                                                     // under the measure box, same left edge
-        w2 = Math.min(W, Math.max(w, sw));
-        sl = clamp(left, 0, W - w2);
-        top2 = bottom + TIP_GAP;
-      }
-      t2.style.left = Math.round(sl) + 'px';
-      t2.style.top = top2 + 'px';
-      if (!stack) {                                                    // same height as the measure box
-        if (w2 !== this.tip2SetW) { t2.style.width = w2 + 'px'; this.tip2SetW = w2; }
-        var hh = Math.max(this.tipH, this.tip2H);
-        tip.style.height = t2.style.height = hh + 'px';
-      } else {
-        tip.style.height = t2.style.height = '';
-        // the side boxes may wrap into more rows at the stacked width: read their height again
-        if (w2 !== this.tip2SetW) { t2.style.width = w2 + 'px'; this.tip2SetW = w2; this.tip2H = t2.offsetHeight; }
-      }
-      t2.classList.toggle('is-pinned', !!pinned);                     // pinned: rows take the pointer (title)
-      t2.hidden = false;
-      bottom = stack ? top2 + this.tip2H : L.tipTop + Math.max(this.tipH, this.tip2H);
-    }
-    this.tipBottom = bottom;
+    this.tipH = tip.offsetHeight;
+    this.tipBottom = L.tipTop + this.tipH;
   };
 
   // ---------------------------------------------------------------- Drawdown chart
