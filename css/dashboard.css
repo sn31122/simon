@@ -17,7 +17,6 @@
   --accent-soft: rgba(var(--accent-rgb), .10);
   --neg-rgb: 231, 142, 120;
   --neg: rgb(var(--neg-rgb));            /* exact app red #e78e78 */
-  --neutral-rgb: 42, 45, 49;             /* correlation 0 in the heatmap */
   --line-muted: #8c9196;
   --tooltip: #2e3133;                    /* measured tooltip box */
   --tooltip-border: #383b3e;
@@ -447,11 +446,6 @@ th.is-sorted { color: var(--text); }
 .row-name i { width: 12px; height: 3px; border-radius: 2px; }
 .tbl input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; flex: 0 0 auto; }
 
-/* month table */
-.tbl--months td, .tbl--months th { padding-left: 6px; padding-right: 6px; }
-.tbl--months th.l, .tbl--months td.l { padding-left: 12px; padding-right: 12px; }
-.mcell { display: block; min-width: 64px; padding: 4px 6px; border-radius: 4px; color: var(--text); font-weight: 500; }
-
 /* group table */
 
 /* asset table */
@@ -626,54 +620,6 @@ th.is-sorted { color: var(--text); }
 .tbl--assets tr.is-changed:hover td { background: rgba(245, 176, 65, .09); }
 .tbl--assets tr.is-changed:hover .sticky { background: #2a261d; }
 
-/* risk & correlation */
-.risk-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
-.kpi--mini .kpi-value { font-size: 18px; }
-.kpi-unit { color: var(--muted); font-size: 13px; font-weight: 500; }
-.card-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 14px; padding: 12px 14px 4px; }
-.card-head h3 { margin: 0; font-size: 13.5px; font-weight: 700; }
-.risk-card { margin-bottom: 10px; }
-.rb-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
-.rb-key { display: inline-block; width: 12px; height: 6px; margin-left: 6px; border-radius: 2px; }
-.rb-key--w { background: #5d6570; }
-.rb-key--r { background: var(--accent); }
-.rbars { columns: 2; column-gap: 32px; padding: 6px 14px 12px; }
-.rb-row {
-  display: grid; grid-template-columns: 104px minmax(0, 1fr) 96px; align-items: center; column-gap: 10px;
-  padding: 3px 0; break-inside: avoid; font-size: 12px;
-}
-.rb-name { overflow: hidden; color: var(--text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.rb-bars { display: flex; flex-direction: column; gap: 2px; }
-.rb-bar { display: block; min-width: 1px; height: 6px; border-radius: 2px; }
-.rb-bar--w { background: #5d6570; }
-.rb-bar--r { background: var(--accent); }
-.rb-bar--r.is-neg { background: var(--neg); }
-.rb-vals { display: flex; justify-content: flex-end; gap: 8px; color: var(--muted); white-space: nowrap; }
-.rb-vals b { min-width: 44px; color: var(--text); font-weight: 700; text-align: right; }
-.rb-vals b.is-over { color: var(--wi); }
-.empty-note { margin: 4px 0 6px; color: var(--muted); font-size: 12.5px; }
-.heat-card { overflow: hidden; }
-.hm-avg { color: var(--muted); font-size: 12px; }
-.hm-avg b { color: var(--text); font-weight: 700; }
-.heat-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; padding: 4px 14px 6px; }
-.hm { position: relative; min-width: 0; }
-.hm-svg { display: block; }
-.hm-label { fill: var(--axis); font-size: 11px; font-weight: 600; }
-.hm-label.is-hot { fill: #fff; }
-.hm-cell { stroke: none; }
-.hm-cell--na { fill: #1d1f22; }
-.hm-num { fill: var(--text); font-size: 9.5px; font-weight: 600; pointer-events: none; }
-.hm-num--dark { fill: var(--accent-ink); }
-.hm-focus { fill: none; stroke: #fff; stroke-width: 1.5; pointer-events: none; }
-.hm-tip {
-  position: absolute; z-index: 5; pointer-events: none; white-space: nowrap;
-  padding: 5px 8px; border: 1px solid var(--tooltip-border); border-radius: 4px; background: var(--tooltip);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .3); color: var(--text); font-size: 11.5px; font-weight: 600;
-}
-.hm-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 2px 14px 12px; color: var(--muted); font-size: 11.5px; }
-.hm-grad { display: inline-block; width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgb(var(--neg-rgb)), rgb(var(--neutral-rgb)) 50%, rgb(var(--accent-rgb))); }
-.hm-legend-note { margin-left: 8px; }
-
 /* notes */
 .notes { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 1.6; }
 .notes h2 { margin: 0 0 6px; color: var(--text); font-size: 13px; font-weight: 700; }
@@ -717,11 +663,6 @@ th.is-sorted { color: var(--text); }
   .wi-sep { margin: 0 4px; }
   .wi-long { display: none; }
   .wi-actions { margin-left: 6px; }
-  .risk-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .risk-kpis .kpi:last-child { grid-column: 1 / -1; }
-  .rbars { columns: 1; }
-  .rb-row { grid-template-columns: 92px minmax(0, 1fr) 90px; }
-  .hm-legend-note { margin-left: 0; flex-basis: 100%; }
 }
 @media (max-width: 480px) {
   .hrow { grid-template-columns: 30px minmax(0, 1fr) auto auto; column-gap: 10px; }
@@ -803,7 +744,3 @@ th.is-sorted { color: var(--text); }
 .cmp-nm { display: inline-block; max-width: var(--cmp-nm, 64px); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .tbl--cmp td.cmp-val { color: var(--text); font-weight: 600; }
 .chart-block.cmp-side .cmp { position: absolute; top: 0; left: calc(100% + 16px); width: max-content; margin: 0; }
-/* Monatsrenditen over several years (history, user 28.09.): one block per year, year label in front of its first row */
-.my-year { display: inline-block; width: 36px; color: var(--text); font-weight: 700; }
-#monthTable tr.my-first td { border-top: 1px solid #2e3236; }
-#monthTable tbody tr.my-first:first-child td { border-top: 0; }

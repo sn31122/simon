@@ -412,15 +412,15 @@ async function depotBoxCheck(page) {
       const el = document.querySelector('[data-card="' + id + '"]'), card = el.querySelector('.bb-ret').textContent;
       const lg = Array.from(document.querySelectorAll('#legend .lg-item')).find((n) => /Benchmark 1/.test(n.textContent));
       const row = Array.from(document.querySelectorAll('#benchTable tbody tr')).find((r) => /Benchmark 1/.test(r.textContent));
-      const kpi = document.querySelector('#kpis .kpi .kpi-bench'), month = Array.from(document.querySelectorAll('#monthTable tbody tr')).some((r) => /Benchmark 1/.test(r.textContent));
+      const kpi = document.querySelector('#kpis .kpi .kpi-bench');
       const dd = PFApp.charts.dd.model.benches.some((b) => b.id === id);
       PFApp.sync.setHover(60); PFApp.sync.flush();
       const readout = document.getElementById('ddReadout').textContent;
       PFApp.sync.setHover(null);
-      return { card, legend: lg && lg.querySelector('b').textContent, table: row && row.children[1].textContent, kpi: kpi && kpi.textContent, month, dd, readout: /Benchmark 1/.test(readout) };
+      return { card, legend: lg && lg.querySelector('b').textContent, table: row && row.children[1].textContent, kpi: kpi && kpi.textContent, dd, readout: /Benchmark 1/.test(readout) };
     }, cid);
-    check('cards', 'card return = legend = Benchmark-Vergleich = Kennzahlen bench line; monthly row, drawdown line + readout',
-      agree.card === agree.legend && agree.card === agree.table && agree.kpi && agree.kpi.indexOf(agree.card) >= 0 && agree.month && agree.dd && agree.readout, agree);
+    check('cards', 'card return = legend = Benchmark-Vergleich = Kennzahlen bench line; drawdown line + readout',
+      agree.card === agree.legend && agree.card === agree.table && agree.kpi && agree.kpi.indexOf(agree.card) >= 0 && agree.dd && agree.readout, agree);
     await page.click('#benchCards .bb-card:first-child [data-act="show"]');
     await settle(page);
     // invalid card excluded everywhere
@@ -430,10 +430,10 @@ async function depotBoxCheck(page) {
     const excl = await page.evaluate((id) => ({
       bench: PFApp.model().benches.some((b) => b.id === id), legend: /Benchmark 1/.test(document.getElementById('legend').textContent),
       lines: PFApp.charts.main.model.benches.some((b) => b.id === id), dd: PFApp.charts.dd.model.benches.some((b) => b.id === id),
-      table: /Benchmark 1/.test(document.getElementById('benchTable').textContent), months: /Benchmark 1/.test(document.getElementById('monthTable').textContent)
+      table: /Benchmark 1/.test(document.getElementById('benchTable').textContent)
     }), cid);
-    check('cards', 'an invalid card is left out of chart, drawdown, legend, Benchmark-Vergleich, Monatsrenditen',
-      !excl.bench && !excl.legend && !excl.lines && !excl.dd && !excl.table && !excl.months, excl);
+    check('cards', 'an invalid card is left out of chart, drawdown, legend, Benchmark-Vergleich',
+      !excl.bench && !excl.legend && !excl.lines && !excl.dd && !excl.table, excl);
     await selectAllAndType(page, '60');
     await settle(page);
 
@@ -803,15 +803,26 @@ async function depotBoxCheck(page) {
 
     // ================================================================= periods
     const per = {};
-    for (const [src, key] of [['#holdPills [data-hp="3M"]', '3M'], ['#rangeTabs [data-preset="6M"]', '6M'], ['#holdPills [data-hp="1W"]', '1W'], ['#rangeTabs [data-preset="MAX"]', 'MAX'], ['#holdPills [data-hp="SK"]', 'SK'], ['#holdPills [data-hp="YTD"]', 'YTD']]) {
+    for (const [src, key] of [['#holdPills [data-hp="1T"]', '1T'], ['#holdPills [data-hp="1M"]', '1M'], ['#holdPills [data-hp="3M"]', '3M'], ['#rangeTabs [data-preset="6M"]', '6M'], ['#holdPills [data-hp="1W"]', '1W'], ['#rangeTabs [data-preset="MAX"]', 'MAX'], ['#holdPills [data-hp="SK"]', 'SK'], ['#holdPills [data-hp="YTD"]', 'YTD']]) {
       await page.click(src);
       await settle(page);
       per[key] = await page.evaluate(() => ({
         pill: (document.querySelector('#holdPills .is-active') || {}).textContent || null,
         tab: (document.querySelector('#rangeTabs .is-active') || {}).textContent || null,
-        label: document.querySelector('#holdChg .hold-per') && document.querySelector('#holdChg .hold-per').textContent
+        label: document.querySelector('#holdChg .hold-per') && document.querySelector('#holdChg .hold-per').textContent,
+        dLabel: document.querySelector('#depotChg .hold-per') && document.querySelector('#depotChg .hold-per').textContent,
+        dEur: document.querySelector('#depotChg b') && document.querySelector('#depotChg b').textContent
       }));
     }
+    const depExp = await page.evaluate(() => {
+      const c = PFEngine.prepare(window.PORTFOLIO_DATA), F = PFEngine.fmt, out = {};
+      for (const p of ['1T', '1M', '3M']) out[p] = F.eur(PFEngine.depotChange(c, PFEngine.presetRange(c, p)).pl, { sign: true, dec: 2 });
+      out.SK = F.eur(PFEngine.depotNow(c).gl, { sign: true, dec: 2 });
+      return out;
+    });
+    check('periods', '"Mein Depot" top block follows the period (1T = daily P&L, 1M, 3M = depotChange; Seit Kauf = G/V seit Kauf) with the Yacht block\'s label',
+      ['1T', '1M', '3M', '6M', 'YTD'].every((k) => per[k].dLabel === per[k].label) && per.SK.dLabel === 'seit Kauf' &&
+      ['1T', '1M', '3M', 'SK'].every((k) => per[k].dEur === depExp[k]) && per['1T'].dEur !== per['1M'].dEur, { per, depExp });
     check('periods', '3M/6M pills and tabs update each other and the labels; MAX = no pill; Seit Kauf = MAX tab',
       per['3M'].pill === '3M' && per['3M'].tab === '3M' && per['3M'].label === '3 Monate' && per['6M'].pill === '6M' && per['6M'].tab === '6M' && per['6M'].label === '6 Monate' &&
       per['1W'].tab === '1W' && per.MAX.pill === null && per.MAX.tab === 'MAX' && per.SK.pill === 'Seit Kauf' && per.SK.tab === 'MAX' && per.YTD.pill === 'YTD', per);
@@ -827,8 +838,9 @@ async function depotBoxCheck(page) {
       }
       return out;
     });
-    check('lists', 'order: lists, Benchmark-Vergleich, Drawdown, Monatsrenditen, Kennzahlen, Risiko & Korrelation, Hinweise',
-      order.join('|') === 'Listen|Benchmark-Vergleich|Drawdown|Monatsrenditen|Kennzahlen|Risiko & Korrelation|Hinweise', order);
+    const gone = await page.evaluate(() => !document.getElementById('monthTable') && !document.getElementById('riskBlock') && !document.getElementById('heatmap'));
+    check('lists', 'order: lists, Benchmark-Vergleich, Drawdown, Kennzahlen, Hinweise (Monatsrenditen and Risiko & Korrelation removed)',
+      order.join('|') === 'Listen|Benchmark-Vergleich|Drawdown|Kennzahlen|Hinweise' && gone, { order, gone });
     async function combos(pg) {
       const out = [];
       for (const [h, a] of [[true, false], [true, true], [false, true], [false, false]]) {

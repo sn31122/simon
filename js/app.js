@@ -28,7 +28,6 @@
   try { ctx = E.prepare(D); } catch (err) { fail('Daten konnten nicht vorbereitet werden: ' + (err && err.message)); return; }
   var ctx0 = ctx;  // original context (never changes) – used for the dashed "Original" line and the banner
   var HAS_WHATIF = typeof E.withShares === 'function';
-  var HAS_RISK = typeof E.riskContribution === 'function' && typeof E.correlationMatrix === 'function';
   var ORIG_SHARES = {};
   ctx0.positions.forEach(function (p) { ORIG_SHARES[p.isin] = Number(p.shares); });
 
@@ -240,16 +239,7 @@
     selB.forEach(function (x) {
       x.rel = p && x.s ? E.relative(p, x.s, { rf: rf }) : null;
       x.dd = x.s ? E.drawdown(x.s.value) : null;
-      var fs = E.benchmark(ctx, x.b, cov, n - 1, 1);                     // Monatsrenditen: from the coverage date on
-      x.monthly = fs ? E.monthly(ctx, fs) : null;
     });
-    var full = sel.size ? E.portfolio(ctx, { selected: sel, start: cov, end: n - 1, startValue: null }) : null;
-    var monthlyP = full ? E.monthly(ctx, full) : null;
-    var monthsRef = monthlyP || (selB[0] && selB[0].monthly) || null;
-    if (!monthsRef && ctx.benchmarks.length) {
-      var fb = E.benchmark(ctx, ctx.benchmarks[0], 0, n - 1, 1);
-      monthsRef = fb ? E.monthly(ctx, fb) : null;
-    }
     var assets = E.assets(ctx, { selected: sel, start: R.start, end: R.end, scale: p && isNum(p.scale) ? p.scale : 1 }) || [];
     var groups = E.groupSummary(ctx, assets) || [];
     // what-if: the original portfolio (same selection, range and Startwert) for the dashed comparison line
@@ -276,7 +266,7 @@
     return {
       R: R, cover: cover, flat: sel.size && E.notQuoted ? E.notQuoted(ctx, { selected: sel, start: R.start }) : [],
       p: p, ps: ps, pdd: pdd, benches: benches, byId: byId, selB: selB,
-      monthlyP: monthlyP, monthsRef: monthsRef || [], assets: assets, groups: groups,
+      assets: assets, groups: groups,
       orig: orig, origStats: orig ? E.stats(orig, { rf: rf }) : null, iv: iv, intra: intra
     };
   }
@@ -1532,69 +1522,6 @@
     } else blk.classList.remove('cmp-side');
   }
 
-  // ------------------------------------------------------------------ monthly table
-  function renderMonthly(M) {
-    var ref = M.monthsRef || [], months = ref.map(function (r) { return r.month; }), partial = {};
-    ref.forEach(function (r) { partial[r.month] = !!r.partial; });
-    var multiYear = months.length > 1 && months[0].slice(0, 4) !== months[months.length - 1].slice(0, 4);
-    var rows = [{ name: 'Portfolio', color: 'var(--accent)', data: M.monthlyP }].concat(M.selB.map(function (x) {
-      return { name: x.name, color: x.color, data: x.monthly };
-    }));
-    var maxAbs = 0.02;
-    rows.forEach(function (rw) {
-      (rw.data || []).forEach(function (c) { if (c && isNum(c.ret)) maxAbs = Math.max(maxAbs, Math.abs(c.ret)); });
-    });
-    function cell(r) {
-      if (!isNum(r)) return '<td><span class="mcell dash">–</span></td>';
-      var a = (0.10 + 0.45 * Math.min(1, Math.abs(r) / maxAbs)).toFixed(3);
-      var bg = 'rgba(var(' + (r >= 0 ? '--accent-rgb' : '--neg-rgb') + '),' + a + ')';   // colours from the CSS tokens
-      return '<td><span class="mcell" style="background:' + bg + '">' + pct(r) + '</span></td>';
-    }
-    if (months.length > 13) {             // history (user 28.09.): one block per year (newest first), Jan–Dez + the year
-      var years = [];
-      months.forEach(function (m) { if (years.indexOf(m.slice(0, 4)) < 0) years.push(m.slice(0, 4)); });
-      years.reverse();
-      var MN = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
-      var hd = '<thead><tr><th class="l sticky">&nbsp;</th>' + MN.map(function (mm) { return '<th>' + esc(monthLabel('2026-' + mm + '-01', false)) + '</th>'; }).join('') +
-        '<th class="bl" title="Rendite des Kalenderjahrs (Monate verkettet; Teiljahr am Anfang und Ende)">Jahr</th></tr></thead>';
-      var bd = '';
-      years.forEach(function (y) {
-        rows.forEach(function (rw, k) {
-          var map = {};
-          (rw.data || []).forEach(function (c) { if (c) map[c.month] = c.ret; });
-          var q = 1, any = false;
-          MN.forEach(function (mm) { var r = map[y + '-' + mm]; if (isNum(r)) { q *= 1 + r; any = true; } });
-          bd += '<tr' + (k === 0 ? ' class="my-first"' : '') + '><td class="l sticky"><span class="row-name">' + (k === 0 ? '<b class="my-year">' + y + '</b>' : '<b class="my-year"></b>') +
-            '<i style="background:' + rw.color + '"></i>' + esc(rw.name) + '</span></td>' +
-            MN.map(function (mm) {
-              var key = y + '-' + mm;
-              return months.indexOf(key) < 0 ? '<td></td>' : cell(map[key]).replace('<td>', partial[key] ? '<td title="Teilmonat">' : '<td>');
-            }).join('') + '<td class="bl">' + (any ? cell(q - 1).replace(/^<td>|<\/td>$/g, '') : '<span class="mcell dash">–</span>') + '</td></tr>';
-        });
-      });
-      $('monthTable').innerHTML = hd + '<tbody>' + bd + '</tbody>';
-      $('monthNote').hidden = !months.some(function (m) { return partial[m]; });
-      return;
-    }
-    var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + months.map(function (m) {
-      return '<th' + (partial[m] ? ' title="Teilmonat"' : '') + '>' + esc(monthLabel(m + '-01', multiYear)) + (partial[m] ? '*' : '') + '</th>';
-    }).join('') + '</tr></thead>';
-    var body = rows.map(function (rw) {
-      var map = {};
-      (rw.data || []).forEach(function (c) { if (c) map[c.month] = c.ret; });
-      return '<tr><td class="l sticky"><span class="row-name"><i style="background:' + rw.color + '"></i>' + esc(rw.name) + '</span></td>' +
-        months.map(function (m) {
-          var r = map[m];
-          if (!isNum(r)) return '<td><span class="mcell dash">–</span></td>';
-          var a = (0.10 + 0.45 * Math.min(1, Math.abs(r) / maxAbs)).toFixed(3);
-          var bg = 'rgba(var(' + (r >= 0 ? '--accent-rgb' : '--neg-rgb') + '),' + a + ')';   // colours from the CSS tokens
-          return '<td><span class="mcell" style="background:' + bg + '">' + pct(r) + '</span></td>';
-        }).join('') + '</tr>';
-    }).join('');
-    $('monthTable').innerHTML = head + '<tbody>' + body + '</tbody>';
-    $('monthNote').hidden = !months.some(function (m) { return partial[m]; });
-  }
-
   // ------------------------------------------------------------------ group table
   // ------------------------------------------------------------------ asset table
   var ASSET_COLS = [
@@ -1820,18 +1747,36 @@
       '</div>';
   }
 
-  /** "Mein Depot" beside the Yacht at the top: the real Scalable depot's value and its G/V seit Kauf (engine.depotNow). */
-  function renderDepotBlock() {
+  /**
+   * "Mein Depot" beside the Yacht at the top: the real Scalable depot (engine.depotNow / depotChange). Its change follows
+   * the period like the Yacht block (1T = since the previous close, 1M = over the month …; the depot's current share
+   * counts valued at the start and end of the range); "Seit Kauf" = G/V seit Kauf from the Scalable snapshot.
+   */
+  function renderDepotBlock(H, label) {
     var d = E.depotNow ? E.depotNow(ctx0) : null, box = $('ovDepot');
     box.hidden = !d;
     if (!d) return;
-    $('depotTotal').innerHTML = bigValueHTML(d.value);
+    var R = H.R, ch = !H.sk && E.depotChange ? E.depotChange(ctx0, { start: R.start, end: R.end }) : null;
+    $('depotTotal').innerHTML = bigValueHTML(ch ? ch.endValue : d.value);
     var asof = d.asof ? F.date(d.asof.slice(0, 10), 'short') : '';
-    var tip = pct(d.glPct) + ' gegenüber Einstand · G/V seit Kauf laut Scalable ' + (asof ? 'am ' + asof + ' ' : '') + eurS(d.refGl) +
-      ', seither mit den Kursen fortgeschrieben (Einstand ' + eur(d.costBasis, { dec: 0 }) + ') · Wert = Stückzahlen × letzter Kurs ' +
-      F.date(d.date, 'short') + ', nur Wertpapiere' + (isNum(d.refTotal) && isNum(d.refValue) ? ' (Scalable gesamt inkl. Guthaben ' +
-      eur(d.refTotal, { dec: 0 }) + (asof ? ' am ' + asof : '') + ')' : '');
-    $('depotChg').innerHTML = '<b class="' + sgn(d.gl) + '">' + eurS(d.gl) + '</b> <span class="hold-per">seit Kauf</span>' +
+    var cash = isNum(d.refTotal) && isNum(d.refValue) ? ' (Scalable gesamt inkl. Guthaben ' + eur(d.refTotal, { dec: 0 }) +
+      (asof ? ' am ' + asof : '') + ')' : '';
+    var chgEur, per, tip;
+    if (ch) {
+      chgEur = ch.pl;
+      per = label;
+      tip = pct(ch.ret) + ' · Wertänderung deines Scalable-Depots im Zeitraum ' + periodText(R) +
+        (ctx0.status[R.end] === 'intraday' ? ' (intraday' + (ASOF ? ' ' + ASOF : '') + ')' : '') +
+        ': heutige Stückzahlen × Kurse (' + eur(ch.startValue) + ' → ' + eur(ch.endValue) + '), Käufe/Verkäufe im Zeitraum nicht berücksichtigt' +
+        ' · G/V seit Kauf ' + eurS(d.gl) + ' · nur Wertpapiere' + cash;
+    } else {
+      chgEur = d.gl;
+      per = 'seit Kauf';
+      tip = pct(d.glPct) + ' gegenüber Einstand · G/V seit Kauf laut Scalable ' + (asof ? 'am ' + asof + ' ' : '') + eurS(d.refGl) +
+        ', seither mit den Kursen fortgeschrieben (Einstand ' + eur(d.costBasis, { dec: 0 }) + ') · Wert = Stückzahlen × letzter Kurs ' +
+        F.date(d.date, 'short') + ', nur Wertpapiere' + cash;
+    }
+    $('depotChg').innerHTML = '<b class="' + sgn(chgEur) + '">' + eurS(chgEur) + '</b> <span class="hold-per">' + esc(per) + '</span>' +
       '<span class="info" tabindex="0" role="img" aria-label="Info" aria-describedby="depotTip"></span>' +
       '<span class="info-tip" id="depotTip" role="tooltip">' + esc(tip) + '</span>';
   }
@@ -1873,7 +1818,7 @@
       ' <span class="hold-per">' + esc(label) + '</span>' +
       '<span class="info" tabindex="0" role="img" aria-label="Info" aria-describedby="holdTip"></span>' +
       '<span class="info-tip" id="holdTip" role="tooltip">' + esc(tipText) + '</span>';
-    renderDepotBlock();
+    renderDepotBlock(H, label);
 
     Array.prototype.forEach.call($('holdPills').querySelectorAll('[data-hp]'), function (b) {
       var on = b.getAttribute('data-hp') === H.hp;
@@ -2001,72 +1946,6 @@
     $('wiReset').hidden = !k;
   }
 
-  // ------------------------------------------------------------------ risk & correlation
-  var heat = new C.Heatmap($('heatmap'));
-
-  function kpiMini(label, value, title, extra) {
-    return '<div class="kpi kpi--mini" title="' + esc(title || '') + '"><div class="kpi-label">' + esc(label) + '</div>' +
-      '<div class="kpi-value">' + value + '</div>' + (extra ? '<div class="kpi-extra">' + extra + '</div>' : '') + '</div>';
-  }
-
-  function renderRisk(M) {
-    var kp = $('riskKpis'), bars = $('riskBars'), avgEl = $('heatAvg');
-    $('riskSub').textContent = 'Zeitraum ' + periodText(M.R) + ' · Gewichte am ' + F.date(ctx.dates[M.R.end], 'short') +
-      (ctx !== ctx0 ? ' · Was-wäre-wenn' : '') + (M.R.start < (ctx.dailyFrom || 0) ? ' · Tagesrenditen ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') : '');
-    var rc = HAS_RISK && M.p ? E.riskContribution(ctx, { selected: state.selected, start: M.R.start, end: M.R.end }) : null;
-    var rows = rc && rc.rows ? rc.rows.filter(function (r) { return isNum(r.weight) && r.weight > 0; }) : [];
-    if (!rc || !rows.length) {
-      kp.innerHTML = kpiMini('Vol. p.a. (aktuelle Gewichte)', '–') + kpiMini('Diversifikations-Ratio', '–') + kpiMini('Top 3 Risikotreiber', '–');
-      bars.innerHTML = '<p class="empty-note">' + (!HAS_RISK ? 'Nicht verfügbar: js/engine.js ohne riskContribution()/correlationMatrix().' :
-        M.p ? 'Zu wenig Kursdaten im Zeitraum für eine Risikozerlegung.' : emptyText() + '.') + '</p>';
-      heat.render(null);
-      avgEl.textContent = '';
-      return;
-    }
-    var info = {};
-    M.assets.forEach(function (a) { info[a.isin] = a; });
-    function shortOf(i) { return info[i] ? info[i].short : i; }
-    var byRisk = rows.slice().sort(function (a, b) { return (nv(b.pctr) || 0) - (nv(a.pctr) || 0); });
-    var names = byRisk.slice(0, 3).map(function (r) { return shortOf(r.isin); }), top3 = nv(rc.top3Pctr);
-    if (top3 === null) {                                     // older engine without the extra: plain sum of the 3 largest
-      top3 = 0;
-      byRisk.slice(0, 3).forEach(function (r) { if (isNum(r.pctr)) top3 += r.pctr; });
-    }
-    kp.innerHTML =
-      kpiMini('Vol. p.a. (aktuelle Gewichte)', pctU(rc.volAnn), 'σ = √(wᵀ Σ w · 252) mit den Gewichten am Ende des Zeitraums') +
-      kpiMini('Diversifikations-Ratio', ratio(rc.diversificationRatio), 'Σ wᵢ · σᵢ / σ Portfolio – 1 = keine Streuung, höher = mehr Diversifikation') +
-      kpiMini('Top 3 Risikotreiber', pctU(top3, 1) + ' <span class="kpi-unit">des Risikos</span>',
-        'Summe der Risikoanteile der drei größten Risikotreiber', esc(names.join(', ')));
-
-    var maxV = 0.0001;
-    rows.forEach(function (r) { maxV = Math.max(maxV, nv(r.weight) || 0, nv(r.pctr) || 0); });
-    bars.innerHTML = byRisk.map(function (r) {
-      var w = nv(r.weight) || 0, p = nv(r.pctr), over = isNum(p) && p > w * 1.25 && p - w > 0.005;
-      var a = info[r.isin] || {};
-      return '<div class="rb-row" title="' + esc((a.name || r.isin) + ' · Vol. p.a. ' + pctU(r.vol) + ' · Grenzbeitrag (MCTR) ' + pctU(r.mctr) +
-        ' · Risikobeitrag ' + pctU(r.ctr)) + '">' +
-        '<span class="rb-name">' + esc(shortOf(r.isin)) + '</span>' +
-        '<span class="rb-bars"><i class="rb-bar rb-bar--w" style="width:' + (w / maxV * 100).toFixed(1) + '%"></i>' +
-        '<i class="rb-bar rb-bar--r' + (isNum(p) && p < 0 ? ' is-neg' : '') + '" style="width:' + (Math.max(0, Math.abs(p || 0)) / maxV * 100).toFixed(1) + '%"></i></span>' +
-        '<span class="rb-vals"><span>' + pctU(w, 1) + '</span><b class="' + (over ? 'is-over' : '') + '">' + pctU(p, 1) + '</b></span></div>';
-    }).join('');
-
-    var order = rows.slice().sort(function (a, b) { return b.weight - a.weight; }).map(function (r) { return r.isin; });
-    var cm = E.correlationMatrix(ctx, { isins: order, start: M.R.start, end: M.R.end });
-    var ids = cm && cm.isins ? cm.isins : order, mm = cm && cm.m ? cm.m : [], nn = cm && cm.n ? cm.n : [];
-    var avg = cm ? nv(cm.avg) : null;
-    avgEl.innerHTML = (avg !== null ? 'Ø paarweise Korrelation <b>' + ratio(avg) + '</b> · ' : '') + ids.length + ' Positionen';
-    heat.render({
-      labels: ids.map(shortOf),
-      m: mm, n: nn,
-      valueLabel: function (c) { return F.num(c, 2); },
-      tipText: function (a, b) {
-        var c = mm[a] ? mm[a][b] : null, k = nn[a] ? nn[a][b] : null;
-        return shortOf(ids[a]) + ' × ' + shortOf(ids[b]) + ': ' + (isNum(c) ? F.num(c, 2) : '–') + (isNum(k) ? ' (' + k + ' Tage)' : '');
-      }
-    });
-  }
-
   // ------------------------------------------------------------------ notes
   function renderNotes() {
     var notes = (META.notes || []).map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('');
@@ -2095,9 +1974,7 @@
     renderKpis(cur);
     renderBenchTable(cur);
     renderCmpPanel(cur);
-    renderMonthly(cur);
     renderAssets(cur);
-    renderRisk(cur);
     renderMeasureBar();
   }
 
@@ -2293,10 +2170,9 @@
     document.addEventListener('pointerdown', function (ev) {
       var t = ev.target;
       if (sortMenuOpen() && !$('holdMenuWrap').contains(t)) closeSortMenu(false);
-      // touch: a tap outside the charts / heatmap removes a sticky read-out and a tapped start point (a pinned measurement stays)
+      // touch: a tap outside the charts removes a sticky read-out and a tapped start point (a pinned measurement stays)
       if (ev.pointerType !== 'mouse' && sync.hoverI != null && !(t.closest && t.closest('.pc'))) sync.setHover(null);
       if (ev.pointerType !== 'mouse' && sync.following() && !(t.closest && t.closest('.pc'))) sync.clearMeasure();
-      if (ev.pointerType !== 'mouse' && heat.hot && !$('heatmap').contains(t)) heat.highlight(null);
     }, true);
 
     var lastW = -1, lastH = -1, pending = 0, box = $('mainChart');
@@ -2306,10 +2182,8 @@
         pending = 0;
         var w = box.clientWidth, h = box.clientHeight;
         if (w === lastW && h === lastH) return;
-        var widthChanged = w !== lastW;
         lastW = w; lastH = h;
         rerenderChartsOnly();
-        if (widthChanged && heat.model) heat.render();         // cell size follows the card width
       });
     }
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(box);

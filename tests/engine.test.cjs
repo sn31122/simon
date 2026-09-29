@@ -375,36 +375,6 @@ test('relative: identical, flat benchmark, missing series, misaligned ranges', (
   approx(a.beta, c.beta, 1e-12); approx(a.excessReturn, c.excessReturn, 1e-12);
 });
 
-// ======================================================================= monthly
-const M_DATES = ['2026-01-29', '2026-01-30', '2026-02-02', '2026-02-27', '2026-03-02', '2026-03-31'];
-const M_VALS = [100, 110, 105, 121, 120, 133.1];
-test('monthly: returns, first month anchored, complete last month', () => {
-  const m = E.monthly(ctxOf(M_DATES), M_VALS);
-  assert.deepStrictEqual(m.map((x) => x.month), ['2026-01', '2026-02', '2026-03']);
-  approxArr(m.map((x) => x.ret), [0.1, 0.1, 0.1]);
-  assert.deepStrictEqual(m.map((x) => x.partial), [true, false, false], '03-31 final = month complete');
-});
-test('monthly: partial last month (intraday / month not over), single month, series input', () => {
-  let st = M_DATES.map(() => 'final'); st[5] = 'intraday';
-  assert.strictEqual(E.monthly(ctxOf(M_DATES, { status: st }), M_VALS)[2].partial, true, 'intraday');
-  const d2 = M_DATES.slice(0, 5).concat(['2026-03-27']);
-  assert.strictEqual(E.monthly(ctxOf(d2), M_VALS)[2].partial, true, 'final, but 30./31.03. still to come');
-  const d3 = ['2026-01-29', '2026-01-30', '2026-02-02', '2026-02-27'];
-  assert.strictEqual(E.monthly(ctxOf(d3), [100, 110, 105, 121])[1].partial, false, '02-27 Fri = last trading day');
-  const d4 = ['2026-11-27', '2026-11-30', '2026-12-01', '2026-12-30'];
-  assert.strictEqual(E.monthly(ctxOf(d4), [1, 2, 3, 4])[1].partial, false, 'Dec 31 is an exchange holiday');
-  const one = E.monthly(ctxOf(['2026-03-02', '2026-03-03']), [100, 90]);
-  assert.strictEqual(one.length, 1); approx(one[0].ret, -0.1); assert.strictEqual(one[0].partial, true);
-  const ctx = ctxOf(M_DATES, { prices: { P: M_VALS }, positions: [{ isin: 'P', group: 'G1', shares: 1 }] });
-  const s = E.portfolio(ctx, { selected: ['P'] });
-  assert.deepStrictEqual(E.monthly(ctx, s).map((x) => [x.month, x.ret, x.partial]), E.monthly(ctx, s.value).map((x) => [x.month, x.ret, x.partial]));
-  const sub = E.monthly(ctx, E.portfolio(ctx, { selected: ['P'], start: 2, end: 3 }));
-  assert.deepStrictEqual(sub.map((x) => [x.month, x.partial]), [['2026-02', true]]);
-  approx(sub[0].ret, 121 / 105 - 1);
-  const u = E.util.isMonthComplete;
-  assert.deepStrictEqual(['2026-03-31', '2026-03-27', '2026-02-27', '2026-12-30', '2026-12-23', '2026-10-30'].map(u), [true, false, true, true, false, true]);
-});
-
 // ======================================================================= assets / groupSummary
 function rowsAC(start, end) {
   const s = E.portfolio(S, { selected: ['A', 'C'], start, end, startValue: 80 });
@@ -464,8 +434,6 @@ test('empty selection: assets rows unselected, groupSummary ret/w1 null', () => 
   const g = E.groupSummary(S, rows);
   assert.ok(g.every((x) => x.nSelected === 0 && x.ret === null && x.w1 === null && x.contrib === null));
   assert.strictEqual(E.stats(E.portfolio(S, { selected: [] })), null);
-  assert.strictEqual(E.monthly(S, null), null);
-  assert.strictEqual(E.riskContribution(S, { selected: [], start: 0, end: 3 }), null);
 });
 
 // ======================================================================= withShares (what-if)
@@ -523,102 +491,13 @@ test('start value 0 (all selected shares 0) behaves like an empty selection: nul
   assert.ok(g.every((x) => x.ret === null && x.contrib === null && x.w1 === null), 'groupSummary');
   const t = E.assetsTotal(Z, rows);
   assert.deepStrictEqual([t.ret, t.contrib, t.w1], [null, null, null], 'assetsTotal');
-  assert.strictEqual(E.monthly(Z, s), null, 'monthly of a null series');
-  assert.ok(E.monthly(Z, [0, 0, 0, 0]).every((x) => x.ret === null), 'monthly of a zero series');
-  assert.strictEqual(E.riskContribution(Z, { selected: sel, start: 0, end: 3 }), null, 'riskContribution');
   const nul = E.relative(s, E.benchmark(Z, 'b1', 0, 3, 100));
   assert.ok(Object.keys(nul).every((k) => k === 'n' || nul[k] === null), 'relative');
-  assertClean({ s, rows, g, t, m: E.monthly(Z, [0, 0, 0, 0]) }, 'zero selection');
+  assertClean({ s, rows, g, t }, 'zero selection');
   const part = E.withShares(S, { A: 0 });                                     // partly zero: still a real portfolio
   const pr = E.assets(part, { selected: ['A', 'C'], start: 0, end: 3, scale: 1 });
   assert.deepStrictEqual([pr[0].contrib, pr[0].w0, pr[0].w1], [0, 0, 0]);
   approx(pr[2].contrib, E.stats(E.portfolio(part, { selected: ['A', 'C'] })).totalReturn, 1e-12);
-});
-
-// ======================================================================= correlationMatrix
-const CM_DATES = calendar('2026-01-05', '2026-01-12', true);               // 6 days -> returns k = 1..5
-const CM_RA = [0.01, 0.02, -0.01, 0.03, 0.00];
-const CM = E.prepare(dataOf(CM_DATES, {
-  prices: {
-    A: fromReturns(CM_RA, 100), B: fromReturns(CM_RA.map((x) => 2 * x), 50), C: fromReturns(CM_RA.map((x) => -x), 80),
-    D: [null, null].concat(fromReturns([0.01, -0.01, 0.02], 50)),           // first quote idx 2 -> real returns k = 3..5
-    E: [null, null, null, 10, 11, 10.5],                                     // first quote idx 3 -> only 2 real returns
-    F: [7, 7, 7, 7, 7, 7],                                                   // zero variance
-  },
-  positions: ['A', 'B', 'C', 'D', 'E', 'F'].map((i) => ({ isin: i, short: i, group: 'G1', shares: 1 })),
-}));
-test('correlationMatrix: hand-computed, pairwise real-quote overlap, null rules, diagonal 1', () => {
-  const c = E.correlationMatrix(CM, { isins: ['A', 'B', 'C', 'D', 'E', 'F'], start: 0, end: 5 });
-  assert.deepStrictEqual(c.isins, ['A', 'B', 'C', 'D', 'E', 'F']);
-  const ix = (i) => c.isins.indexOf(i), M = (a, b) => c.m[ix(a)][ix(b)], N = (a, b) => c.n[ix(a)][ix(b)];
-  approx(M('A', 'B'), 1, 1e-12); approx(M('A', 'C'), -1, 1e-12); approx(M('B', 'C'), -1, 1e-12);
-  const rAD = -48 / Math.sqrt(78 * 42);                                      // over k = 3..5 only (pre-listing excluded)
-  approx(M('A', 'D'), rAD, 1e-12); approx(M('B', 'D'), rAD, 1e-12); approx(M('C', 'D'), -rAD, 1e-12);
-  assert.strictEqual(N('A', 'B'), 5); assert.strictEqual(N('A', 'D'), 3); assert.strictEqual(N('D', 'E'), 2);
-  assert.strictEqual(N('A', 'E'), 2); assert.strictEqual(M('A', 'E'), null, 'n < 3 -> null');
-  assert.strictEqual(M('D', 'E'), null);
-  assert.strictEqual(N('A', 'F'), 5); assert.strictEqual(M('A', 'F'), null, 'zero variance -> null');
-  for (let a = 0; a < 6; a++) {
-    assert.strictEqual(c.m[a][a], 1, 'diagonal 1');
-    for (let b = 0; b < 6; b++) { assert.strictEqual(c.m[a][b], c.m[b][a], 'symmetric m'); assert.strictEqual(c.n[a][b], c.n[b][a], 'symmetric n'); }
-  }
-  assert.deepStrictEqual([N('A', 'A'), N('D', 'D'), N('E', 'E')], [5, 3, 2]);
-  const r = E.correlationMatrix(CM, { isins: ['D', 'A', 'NOPE', 'A'], start: 2, end: 5 });
-  assert.deepStrictEqual(r.isins, ['D', 'A'], 'order kept, unknown/duplicates dropped');
-  assert.strictEqual(r.n[0][1], 3); approx(r.m[0][1], rAD, 1e-12);
-  assert.strictEqual(E.correlationMatrix(CM, { isins: ['A', 'D'], start: 3, end: 5 }).m[0][1], null, 'only 2 returns');
-  const three = E.correlationMatrix(CM, { isins: new Set(['A', 'B', 'C']), start: 0, end: 5 });
-  approx(three.avg, -1 / 3, 1e-12); assert.strictEqual(three.pairs, 3);
-  assert.deepStrictEqual(E.correlationMatrix(CM, { isins: [] }), { isins: [], m: [], n: [], start: 0, end: 5, avg: null, pairs: 0 });
-});
-
-// ======================================================================= riskContribution
-const RC_DATES = calendar('2026-01-05', '2026-01-09', true);               // 5 days -> T = 4 returns
-const RC_R = { A: [0.01, -0.01, 0.02, 0.00], B: [0.00, 0.02, -0.01, 0.03], C: [0.02, 0.01, 0.00, -0.01] };
-const RC_PX = { A: fromReturns(RC_R.A, 100), B: fromReturns(RC_R.B, 100), C: fromReturns(RC_R.C, 40), FL: [5, 5, 5, 5, 5] };
-function rcCtx(valueAtEnd) {                                                 // shares chosen so that v_i(end) = valueAtEnd[i]
-  return E.prepare(dataOf(RC_DATES, {
-    prices: RC_PX, groups: ['G1'],
-    positions: Object.keys(valueAtEnd).map((i) => ({ isin: i, short: 'S' + i, name: 'N' + i, group: 'G1', shares: valueAtEnd[i] / RC_PX[i][4] })),
-  }));
-}
-test('riskContribution: 2 assets, hand-computed (negative correlation, hedge with negative pctr)', () => {
-  // Sigma: AA = 0.0005/3, BB = 0.001/3, AB = -0.0002; w = 0.5/0.5 -> w'Sw = 0.000025, sd_p = 0.005
-  const rc = E.riskContribution(rcCtx({ A: 1, B: 1 }), { selected: ['A', 'B'], start: 0, end: 4 });
-  approx(rc.volAnn, 0.005 * S252);
-  const [A, B] = rc.rows;
-  assert.deepStrictEqual(rc.rows.map((r) => r.isin), ['A', 'B']);
-  approx(A.weight, 0.5); approx(B.weight, 0.5);
-  approx(A.vol, Math.sqrt(0.042)); approx(B.vol, Math.sqrt(0.084));
-  approx(A.mctr, -S252 / 300); approx(B.mctr, S252 / 75);
-  approx(A.ctr, -S252 / 600); approx(B.ctr, S252 / 150);
-  approx(A.pctr, -1 / 3); approx(B.pctr, 4 / 3);
-  approx(A.pctr + B.pctr, 1, 1e-12, 'sum pctr = 1');
-  approx(rc.diversificationRatio, 0.5 * (Math.sqrt(0.042) + Math.sqrt(0.084)) / (0.005 * S252));
-  assert.ok(rc.diversificationRatio >= 1);
-  assert.strictEqual(A.short, 'SA'); assert.strictEqual(rc.n, 4); approx(rc.value, 2);
-});
-test('riskContribution: 3 assets hand-computed, identities, null cases', () => {
-  // w = 0.2/0.3/0.5; Sigma adds CC = 0.0005/3, AC = 0, BC = -0.0001 -> 300000*w'Sw = 7.3, pctr = [-1.6, 0.9, 8]/7.3
-  const ctx3 = rcCtx({ A: 2, B: 3, C: 5, FL: 0 });
-  const rc = E.riskContribution(ctx3, { selected: ['C', 'A', 'B'], start: 0, end: 4 });
-  assert.deepStrictEqual(rc.rows.map((r) => r.isin), ['A', 'B', 'C'], 'ctx.positions order');
-  approxArr(rc.rows.map((r) => r.weight), [0.2, 0.3, 0.5]);
-  approx(rc.volAnn, Math.sqrt(7.3 / 300000 * 252));
-  approxArr(rc.rows.map((r) => r.pctr), [-1.6 / 7.3, 0.9 / 7.3, 8 / 7.3]);
-  approx(rc.rows.reduce((a, r) => a + r.pctr, 0), 1, 1e-12, 'sum pctr = 1');
-  approx(rc.rows.reduce((a, r) => a + r.ctr, 0), rc.volAnn, 1e-12, 'sum ctr = volAnn');
-  const volA = Math.sqrt(0.0005 / 3 * 252), volB = Math.sqrt(0.001 / 3 * 252);
-  approx(rc.diversificationRatio, (0.2 * volA + 0.3 * volB + 0.5 * volA) / rc.volAnn);
-  approx(rc.top3Pctr, 1, 1e-12);
-  const z = E.riskContribution(ctx3, { selected: ['A', 'B', 'C', 'FL'], start: 0, end: 4 });
-  assert.strictEqual(z.rows[3].weight, 0); assert.strictEqual(z.rows[3].pctr, 0); assert.strictEqual(z.rows[3].vol, 0);
-  approx(z.volAnn, rc.volAnn, 1e-12, 'zero-weight row does not change the risk');
-  const flat = E.riskContribution(rcCtx({ FL: 1 }), { selected: ['FL'], start: 0, end: 4 });
-  assert.strictEqual(flat, null, 'volAnn = 0 -> null');
-  assert.strictEqual(E.riskContribution(ctx3, { selected: ['FL'], start: 0, end: 4 }), null, 'V(end) = 0 -> null');
-  assert.strictEqual(E.riskContribution(ctx3, { selected: ['A', 'B'], start: 3, end: 4 }), null, '1 return -> null');
-  assert.strictEqual(E.riskContribution(ctx3, { selected: [], start: 0, end: 4 }), null, 'nothing selected');
 });
 
 // ======================================================================= formatters
@@ -697,8 +576,8 @@ test('UMD: classic script sets window.PFEngine without module', () => {
   const foreignSet = new Set(['A', 'B']);                                   // Set from another realm (e.g. an iframe)
   const ws = W.portfolio(W.prepare(S_DATA), { selected: foreignSet, start: 0, end: 3 });
   assert.ok(ws && ws.raw.length === 4 && Math.abs(ws.raw[0] - 40) < 1e-12, 'cross-realm Set selection');
-  for (const k of ['prepare', 'presetRange', 'customRange', 'portfolio', 'benchmark', 'drawdown', 'stats', 'relative', 'monthly', 'assets', 'groupSummary',
-    'withShares', 'correlationMatrix', 'riskContribution', 'chartInterval', 'gridCovers', 'gridFrame', 'intraday', 'intradayBenchmark',
+  for (const k of ['prepare', 'presetRange', 'customRange', 'portfolio', 'benchmark', 'drawdown', 'stats', 'relative', 'assets', 'groupSummary',
+    'withShares', 'depotChange', 'chartInterval', 'gridCovers', 'gridFrame', 'intraday', 'intradayBenchmark',
     'intradayAsset', 'intradayWindow', 'equalValueWindow', 'benchmarkValueNow', 'benchmarkRealPl'])
     assert.strictEqual(typeof E[k], 'function', k);
   for (const k of ['eur', 'num', 'pct', 'ratio', 'date', 'asofBerlin', 'parseDE']) assert.strictEqual(typeof E.fmt[k], 'function', 'fmt.' + k);
@@ -721,10 +600,6 @@ test('real data: shape and fill (SpaceX back-filled before 2026-06-12)', () => {
   assert.strictEqual(D.dates[k], '2026-06-12');
   assert.ok(ctx.px[sx].slice(0, k).every((x) => x === D.prices[sx][k]));
   for (const isin of Object.keys(ctx.px)) assert.ok(ctx.px[isin].every((x) => Number.isFinite(x) && x > 0), isin);
-  const m = E.monthly(ctx, E.portfolio(ctx, { selected: ALL }).value);
-  assert.strictEqual(m[0].partial, true);
-  assert.strictEqual(m[m.length - 1].partial, ctx.status[ctx.n - 1] === 'intraday' || !E.util.isMonthComplete(ctx.dates[ctx.n - 1]));
-  assert.ok(m.slice(1, -1).every((x) => !x.partial));
 });
 
 test('real data: sum of contributions = portfolio totalReturn (all presets, selections, scaled)', () => {
@@ -775,32 +650,6 @@ test('real data: %-metrics invariant to startValue scaling, EUR metrics scale', 
   }
 });
 
-test('real data: riskContribution identities (sum pctr = 1, DR >= 1, vol_i = assets vol) and correlation matrix', () => {
-  for (const p of PRESETS) for (const [name, sel] of SELECTIONS) {
-    const r = E.presetRange(ctx, p);
-    const rc = E.riskContribution(ctx, { selected: sel, start: r.start, end: r.end });
-    if (r.end - r.start < 2) { assert.strictEqual(rc, null, `${p} too short`); continue; }
-    const where = `${p} ${name}`;
-    approx(rc.rows.reduce((a, x) => a + x.pctr, 0), 1, 1e-9, where + ' sum pctr');
-    approx(rc.rows.reduce((a, x) => a + x.ctr, 0), rc.volAnn, 1e-9, where + ' sum ctr');
-    approx(rc.rows.reduce((a, x) => a + x.weight, 0), 1, 1e-12, where + ' sum w');
-    assert.ok(rc.diversificationRatio >= 1 - 1e-12, `${where} DR ${rc.diversificationRatio}`);
-    const vols = Object.fromEntries(E.assets(ctx, { selected: sel, start: r.start, end: r.end }).map((x) => [x.isin, x.vol]));
-    rc.rows.forEach((x) => approx(x.vol, vols[x.isin], 1e-9, `${where} ${x.isin} vol`));
-  }
-  const sx = 'US84615Q1031', c = E.correlationMatrix(ctx, { isins: ALL, start: 0, end: ctx.n - 1 });
-  const a = c.isins.indexOf(sx), b = c.isins.indexOf(ALL.find((i) => i !== sx));
-  assert.strictEqual(c.n[a][b], ctx.n - 1 - ctx.firstIdx[sx], 'SpaceX pairs only after its listing');
-  const full0 = c.isins.map((_, x) => x).filter((x) => ctx.firstIdx[c.isins[x]] <= ctx.dailyFrom);
-  assert.strictEqual(c.n[full0[0]][full0[1]], ctx.n - 1 - ctx.dailyFrom, 'instruments quoted before the daily data use every daily return');
-  c.m.forEach((row, x) => row.forEach((v, y) => {
-    assert.ok(v === null || (v >= -1 && v <= 1), 'in [-1, 1]');
-    assert.strictEqual(v, c.m[y][x]);
-    if (x === y) assert.strictEqual(v, 1);
-  }));
-  assert.ok(c.avg > 0 && c.avg < 1 && c.pairs === ALL.length * (ALL.length - 1) / 2);
-});
-
 function assertClean(x, where, seen) {
   if (x === null || x === undefined || typeof x === 'boolean') return;
   if (typeof x === 'number') { assert.ok(Number.isFinite(x), `${where}: ${x}`); return; }
@@ -819,9 +668,7 @@ function sweep(c, label, selections, ranges) {
     const where = `${label} ${name} ${rname} sv=${sv}`;
     const rows = E.assets(c, { selected: sel, start: r.start, end: r.end, scale: s ? s.scale : 1 });
     const out = { s, st: E.stats(s), dd: s && E.drawdown(s.value), rows, g: E.groupSummary(c, rows), t: E.assetsTotal(c, rows),
-      m: s ? E.monthly(c, E.portfolio(c, { selected: sel, startValue: sv }).value) : [], b: [],
-      rc: E.riskContribution(c, { selected: sel, start: r.start, end: r.end }),
-      cm: sv === null ? E.correlationMatrix(c, { isins: sel, start: r.start, end: r.end }) : null };
+      b: [] };
     for (const bm of c.benchmarks) {
       const b = E.benchmark(c, bm, r.start, r.end, s ? s.value[0] : 1000);
       out.b.push({ b, st: E.stats(b), rel: E.relative(s, b), dd: E.drawdown(b.value) });
@@ -889,10 +736,6 @@ test('history rows: totalReturn/CAGR/maxDD use every point, risk metrics only th
   const s3 = E.portfolio(c, { start: 0, end: 2 });               // history only: no daily returns
   assert.strictEqual(s3.dailyOff, 2); assert.strictEqual(E.stats(s3).n, 0); assert.strictEqual(E.stats(s3).volAnn, null);
   approx(E.assets(c, { start: 0, end: 6 })[0].vol, sdRef(r) * S252, 1e-12, 'assets vol: daily part');
-  const cm = E.correlationMatrix(c, { isins: ['A', 'B'], start: 0, end: 6 });
-  assert.strictEqual(cm.n[0][1], 3, 'correlation: daily returns only');
-  const rc = E.riskContribution(c, { selected: ['A'], start: 0, end: 6 });
-  assert.strictEqual(rc.n, 3);
 });
 
 test('coverageStart / notQuoted: the long range starts once enough of the value has real quotes', () => {
@@ -922,6 +765,21 @@ test('depotNow: real depot value at the latest price and G/V seit Kauf from the 
   assert.strictEqual(E.depotNow(ctxOf(['2026-03-02'])), null, 'no depot data');
   d.depot.holdings.X = 1;
   assert.strictEqual(E.depotNow(E.prepare(d)), null, 'unknown ISIN');
+});
+
+test('depotChange: the real depot\'s current shares valued at range start and end (period P&L)', () => {
+  const d = dataOf(['2026-03-02', '2026-03-03', '2026-03-04'], { prices: { A: [10, 12, 11], B: [5, 4, null] } });
+  d.depot = { holdings: { A: 3, B: 10 }, cost_basis: 60 };
+  const c = E.prepare(d);
+  const r = E.depotChange(c, { start: 0, end: 2 });                // B forward-filled at 4 on the last day
+  approx(r.startValue, 3 * 10 + 10 * 5); approx(r.endValue, 3 * 11 + 10 * 4); approx(r.pl, 73 - 80); approx(r.ret, 73 / 80 - 1);
+  const t = E.depotChange(c, { start: 1, end: 2 });                // 1T: since the previous close
+  approx(t.pl, 73 - 76); assert.deepStrictEqual([t.start, t.end], [1, 2]);
+  approx(t.endValue, E.depotNow(c).value, 1e-12, 'end value = depotNow on the last day');
+  approx(E.depotChange(c).pl, r.pl, 1e-12, 'default = whole range');
+  assert.strictEqual(E.depotChange(ctxOf(['2026-03-02'])), null, 'no depot data');
+  d.depot.holdings.X = 1;
+  assert.strictEqual(E.depotChange(E.prepare(d), { start: 0, end: 2 }), null, 'unknown ISIN');
 });
 
 test('schedule benchmark: holdings changing over time, flat before the first step, extra € amounts', () => {
@@ -957,11 +815,6 @@ test('prepare without res: everything counts as daily (dailyFrom 0)', () => {
   const top = E.assets(ctx, { selected: ALL, start: 0, end: ctx.n - 1, scale: 1 }).sort((a, b) => b.contrib - a.contrib).slice(0, 5);
   console.log(`  Portfolio ${F.eur(s.value[0])} -> ${F.eur(s.value[s.value.length - 1])}; top 5 Beitrag:`);
   top.forEach((r) => console.log(`    ${r.short.padEnd(22)} ${pad(F.pct(r.contrib), 9)}  (Rendite ${F.pct(r.ret)})`));
-  const rc = E.riskContribution(ctx, { selected: ALL, start: 0, end: ctx.n - 1 });
-  const cm = E.correlationMatrix(ctx, { isins: ALL, start: 0, end: ctx.n - 1 });
-  const top3 = rc.rows.slice().sort((a, b) => b.pctr - a.pctr).slice(0, 3).map((r) => `${r.short} ${F.pct(r.pctr, { sign: false, dec: 1 })}`);
-  console.log(`  Risiko (aktuelle Gewichte): Vol. p.a. ${F.pct(rc.volAnn, { sign: false })}, Div.-Ratio ${F.ratio(rc.diversificationRatio)}, ` +
-    `Top 3 = ${F.pct(rc.top3Pctr, { sign: false, dec: 1 })} (${top3.join(', ')}); Ø Korrelation ${F.ratio(cm.avg)}`);
 })();
 
 // ---------- intraday (1T 30-min grid), hand-computed
@@ -1283,7 +1136,7 @@ test('real data: chart interval per range and multi-day grids end on the daily v
     s.value.forEach((v, k) => assert.ok(Number.isFinite(v) && v > 0, `${p} point ${k}`));
     if (c.status[R.end] === 'final') {
       approx(s.value[s.last], d.value[d.value.length - 1], 1e-9, `${p} end = daily end`);
-      for (const b of [c.benchmarks[0], { id: 'w', name: 'W', weights: { IE00B4L5Y983: 40, US5949181045: 60 } }]) {
+      for (const b of [c.benchmarks[0] || (D.card_presets || [])[0], { id: 'w', name: 'W', weights: { IE00B4L5Y983: 40, US5949181045: 60 } }].filter(Boolean)) {
         const ib = E.intradayBenchmark(c, b, s.base, f), db = E.benchmark(c, b, R.start, R.end, s.base);
         approx(ib.value[ib.last], db.value[db.value.length - 1], 1e-9, `${p} ${b.id} end`);
       }

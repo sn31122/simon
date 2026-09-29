@@ -51,8 +51,6 @@ for (const c of ref.cases) {
 
 const all = ctx.positions.map(p => p.isin);
 const full = E.portfolio(ctx, { selected: all, start: 0, end: ctx.n - 1, startValue: null });
-const m = E.monthly(ctx, full.value);
-cmp('monthly count', m.length, ref.monthly_all.length);
 if (ref.coverage) {                                   // long ranges start where >= 90 % of today's value has real quotes
   const all0 = ctx.positions.map((p) => p.isin);
   cmp('coverage daily_from', ctx.dailyFrom, ref.coverage.daily_from);
@@ -60,31 +58,9 @@ if (ref.coverage) {                                   // long ranges start where
   cmp('coverage all 50 %', E.coverageStart(ctx, { selected: all0, share: 0.5 }), ref.coverage.all_50);
   cmp('coverage semis 90 %', E.coverageStart(ctx, { selected: ref.cases.find((c) => c.name === 'semis_custom_100k').isins, share: 0.9 }), ref.coverage.semis_90);
 }
-ref.monthly_all.forEach((r, k) => { cmp(`monthly ${r.month} key`, m[k] && m[k].month, r.month); cmp(`monthly ${r.month} ret`, m[k] && m[k].ret, r.ret); });
 cmp('empty selection -> null', E.portfolio(ctx, { selected: [], start: 0, end: ctx.n - 1, startValue: null }), null);
 
-// correlationMatrix / riskContribution / withShares (skipped until the engine has them)
-if (typeof E.correlationMatrix === 'function') {
-  for (const [key, rng] of [['corr_3M', E.presetRange(ctx, '3M')], ['corr_MAX', { start: 0, end: ctx.n - 1 }]]) {
-    const r = ref[key], c = E.correlationMatrix(ctx, { isins: r.isins, start: rng.start, end: rng.end });
-    r.isins.forEach((a, x) => r.isins.forEach((b, y) => {
-      cmp(`${key} m[${a}][${b}]`, c.m[x][y], r.m[x][y]);
-      if (x !== y) cmp(`${key} n[${a}][${b}]`, c.n[x][y], r.n[x][y]);
-    }));
-  }
-} else console.log('SKIP correlationMatrix (not in engine yet)');
-function checkRisk(label, got, r) {
-  cmp(`${label} volAnn`, got && got.volAnn, r.volAnn);
-  cmp(`${label} diversificationRatio`, got && got.diversificationRatio, r.diversificationRatio);
-  const byIsin = Object.fromEntries(((got && got.rows) || []).map(x => [x.isin, x]));
-  for (const row of r.rows) for (const k of ['weight', 'vol', 'mctr', 'ctr', 'pctr']) cmp(`${label} ${row.isin}.${k}`, byIsin[row.isin] && byIsin[row.isin][k], row[k]);
-}
-if (typeof E.riskContribution === 'function') {
-  checkRisk('risk MAX all', E.riskContribution(ctx, { selected: all, start: 0, end: ctx.n - 1 }), ref.risk_MAX_all);
-  const semis = ctx.positions.filter(p => p.group === 'High Players Semiconductors').map(p => p.isin);
-  const [s, e] = ref.risk_custom_semis.range;
-  checkRisk('risk custom semis', E.riskContribution(ctx, { selected: semis, start: s, end: e }), ref.risk_custom_semis);
-} else console.log('SKIP riskContribution (not in engine yet)');
+// withShares
 if (typeof E.withShares === 'function') {
   const w = ref.whatif, wctx = E.withShares(ctx, w.overrides);
   const ws = E.portfolio(wctx, { selected: all, start: 0, end: ctx.n - 1, startValue: null });
@@ -95,7 +71,6 @@ if (typeof E.withShares === 'function') {
     cmp(`whatif ${isin} costBasis`, row && row.costBasis, cb);
     cmp(`whatif ${isin} glSinceBuy`, row && row.glSinceBuy, w.gl_since_buy[isin]);
   }
-  if (typeof E.riskContribution === 'function') checkRisk('whatif risk', E.riskContribution(wctx, { selected: all, start: 0, end: ctx.n - 1 }), w.risk);
   cmp('whatif leaves base ctx untouched', E.portfolio(ctx, { selected: all, start: 0, end: ctx.n - 1, startValue: null }).value.at(-1), full.value.at(-1));
   const zero = E.withShares(ctx, Object.fromEntries(all.map(i => [i, 0])));
   cmp('all shares 0 -> portfolio null', E.portfolio(zero, { selected: all, start: 0, end: ctx.n - 1, startValue: null }), null);
