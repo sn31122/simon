@@ -11,6 +11,10 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 <!-- data-status:end -->
 (The block above is rewritten by `--finish` / `--finish-add`; do not edit it by hand.)
 
+- **Design (29.09.):** no headline figure above the chart any more (only the legend with each line's %; period and notes
+  in a muted line under the chart); measurement = one caption with the span + one equal box per line (Portfolio first):
+  "● name %", "start → end" in € as drawn (Startwert applies), € change; "Gleicher Wert" removed.
+  `tools/acceptance-check.cjs` still expects the old headline/boxes and needs a rewrite before its next run.
 - **Depot-Historie (29.09.):** preset in the "+ Benchmark" menu – the real depot replayed from the transaction export
   `data/depot_transactions.csv` (securities value from 17.03.2026, ends at today's holdings). A newer export replaces the
   file; `python data/build_data.py` rebuilds it.
