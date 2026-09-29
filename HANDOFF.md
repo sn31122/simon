@@ -7,7 +7,7 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 29.09.2026 00:59 Berlin): 189 trading days 2026-01-02 … 2026-09-28; last row 2026-09-28 = intraday, asof 2026-09-28T19:20Z; 30-min (intraday.csv): 7 sessions 2026-09-18 … 2026-09-28; 2-h (intraday_2h.csv): 25 sessions 2026-08-25 … 2026-09-28; engine tests: 60 passed, 0 failed; crosscheck: 7968/7969 checks passed.
+- Data status (update 29.09.2026 04:18 Berlin): 189 trading days 2026-01-02 … 2026-09-28; last row 2026-09-28 = final; history (prices_history.csv): 139 rows 2016-09-30 … 2025-12-29 (month-end + every 2nd trading day); 30-min (intraday.csv): 7 sessions 2026-09-18 … 2026-09-28; 2-h (intraday_2h.csv): 25 sessions 2026-08-25 … 2026-09-28; engine tests: 57 passed, 0 failed; crosscheck: 3335/3335 checks passed.
 <!-- data-status:end -->
 (The block above is rewritten by `--finish` / `--finish-add`; do not edit it by hand.)
 
@@ -17,6 +17,12 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 - **Depot-Historie (29.09.):** preset in the "+ Benchmark" menu – the real depot replayed from the transaction export
   `data/depot_transactions.csv` (securities value from 17.03.2026, ends at today's holdings). A newer export replaces the
   file; `python data/build_data.py` rebuilds it.
+- **29.09. (later):** "Monatsrenditen" and "Risiko & Korrelation" removed from the page, together with `monthly`,
+  `correlationMatrix`, `riskContribution`, the heatmap chart and their tests/crosschecks. "Mein Depot" at the top now
+  shows its change over the selected period (1T = daily P&L, 1M = month …; `PFEngine.depotChange`: today's share counts
+  at the range start and end – trades inside the range are not known); "Seit Kauf" still shows G/V seit Kauf.
+  + 3 instruments (77 series): iShares Core S&P 500 IE00B5BMR087, iShares MSCI ACWI IE00B6R52259, Rocket Lab US7731211089
+  (daily 2026, 30-min, 2-h, history; in every update and the benchmark search).
 - **Depot + Startwert (29.09.):** `data/depot.csv` / `depot_ref.csv` = the real Scalable depot (9 positions, read with
   get_portfolio_holdings/overview on 29.09.; "update depot" refreshes them). The top shows the real Yacht and "Mein Depot"
   (value + G/V seit Kauf) side by side. Startwert: empty = all lines start at the Yacht's value, buttons "Yacht" / "Mein
@@ -36,12 +42,12 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 - **Dashboard (27.09. requests, all verified in a browser):** benchmark cards (presets Mein Depot + Energie, custom
   cards with instrument search and % rows, buy and hold), measurement boxes (Yacht + one box per shown benchmark with % / Gleicher Wert, 28.09.),
   hover band that keeps the plot height with up to 3 shown benchmarks, list toggles (Portfolio / Einzelwerte, side by side
-  from ~1900 px), 3M/6M pills, section order Lists → Benchmark-Vergleich → Drawdown → Monatsrenditen → Kennzahlen → Risiko &
-  Korrelation → Hinweise, touch: a tap outside the chart ends a tapped measurement. Details: `SPEC.md`.
+  from ~1900 px), 3M/6M pills, section order Lists → Benchmark-Vergleich → Drawdown → Kennzahlen → Hinweise (Monatsrenditen and Risiko &
+  Korrelation removed 29.09.), touch: a tap outside the chart ends a tapped measurement. Details: `SPEC.md`.
 - **Chart interval per range:** 1T and 1W 30 min, 1M 2 h, 3M and longer daily; custom ranges by length (≤ 7 days 30 min,
   ≤ 31 days 2 h, else daily), stepping down where finer data was not collected (a note under the chart shows the interval
   and why it stepped down). Main chart, hover, measurement boxes and drawdown follow the interval; Kennzahlen,
-  Monatsrenditen, tables and sparklines stay daily. Details: `SPEC.md`.
+  tables and sparklines stay daily. Details: `SPEC.md`.
 - **Quote update in one sentence:** say "update", "refresh", "check for new quotes" or "Kurse aktualisieren" (or "run
   UPDATE.md"). The skill `update-quotes` runs `--plan` → 2 Haiku `price-fetcher` agents (seven_days + one_month per ISIN;
   three_months after a break of > 5 weekdays) → `--finish`. The PostToolUse hook `.claude/hooks/save-chart.cjs` writes every
@@ -74,7 +80,8 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 - `node tests/engine.test.cjs`, `python tests/crosscheck.py && node tests/crosscheck.cjs` (numbers in the status block).
 - Browser acceptance: `tools/acceptance-check.cjs` (Playwright, real mouse/keyboard/touch at 1903/1400/375 px); rewritten
   29.09.2026 for the current dashboard (menu presets, one measurement block, legend-only headline, Startwert buttons; dates
-  and counts read from the data, the chart scrolled into view on phones): 92 of 92 checks passed (Segoe UI metrics via
+  and counts read from the data, the chart scrolled into view on phones; later on 29.09. without Monatsrenditen / Risiko &
+  Korrelation and with a check that "Mein Depot" follows the period): 93 of 93 checks passed (Segoe UI metrics via
   Selawik – without it the list-width checks fail), results and screenshots in `docs/verification/2026-09-29/`. Not covered: real Segoe UI on Windows, Edge, a physical touch device, a session still
   in progress (only unit-tested).
   Usage and the Segoe UI font fallback for Linux: `docs/VERIFICATION.md`.
@@ -83,8 +90,6 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 - The "Gruppen" table stays removed (user, 27.09.); its unused CSS was deleted.
 - With 2 or 3 benchmarks shown, the band above the plot reserves room for the hover box, so there is empty space between the
   measurement boxes and the plot while nothing is hovered (deliberate: the plot keeps its height and nothing covers lines).
-- "Monatsrenditen" buys custom cards on the first data day (02.01.2026), not at the selected period start; the chart and
-  tables use the period start.
 - Beyond 5 custom cards the colours of the palette get closer to each other.
 - Chart interval details decided without asking (change on request): a custom range's length counts from its first to its
   last trading day, not the typed dates (a Saturday-to-Saturday week = Mon–Fri, 30 min); the last point of a day reads

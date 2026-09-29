@@ -1,9 +1,9 @@
 {
   "url": "http://127.0.0.1:8770/dashboard.html",
-  "at": "2026-09-29T01:16:42.909Z",
+  "at": "2026-09-29T02:17:23.034Z",
   "browser": "141.0.7390.37",
   "fonts": "Selawik injected as \"Segoe UI\" (Segoe UI metrics)",
-  "passed": 92,
+  "passed": 93,
   "failed": 0,
   "results": [
     {
@@ -11,11 +11,11 @@
       "name": "every instrument has a price series; only the last row may be intraday; history rows before the daily data; 30-min and 2-h grids end on the last daily date",
       "pass": true,
       "detail": {
-        "instruments": 74,
-        "prices": 74,
+        "instruments": 77,
+        "prices": 77,
         "dates": 328,
         "last": "2026-09-28",
-        "lastStatus": "intraday",
+        "lastStatus": "final",
         "intradayOnlyLast": true,
         "m30": "2026-09-28",
         "h2": "2026-09-28",
@@ -41,11 +41,11 @@
       "name": "Bloom once, 32 positions, no locked presets; presets Mein Depot (card) + Energie, Old portfolio, Situational Awareness, Depot-Historie (menu); depot data present",
       "pass": true,
       "detail": {
-        "instruments": 74,
-        "prices": 74,
+        "instruments": 77,
+        "prices": 77,
         "dates": 328,
         "last": "2026-09-28",
-        "lastStatus": "intraday",
+        "lastStatus": "final",
         "intradayOnlyLast": true,
         "m30": "2026-09-28",
         "h2": "2026-09-28",
@@ -106,7 +106,7 @@
         ],
         "total": "100 %",
         "shown": "Mein Depot",
-        "legend": "Portfolio+129,10 %Mein Depot+10,55 %"
+        "legend": "Portfolio+128,89 %Mein Depot+10,64 %"
       }
     },
     {
@@ -145,7 +145,7 @@
       "pass": true,
       "detail": {
         "shown": 0,
-        "legend": "Portfolio+129,10 %",
+        "legend": "Portfolio+128,89 %",
         "lines": 0,
         "table": 2
       }
@@ -160,8 +160,8 @@
         "rows": 1,
         "name": "Benchmark 1",
         "open": true,
-        "opts": 74,
-        "all": 74,
+        "opts": 77,
+        "all": 77,
         "color": "#6ea8ff"
       }
     },
@@ -296,7 +296,7 @@
       "pass": true,
       "detail": {
         "invalid": "–",
-        "valid": "+8,70 %"
+        "valid": "+8,50 %"
       }
     },
     {
@@ -341,8 +341,8 @@
       "pass": true,
       "detail": {
         "maxErr": 2.7541161673903073e-16,
-        "bh": 273766.6234212964,
-        "reb": 277565.60910671396,
+        "bh": 272882.90782104357,
+        "reb": 276693.86083723675,
         "n": 190
       }
     },
@@ -369,29 +369,27 @@
     },
     {
       "area": "cards",
-      "name": "card return = legend = Benchmark-Vergleich = Kennzahlen bench line; monthly row, drawdown line + readout",
+      "name": "card return = legend = Benchmark-Vergleich = Kennzahlen bench line; drawdown line + readout",
       "pass": true,
       "detail": {
-        "card": "+15,87 %",
-        "legend": "+15,87 %",
-        "table": "+15,87 %",
-        "kpi": "Benchmark 1: +15,87 % · +37.489,23 €",
-        "month": true,
+        "card": "+15,49 %",
+        "legend": "+15,49 %",
+        "table": "+15,49 %",
+        "kpi": "Benchmark 1: +15,49 % · +36.605,51 €",
         "dd": true,
         "readout": true
       }
     },
     {
       "area": "cards",
-      "name": "an invalid card is left out of chart, drawdown, legend, Benchmark-Vergleich, Monatsrenditen",
+      "name": "an invalid card is left out of chart, drawdown, legend, Benchmark-Vergleich",
       "pass": true,
       "detail": {
         "bench": false,
         "legend": false,
         "lines": false,
         "dd": false,
-        "table": false,
-        "months": false
+        "table": false
       }
     },
     {
@@ -402,7 +400,7 @@
         "same": true,
         "val": "BenXYchmark 1",
         "pos": 5,
-        "legend": "Portfolio+129,10 %Mein Depot+10,55 %BenXYchmark 1+15,87 %"
+        "legend": "Portfolio+128,89 %Mein Depot+10,64 %BenXYchmark 1+15,49 %"
       }
     },
     {
@@ -710,10 +708,10 @@
       "pass": true,
       "detail": {
         "svd": {
-          "sv": 292751,
-          "want": 292751,
+          "sv": 293120,
+          "want": 293120,
           "on": true,
-          "start": 292751
+          "start": 293120
         },
         "svy": {
           "sv": null,
@@ -858,7 +856,7 @@
         },
         "1M": {
           "m": 190,
-          "endGap": 27.1500000001397,
+          "endGap": 0,
           "baseGap": 0
         },
         "3M": {
@@ -1006,8 +1004,8 @@
       "detail": {
         "wsv": {
           "base": 100000,
-          "end": 101255.88691015134,
-          "ps": 101255.88691015134
+          "end": 101159.01505001565,
+          "ps": 101159.01505001565
         },
         "rows": [
           "-4,88 %",
@@ -1059,38 +1057,135 @@
     },
     {
       "area": "periods",
+      "name": "\"Mein Depot\" top block follows the period (1T = daily P&L, 1M, 3M = depotChange; Seit Kauf = G/V seit Kauf) with the Yacht block's label",
+      "pass": true,
+      "detail": {
+        "per": {
+          "1T": {
+            "pill": "1T",
+            "tab": "1T",
+            "label": "Heute",
+            "dLabel": "Heute",
+            "dEur": "-5.690,95 €"
+          },
+          "1M": {
+            "pill": "1M",
+            "tab": "1M",
+            "label": "Monat",
+            "dLabel": "Monat",
+            "dEur": "-79,16 €"
+          },
+          "3M": {
+            "pill": "3M",
+            "tab": "3M",
+            "label": "3 Monate",
+            "dLabel": "3 Monate",
+            "dEur": "-9.326,74 €"
+          },
+          "6M": {
+            "pill": "6M",
+            "tab": "6M",
+            "label": "6 Monate",
+            "dLabel": "6 Monate",
+            "dEur": "+90.475,80 €"
+          },
+          "1W": {
+            "pill": "1W",
+            "tab": "1W",
+            "label": "Woche",
+            "dLabel": "Woche",
+            "dEur": "-20.478,84 €"
+          },
+          "MAX": {
+            "pill": null,
+            "tab": "MAX",
+            "label": "seit 30.09.2016",
+            "dLabel": "seit 30.09.2016",
+            "dEur": "+201.545,36 €"
+          },
+          "SK": {
+            "pill": "Seit Kauf",
+            "tab": "MAX",
+            "label": "seit Kauf",
+            "dLabel": "seit Kauf",
+            "dEur": "+58.136,21 €"
+          },
+          "YTD": {
+            "pill": "YTD",
+            "tab": "YTD",
+            "label": "seit 29.12.",
+            "dLabel": "seit 29.12.",
+            "dEur": "+19.689,01 €"
+          }
+        },
+        "depExp": {
+          "1T": "-5.690,95 €",
+          "1M": "-79,16 €",
+          "3M": "-9.326,74 €",
+          "SK": "+58.136,21 €"
+        }
+      }
+    },
+    {
+      "area": "periods",
       "name": "3M/6M pills and tabs update each other and the labels; MAX = no pill; Seit Kauf = MAX tab",
       "pass": true,
       "detail": {
+        "1T": {
+          "pill": "1T",
+          "tab": "1T",
+          "label": "Heute",
+          "dLabel": "Heute",
+          "dEur": "-5.690,95 €"
+        },
+        "1M": {
+          "pill": "1M",
+          "tab": "1M",
+          "label": "Monat",
+          "dLabel": "Monat",
+          "dEur": "-79,16 €"
+        },
         "3M": {
           "pill": "3M",
           "tab": "3M",
-          "label": "3 Monate"
+          "label": "3 Monate",
+          "dLabel": "3 Monate",
+          "dEur": "-9.326,74 €"
         },
         "6M": {
           "pill": "6M",
           "tab": "6M",
-          "label": "6 Monate"
+          "label": "6 Monate",
+          "dLabel": "6 Monate",
+          "dEur": "+90.475,80 €"
         },
         "1W": {
           "pill": "1W",
           "tab": "1W",
-          "label": "Woche"
+          "label": "Woche",
+          "dLabel": "Woche",
+          "dEur": "-20.478,84 €"
         },
         "MAX": {
           "pill": null,
           "tab": "MAX",
-          "label": "seit 30.09.2016"
+          "label": "seit 30.09.2016",
+          "dLabel": "seit 30.09.2016",
+          "dEur": "+201.545,36 €"
         },
         "SK": {
           "pill": "Seit Kauf",
           "tab": "MAX",
-          "label": "seit Kauf"
+          "label": "seit Kauf",
+          "dLabel": "seit Kauf",
+          "dEur": "+58.136,21 €"
         },
         "YTD": {
           "pill": "YTD",
           "tab": "YTD",
-          "label": "seit 29.12."
+          "label": "seit 29.12.",
+          "dLabel": "seit 29.12.",
+          "dEur": "+19.689,01 €"
         }
       }
     },
@@ -1106,17 +1201,18 @@
     },
     {
       "area": "lists",
-      "name": "order: lists, Benchmark-Vergleich, Drawdown, Monatsrenditen, Kennzahlen, Risiko & Korrelation, Hinweise",
+      "name": "order: lists, Benchmark-Vergleich, Drawdown, Kennzahlen, Hinweise (Monatsrenditen and Risiko & Korrelation removed)",
       "pass": true,
-      "detail": [
-        "Listen",
-        "Benchmark-Vergleich",
-        "Drawdown",
-        "Monatsrenditen",
-        "Kennzahlen",
-        "Risiko & Korrelation",
-        "Hinweise"
-      ]
+      "detail": {
+        "order": [
+          "Listen",
+          "Benchmark-Vergleich",
+          "Drawdown",
+          "Kennzahlen",
+          "Hinweise"
+        ],
+        "gone": true
+      }
     },
     {
       "area": "lists",

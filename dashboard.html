@@ -46,7 +46,7 @@
         <div class="bigval" id="holdTotal"></div>
         <div class="hold-chg" id="holdChg"></div>
       </div>
-      <!-- the real Scalable depot (user 29.09.): its actual value and G/V seit Kauf, independent of range, filters and Startwert -->
+      <!-- the real Scalable depot (user 29.09.): its value and its change over the selected period (Seit Kauf: G/V seit Kauf), independent of filters and Startwert -->
       <div class="ov-val ov-val--depot" id="ovDepot" hidden>
         <div class="ov-lbl">Mein Depot <span class="weak">Scalable</span></div>
         <div class="bigval" id="depotTotal"></div>
@@ -214,42 +214,10 @@
 
     <section class="block">
       <div class="block-head">
-        <h2>Monatsrenditen</h2>
-        <span class="block-sub">gesamter Datenzeitraum · aktuelle Positionsauswahl</span>
-      </div>
-      <div class="card card--table"><div class="tscroll"><table class="tbl tbl--months" id="monthTable"></table></div></div>
-      <p class="footnote" id="monthNote">* Teilmonat</p>
-    </section>
-
-    <section class="block">
-      <div class="block-head">
         <h2>Kennzahlen</h2>
         <span class="block-sub" id="kpiSub"></span>
       </div>
       <div class="kpis" id="kpis"></div>
-    </section>
-
-    <section class="block risk" id="riskBlock" aria-labelledby="riskTitle">
-      <div class="block-head">
-        <h2 id="riskTitle">Risiko &amp; Korrelation</h2>
-        <span class="block-sub" id="riskSub"></span>
-      </div>
-      <div class="risk-kpis" id="riskKpis"></div>
-      <div class="card risk-card">
-        <div class="card-head">
-          <h3>Gewicht vs. Risikoanteil</h3>
-          <span class="rb-legend"><i class="rb-key rb-key--w"></i>Gewicht <i class="rb-key rb-key--r"></i>Risikoanteil</span>
-        </div>
-        <div class="rbars" id="riskBars"></div>
-      </div>
-      <div class="card heat-card">
-        <div class="card-head">
-          <h3>Korrelation der Tagesrenditen</h3>
-          <span class="hm-avg" id="heatAvg"></span>
-        </div>
-        <div class="heat-scroll" id="heatScroll"><div id="heatmap"></div></div>
-        <div class="hm-legend" aria-hidden="true"><span>−1</span><i class="hm-grad"></i><span>+1</span><span class="hm-legend-note">Sortiert nach aktuellem Gewicht · Tage = gemeinsame Handelstage mit echten Kursen</span></div>
-      </div>
     </section>
 
     <footer class="notes" id="notes"></footer>

@@ -81,19 +81,6 @@
   }
   function minusMonths(iso, k) { const t = minusMonthsDay(iso, k); return t === null ? null : dayToISO(t); }
   function daysBetween(a, b) { const x = dayNumber(a), y = dayNumber(b); return x === null || y === null ? null : y - x; }
-  // Weekday that the German exchanges close on and that can end a month (approximation, no full calendar).
-  function isExchangeDay(y, mo, d) {
-    const wd = new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
-    if (wd === 0 || wd === 6) return false;
-    return !((mo === 12 && (d === 24 || d === 25 || d === 26 || d === 31)) || (mo === 1 && d === 1) || (mo === 5 && d === 1));
-  }
-  /** true if no further trading day follows iso within its month */
-  function isMonthComplete(iso) {
-    const p = isoParts(iso);
-    if (!p) return false;
-    for (let d = p[2] + 1, last = daysInMonth(p[0], p[1]); d <= last; d++) if (isExchangeDay(p[0], p[1], d)) return false;
-    return true;
-  }
 
   // ------------------------------------------------------------------ prepare
   function fillPrices(raw, n) {
@@ -430,6 +417,25 @@
     const cb = isNum(d.cost_basis) ? d.cost_basis : null;
     return { value: v, costBasis: cb, gl: cb === null ? null : v - cb, glPct: cb > 0 ? (v - cb) / cb : null, date: ctx.dates[e],
       asof: d.asof_utc || null, refValue: fin(d.securities_value), refTotal: fin(d.total_value), refGl: fin(d.gv_since_buy) };
+  }
+
+  /**
+   * depotChange(ctx, {start, end}) -> the real depot's current share counts (depot.csv) valued at start and end:
+   * { start, end, startValue, endValue, pl, ret } | null. Constant shares over the range (back-cast like the Yacht block;
+   * trades inside the range are not known here); 1T = the change since the previous close.
+   */
+  function depotChange(ctx, opts) {
+    const d = ctx && ctx.data && ctx.data.depot;
+    if (!d || !d.holdings || !ctx.n) return null;
+    opts = opts || {};
+    const [s, e] = normRange(ctx, opts.start, opts.end);
+    let v0 = 0, v1 = 0;
+    for (const i of Object.keys(d.holdings)) {
+      const q = Number(d.holdings[i]), px = ctx.px[i];
+      if (!px || !isNum(q)) return null;
+      v0 += q * px[s]; v1 += q * px[e];
+    }
+    return { start: s, end: e, startValue: v0, endValue: v1, pl: v1 - v0, ret: v0 > 0 ? v1 / v0 - 1 : null };
   }
 
   /** benchmarkValueNow(ctx, bench|id) -> Σ quantity × latest price (e.g. the real value of "Mein Depot" today) | null */
@@ -771,43 +777,6 @@
     return out;
   }
 
-  /**
-   * monthly(ctx, values) -> [{ month: 'YYYY-MM', ret, partial }]
-   * values: full-length array (index 0..n-1); extra: a series object ({value, idx|start}) works too.
-   * First month anchored at its first value (partial). Last month partial if it ends on the last data date and
-   * that date is intraday or further trading days of the month are still to come.
-   */
-  function monthly(ctx, values) {
-    let vals, idxOf;
-    if (Array.isArray(values)) { vals = values.slice(0, ctx.n); idxOf = (k) => k; }
-    else if (values && Array.isArray(values.value)) {
-      vals = values.value;
-      const st = isNum(values.start) ? values.start : 0;
-      idxOf = Array.isArray(values.idx) ? (k) => values.idx[k] : (k) => st + k;
-    } else return null;                                                        // no series (e.g. empty selection)
-    const m = vals.length;
-    if (!m) return [];
-    const dataMonthEnd = {};                                               // last data index per month
-    for (let k = 0; k < ctx.n; k++) dataMonthEnd[String(ctx.dates[k]).slice(0, 7)] = k;
-    const out = [];
-    let anchor = vals[0], cur = null, lastVal = null, lastIdx = -1;
-    const close = () => {
-      out.push({ month: cur, ret: (() => { const q = div(lastVal, anchor); return q === null ? null : q - 1; })(), partial: false, endIdx: lastIdx });
-      anchor = lastVal;
-    };
-    for (let k = 0; k < m; k++) {
-      const i = idxOf(k), key = String(ctx.dates[i]).slice(0, 7);
-      if (cur !== null && key !== cur) close();
-      cur = key; lastVal = vals[k]; lastIdx = i;
-    }
-    close();
-    out[0].partial = true;
-    const last = out[out.length - 1], lastData = ctx.n - 1;
-    if (last.endIdx < dataMonthEnd[last.month]) last.partial = true;        // series stops before the month's last data day
-    else if (last.endIdx === lastData && (ctx.status[lastData] === 'intraday' || !isMonthComplete(ctx.dates[lastData]))) last.partial = true;
-    return out;
-  }
-
   /** assets(ctx, {selected, start, end, scale}) -> one row per position (selected or not) */
   function assets(ctx, opts) {
     opts = opts || {};
@@ -882,7 +851,7 @@
     return summarize(rows, selectionTotals(rows));
   }
 
-  // ------------------------------------------------------------------ what-if, correlation, risk contribution
+  // ------------------------------------------------------------------ what-if
   function numOrNull(x) { if (x === null || x === undefined || x === '') return null; const v = Number(x); return isNum(v) ? v : null; }
   function overrideMap(overrides) {
     const out = new Map();
@@ -922,105 +891,6 @@
       return q;
     });
     return Object.assign({}, ctx, { positions, whatIf, base: root });
-  }
-
-  function isinList(ctx, isins) {
-    let list;
-    if (isins == null) list = ctx.positions.map((p) => p.isin);
-    else if (Array.isArray(isins)) list = isins;
-    else if (typeof isins === 'string') list = [isins];
-    else if (typeof isins.forEach === 'function') { list = []; isins.forEach((x) => list.push(x)); }
-    else list = [];
-    const seen = new Set();
-    return list.filter((i) => { if (!ctx.px[i] || seen.has(i)) return false; seen.add(i); return true; });
-  }
-  // sample Pearson correlation of x[from..], y[from..]; null for zero variance
-  function pearsonFrom(x, y, from) {
-    const len = x.length - from;
-    if (len < 2) return null;
-    let mx = 0, my = 0;
-    for (let i = from; i < x.length; i++) { mx += x[i]; my += y[i]; }
-    mx /= len; my /= len;
-    let sxy = 0, sxx = 0, syy = 0;
-    for (let i = from; i < x.length; i++) { const dx = x[i] - mx, dy = y[i] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
-    const sdx = Math.sqrt(sxx / (len - 1)), sdy = Math.sqrt(syy / (len - 1));
-    if (!(sdx > EPS) || !(sdy > EPS)) return null;
-    const c = fin(sxy / (len - 1) / (sdx * sdy));
-    return c === null ? null : clamp(c, -1, 1);
-  }
-
-  /**
-   * correlationMatrix(ctx, {isins, start, end}) -> { isins, m, n } : sample Pearson correlation of daily returns over
-   * (start, end], pairwise on real quotes only (return k counts for i only if k-1 >= firstIdx_i). n[a][b] = overlapping
-   * returns; m[a][a] = 1; m[a][b] = null if n < 3 or zero variance. isins: given order, duplicates/unknown dropped
-   * (default: all positions). Extras: start, end, avg (mean off-diagonal correlation), pairs (count used in avg).
-   */
-  function correlationMatrix(ctx, opts) {
-    opts = opts || {};
-    const isins = isinList(ctx, opts.isins), k = isins.length;
-    const [s0, e] = ctx.n ? normRange(ctx, opts.start, opts.end) : [0, -1];
-    const s = ctx.n ? Math.min(riskStart(ctx, s0), Math.max(s0, e)) : s0;   // daily returns only (history before dailyFrom)
-    const R = isins.map((i) => returnsOf(ctx.px[i].slice(s, e + 1)));        // R[a][j] = return at index s+1+j
-    const j0 = isins.map((i) => { const f = ctx.firstIdx[i]; return Math.max(0, (isNum(f) ? f : 0) - s); });
-    const m = [], n = [];
-    for (let a = 0; a < k; a++) { m.push(new Array(k).fill(null)); n.push(new Array(k).fill(0)); }
-    let sumC = 0, pairs = 0;
-    for (let a = 0; a < k; a++) {
-      m[a][a] = 1;
-      n[a][a] = Math.max(0, R[a].length - j0[a]);
-      for (let b = a + 1; b < k; b++) {
-        const from = Math.max(j0[a], j0[b]), cnt = Math.max(0, R[a].length - from);
-        const c = cnt >= 3 ? pearsonFrom(R[a], R[b], from) : null;
-        n[a][b] = n[b][a] = cnt;
-        m[a][b] = m[b][a] = c;
-        if (c !== null) { sumC += c; pairs++; }
-      }
-    }
-    return { isins, m, n, start: s, end: e, avg: pairs ? sumC / pairs : null, pairs };
-  }
-
-  /**
-   * riskContribution(ctx, {selected, start, end}) -> { volAnn, diversificationRatio, rows } | null
-   * w = current weights at end; Σ = sample covariance of the filled daily returns over (start, end];
-   * volAnn = sqrt(wᵀΣw·252); mctr = (Σw)_i/sqrt(wᵀΣw)·√252; ctr = w·mctr; pctr = ctr/volAnn (Σ = 1);
-   * vol_i = sqrt(Σ_ii·252); diversificationRatio = Σ w_i·vol_i / volAnn. Rows: selected positions in ctx order.
-   * null if nothing selected, fewer than 2 returns, V(end) = 0 or volAnn = 0.
-   * Extras: n (returns), value (V(end)), start, end, top3Pctr (sum of the 3 largest pctr); rows also carry short/name/group.
-   */
-  function riskContribution(ctx, opts) {
-    opts = opts || {};
-    const sel = selectionSet(ctx, opts.selected);
-    const list = ctx.positions.filter((p) => sel.has(p.isin));
-    if (!list.length || ctx.n < 2) return null;
-    const [s0, e] = normRange(ctx, opts.start, opts.end);
-    const s = Math.min(riskStart(ctx, s0), e);                             // daily returns only (history before dailyFrom)
-    const T = e - s;
-    if (T < 2) return null;
-    const vEnd = list.map((p) => sharesOf(p) * ctx.px[p.isin][e]);
-    const V = sum(vEnd);
-    if (!(V > 0)) return null;
-    const k = list.length, w = vEnd.map((v) => v / V);
-    const R = list.map((p) => returnsOf(ctx.px[p.isin].slice(s, e + 1)));
-    const mu = R.map(mean), C = [];
-    for (let a = 0; a < k; a++) C.push(new Array(k));
-    for (let a = 0; a < k; a++) for (let b = a; b < k; b++) {
-      let t = 0;
-      for (let j = 0; j < T; j++) t += (R[a][j] - mu[a]) * (R[b][j] - mu[b]);
-      C[a][b] = C[b][a] = t / (T - 1);
-    }
-    const Sw = C.map((row) => { let t = 0; for (let b = 0; b < k; b++) t += row[b] * w[b]; return t; });
-    let q = 0;
-    for (let a = 0; a < k; a++) q += w[a] * Sw[a];
-    if (!(q > EPS * EPS)) return null;
-    const sdP = Math.sqrt(q), volAnn = sdP * SQRT_ANN;
-    let wv = 0;
-    const rows = list.map((p, a) => {
-      const vol = Math.sqrt(Math.max(0, C[a][a]) * ANN), mctr = Sw[a] / sdP * SQRT_ANN, ctr = w[a] * mctr;
-      wv += w[a] * vol;
-      return { isin: p.isin, short: p.short, name: p.name, group: p.group, weight: w[a], vol, mctr, ctr, pctr: ctr / volAnn };
-    });
-    const top = rows.map((r) => r.pctr).sort((x, y) => y - x).slice(0, 3);
-    return { volAnn, diversificationRatio: wv / volAnn, rows, n: T, value: V, start: s, end: e, top3Pctr: sum(top) };
   }
 
   // ------------------------------------------------------------------ formatters (de-DE)
@@ -1138,12 +1008,12 @@
   const PFEngine = {
     version: '1.1.0',
     PRESETS, ANN, DEFAULT_RF,
-    prepare, presetRange, customRange, portfolio, benchmark, drawdown, stats, relative, monthly, assets, groupSummary,
-    withShares, correlationMatrix, riskContribution, coverageStart, notQuoted, depotNow,
+    prepare, presetRange, customRange, portfolio, benchmark, drawdown, stats, relative, assets, groupSummary,
+    withShares, coverageStart, notQuoted, depotNow, depotChange,
     assetsTotal, chartInterval, gridCovers, gridFrame,
     intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },
-    util: { mean, sampleSd, sampleCov, quantile, returnsOf, minusMonths, daysBetween, dayNumber, isMonthComplete },
+    util: { mean, sampleSd, sampleCov, quantile, returnsOf, minusMonths, daysBetween, dayNumber },
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = PFEngine; else root.PFEngine = PFEngine;
