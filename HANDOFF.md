@@ -4,7 +4,7 @@ Repo `sn31122/simon`, branch `main`; the user works only in Claude Code cloud se
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 29.09.2026 06:07 Berlin): 189 trading days 2026-01-02 … 2026-09-28; last row 2026-09-28 = final; history (prices_history.csv): 171 rows 2016-09-30 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 8 sessions 2026-09-18 … 2026-09-29; 2-h (intraday_2h.csv): 26 sessions 2026-08-25 … 2026-09-29; engine tests: 57 passed, 0 failed; crosscheck: 3335/3335 checks passed.
+- Data status (update 29.09.2026 11:52 Berlin): 190 trading days 2026-01-02 … 2026-09-29; last row 2026-09-29 = intraday, asof 2026-09-29T09:52Z; history (prices_history.csv): 171 rows 2016-09-30 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 8 sessions 2026-09-18 … 2026-09-29; 2-h (intraday_2h.csv): 26 sessions 2026-08-25 … 2026-09-29; engine tests: 57 passed, 0 failed; crosscheck: 3132/3133 checks passed.
 <!-- data-status:end -->
 (Block rewritten by `--finish` / `--finish-add`; do not edit by hand.)
 
