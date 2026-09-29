@@ -249,20 +249,17 @@ button { -webkit-tap-highlight-color: transparent; }
 .bb-empty { padding: 8px 12px; color: var(--muted); font-size: 12.5px; }
 
 /* ------------------------------------------------------------------ headline */
-/* as in the app: small bold figure above the chart */
+/* only the legend line (each line's return over the period); period and notes are in the row under the chart (.chart-note) */
 .headline { margin-top: 20px; }
-.hl-main { font-size: 16px; font-weight: 700; line-height: 1.3; }
 /* empty selection: "Positionen auswählen" opens the Einzelwerte list (openAssets in app.js) */
-.hl-empty { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.hl-empty { font-size: 13px; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .hl-act {
   height: 24px; padding: 0 10px;
   border: 1px solid rgba(var(--accent-rgb), .55); border-radius: 999px; background: none;
   color: var(--accent); font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
 }
 .hl-act:hover { border-color: var(--accent); background: var(--accent-soft); }
-.hl-sub { margin-top: 2px; color: var(--muted); font-size: 12px; }
-.hl-sub b { font-weight: 600; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; color: var(--muted); font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 0; min-height: 18px; color: var(--muted); font-size: 12px; }
 .lg-item { --c: var(--accent); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .lg-item i { width: 14px; height: 2px; border-radius: 1px; background: var(--c); }
 .lg-item span { color: var(--text); }
@@ -335,45 +332,33 @@ button { -webkit-tap-highlight-color: transparent; }
 .tt-main.pos { color: var(--accent); }
 .tt-main.neg { color: var(--neg); }
 .tt-one + .tt-h { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--tooltip-border); }
-.tt-val, .tt-delta { font-size: 12.5px; font-weight: 700; }
-.tt-val { color: #fff; }
-/* measurement: the app's box (dates · start value, € change, end value · % change) and the "Mein Depot" box beside
-   it. Fixed 16px rows: both boxes are equally tall, and MainChart sizes the band above the plot from their height */
-.pc-tip--measure, .pc-tip--side { line-height: 16px; }
-.tt-m { display: grid; grid-template-columns: 1fr auto 1fr; column-gap: 14px; row-gap: 3px; align-items: baseline; }
-.tt-m .l1 { grid-area: 1 / 1; padding-left: 5px; }
-.tt-m .r1 { grid-area: 1 / 3; padding-right: 5px; text-align: right; }
-.tt-m .l2 { grid-area: 2 / 1; }
-.tt-m .c2 { grid-area: 2 / 2; text-align: center; }
-.tt-m .r2 { grid-area: 2 / 3; text-align: right; }
-.tt-m .c3 { grid-area: 3 / 1 / 4 / 4; text-align: center; color: #fff; font-size: 11.5px; font-weight: 600; }
-.tt-d { display: grid; row-gap: 3px; }
-.tt-dr { display: flex; justify-content: space-between; align-items: center; column-gap: 16px; }   /* center: rows stay 16px */
-.tt-dn { color: #fff; font-weight: 600; }
-.tt-dn i { display: inline-block; width: 7px; height: 7px; margin: 0 6px 0 1px; border-radius: 50%; background: var(--c); }
-.tt-dl { color: var(--muted); }
-.tt-dv { color: #fff; font-size: 12.5px; font-weight: 700; }
-.tt-dr:first-child .tt-dv { font-size: 11.5px; font-weight: 600; }   /* the % like the measure box's third row */
-.tt-dv.pos { color: var(--accent); }
-.tt-dv.neg { color: var(--neg); }
-.pc-tip--side.is-pinned .tt-dr { pointer-events: auto; cursor: help; }   /* pinned: rows show their title */
-/* side element = transparent row of boxes ("Mein Depot" + one per other shown benchmark), all as tall as the measure
-   box (MainChart sets the element's height; the boxes stretch); wraps when the chart is too narrow */
-.pc-tip--side {
-  display: flex; flex-wrap: wrap; gap: 4px; align-items: stretch;
+/* measurement (user, 29.09.): ONE transparent block – a caption with the measured span, then a row of equal boxes
+   (Portfolio + every shown benchmark; each: "● name  %", start → end value, € change). The boxes stretch to the
+   tallest one, the row wraps on narrow charts. Fixed 16px rows: MainChart sizes the band above the plot from the height */
+.pc-tip--measure {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; line-height: 16px;
   padding: 0; border: 0; background: none; box-shadow: none;
 }
-.tt-sides { display: contents; }
-.tt-sides > .tt-d {
-  flex: 1 0 auto; align-content: start; padding: 7px 12px 8px;
+.tt-cap { max-width: 100%; color: var(--muted); font-size: 11px; font-weight: 600; text-align: center; white-space: normal; }
+.tt-sides { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 4px; max-width: 100%; }
+.tt-d {
+  flex: 0 1 auto; display: grid; row-gap: 3px; align-content: start; padding: 7px 12px 8px;
   border: 1px solid var(--tooltip-border); border-radius: 4px; background: var(--tooltip);
   box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
 }
-.pc--compact .pc-tip--measure, .pc--compact .tt-sides > .tt-d { padding: 5px 9px 6px; line-height: 14px; }
-.pc--compact .pc-tip--side { line-height: 14px; }
-.pc--compact .tt-m { column-gap: 10px; row-gap: 2px; }
-.pc--compact .tt-d { row-gap: 2px; }
-.pc--compact .tt-dr { column-gap: 12px; }
+.tt-dr { display: flex; justify-content: space-between; align-items: center; column-gap: 16px; }   /* center: rows stay 16px */
+.tt-dn { color: #fff; font-weight: 600; }
+.tt-dn i { display: inline-block; width: 7px; height: 7px; margin: 0 6px 0 1px; border-radius: 50%; background: var(--c); }
+.tt-dv { color: #fff; font-size: 11.5px; font-weight: 600; }
+.tt-dv.pos, .tt-dchg.pos { color: var(--accent); }
+.tt-dv.neg, .tt-dchg.neg { color: var(--neg); }
+.tt-dval { color: #fff; font-size: 12.5px; font-weight: 700; }
+.tt-dchg { color: #fff; font-size: 12.5px; font-weight: 700; }
+.pc-tip--measure.is-pinned .tt-d > * { pointer-events: auto; cursor: help; }   /* pinned: rows show their title */
+.pc--compact .pc-tip--measure { line-height: 14px; }
+.pc--compact .tt-d { padding: 5px 7px 6px; row-gap: 2px; }
+.pc--compact .tt-dr { column-gap: 8px; }
+.pc--compact .tt-dval, .pc--compact .tt-dchg { font-size: 11px; }   /* two boxes fit side by side at 375px */
 /* hover rows; a name too long for a narrow chart is cut with "…" (first column may shrink) instead of overflowing the box */
 .tt-h { display: grid; grid-template-columns: minmax(0, auto) auto auto; column-gap: 12px; row-gap: 2px; align-items: baseline; }
 .tt-name { --c: var(--accent); display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
@@ -387,6 +372,9 @@ button { -webkit-tap-highlight-color: transparent; }
 /* interval of the chart (30 Min. / 2 Std. / 1 Tag, why it stepped down); the title lists the collected sub-daily data */
 .chart-iv { margin-left: auto; color: var(--muted); font-size: 12px; cursor: help; }
 .chart-iv b { color: var(--axis); font-weight: 600; white-space: nowrap; }
+/* period + notes of the range (was the headline's sub line): own wrapping line under the help / interval row */
+.chart-note { flex: 1 1 100%; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.chart-note:empty { display: none; }
 
 .btn {
   height: 28px; padding: 0 11px;

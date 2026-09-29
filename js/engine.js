@@ -336,10 +336,56 @@
    * on the frame (omitted = 1T), normalized to baseValue at the daily close of the range start; a weights benchmark is bought
    * at that close and held (the same purchase as benchmark(ctx, bench, start, end, base)).
    */
+  /**
+   * Holdings that change over time (bench.schedule = { steps: [{date, holdings: {ISIN: qty}, extra: EUR}] }, user 29.09.:
+   * "Depot-Historie" replayed from the transactions): on a date the last step at or before it counts (holdings after
+   * that day's trades + an extra € amount); before the first step the value stays flat at the first step's value.
+   */
+  function schedStep(bench, iso) {
+    const st = bench.schedule.steps;
+    let s = null;
+    for (let j = 0; j < st.length && st[j].date <= iso; j++) s = st[j];
+    return s;
+  }
+  function schedFirst(ctx, bench) {
+    const d0 = bench.schedule.steps[0].date;
+    for (let k = 0; k < ctx.n; k++) if (ctx.dates[k] >= d0) return k;
+    return ctx.n;
+  }
+  function schedValue(ctx, bench, k, pxAt) {
+    const s = schedStep(bench, ctx.dates[k]);
+    if (!s) return null;
+    let t = Number(s.extra) || 0;
+    for (const i of Object.keys(s.holdings)) {
+      const p = pxAt ? pxAt(i) : (ctx.px[i] ? ctx.px[i][k] : null);
+      if (!isNum(p)) return null;
+      t += Number(s.holdings[i]) * p;
+    }
+    return t;
+  }
+  function schedRaw(ctx, bench, s, e) {
+    const k0 = schedFirst(ctx, bench), out = new Array(e - s + 1);
+    for (let k = s; k <= e; k++) out[k - s] = schedValue(ctx, bench, Math.max(k, Math.min(k0, ctx.n - 1)));
+    return out;
+  }
+  function isSchedule(bench) { return !!(bench && bench.schedule && Array.isArray(bench.schedule.steps) && bench.schedule.steps.length); }
+
   function intradayBenchmark(ctx, bench, baseValue, frame) {
     if (typeof bench === 'string') bench = ctx.benchmarks.find((b) => b.id === bench);
     const F = frameOf(ctx, frame);
     if (!bench || !F) return null;
+    if (isSchedule(bench)) {                                              // holdings of each slot's session day × slot price
+      const k0 = Math.min(schedFirst(ctx, bench), ctx.n - 1), end = Math.min(F.last, F.m - 1), raw = new Array(F.m).fill(null);
+      for (let k = 0; k <= end; k++) {
+        const di = F.day[k];
+        raw[k] = F.src[k] < 0 || di < k0 ? schedValue(ctx, bench, Math.max(di, k0)) : schedValue(ctx, bench, di, (i) => framePx(ctx, F, i, k));
+      }
+      const r0 = raw[0];
+      if (!(r0 > 0)) return null;
+      const base = isNum(baseValue) ? baseValue : r0;
+      const value = raw.map((t) => (t === null ? null : base * (t / r0)));
+      return Object.assign(frameInfo(F), { id: bench.id, name: bench.name, value, pl: minusBase(value, base), base, ret: relBase(value, base), missing: [] });
+    }
     const q = benchQty(ctx, bench, F.start);
     if (!q) return null;
     let r0 = 0;
@@ -562,19 +608,28 @@
   /**
    * benchmark(ctx, bench|id, start, end, baseValue) -> series (+ id, name); value = baseValue * raw/raw[0]
    * bench = { holdings: {ISIN: qty} } (fixed quantities) or { weights: {ISIN: % or fraction} } (bought at `start`, then
-   * held); null for a weights benchmark without any valid ISIN.
+   * held) or { schedule: {steps} } (holdings changing over time, e.g. the replayed depot; flat before the first step);
+   * null for a weights benchmark without any valid ISIN.
    */
   function benchmark(ctx, bench, start, end, baseValue) {
     if (typeof bench === 'string') bench = ctx.benchmarks.find((b) => b.id === bench);
     if (!bench || ctx.n < 1) return null;
     const [s, e] = normRange(ctx, start, end);
-    const hold = benchQty(ctx, bench, s);
-    if (!hold) return null;
-    const m = e - s + 1, raw = new Array(m);
-    for (let k = 0; k < m; k++) {
-      let t = 0;
-      for (let j = 0; j < hold.length; j++) t += hold[j][1] * ctx.px[hold[j][0]][s + k];
-      raw[k] = t;
+    let raw;
+    if (isSchedule(bench)) {
+      raw = schedRaw(ctx, bench, s, e);
+      for (let k = 1; k < raw.length; k++) if (raw[k] === null) raw[k] = raw[k - 1];
+      if (raw[0] === null) return null;
+    } else {
+      const hold = benchQty(ctx, bench, s);
+      if (!hold) return null;
+      const m = e - s + 1;
+      raw = new Array(m);
+      for (let k = 0; k < m; k++) {
+        let t = 0;
+        for (let j = 0; j < hold.length; j++) t += hold[j][1] * ctx.px[hold[j][0]][s + k];
+        raw[k] = t;
+      }
     }
     const base = isNum(baseValue) ? baseValue : raw[0];
     const ok = raw[0] > 0;

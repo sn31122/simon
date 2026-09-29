@@ -281,17 +281,6 @@
     };
   }
 
-  /** Portfolio over [a, b] (indices into the current range) in the current scale -> stats. */
-  function win(a, b) {
-    var key = 'p|' + a + '|' + b;
-    if (Object.prototype.hasOwnProperty.call(cache, key)) return cache[key];
-    var M = cur, p = M && M.p, st = null;
-    if (p && b > a) {
-      var s = E.portfolio(ctx, { selected: state.selected, start: M.R.start + a, end: M.R.start + b, startValue: p.value[a] });
-      st = s ? E.stats(s, { rf: state.rf }) : null;
-    }
-    return (cache[key] = st);
-  }
   /** What-if: return of the original portfolio over [a, b] (indices into the current range). */
   function origWin(a, b) {
     var key = 'o|' + a + '|' + b;
@@ -474,37 +463,37 @@
       '<span class="tt-num">' + val + '</span><span class="tt-pct ' + sgn(r) + '">' + pct(r) + '</span>';
   }
 
-  /** Measure box exactly as in the app: dates · start value, € change, end value · % change (nothing else). */
-  function measureBox(la, lb, va, vb, delta, ret) {
-    return '<div class="tt-m">' +
-      '<div class="tt-date l1">' + esc(la) + '</div>' +
-      '<div class="tt-date r1">' + esc(lb) + '</div>' +
-      '<div class="tt-val l2">' + va + '</div>' +
-      '<div class="tt-delta c2 ' + sgn(delta) + '">' + eurS(delta) + '</div>' +
-      '<div class="tt-val r2">' + vb + '</div>' +
-      '<div class="tt-sub c3">' + colored(ret, pct(ret)) + '</div>' +
+  /**
+   * One measurement box (Yacht and every benchmark look the same): "● name  +x,xx %", the start → end value of the span
+   * and its € change. vals = the line's VALUE series as drawn (Startwert applied; Portfoliowert series also in the
+   * Gesamtrendite mode); a/b = points of that series.
+   */
+  function measureBox(o, a, b) {
+    var w = E.intradayWindow(o.values, a, b), i = Math.min(a, b), j = Math.max(a, b);
+    var ret = get(w, 'ret'), delta = get(w, 'pl'), name = esc(o.name);
+    return '<div class="tt-d">' +
+      '<div class="tt-dr" title="' + esc('Veränderung von „' + o.name + '“ im gemessenen Zeitraum') + '">' +
+        '<span class="tt-dn" style="--c:' + o.color + '"><i></i>' + name + '</span>' +
+        '<span class="tt-dv ' + sgn(ret) + '">' + pct(ret) + '</span></div>' +
+      '<div class="tt-dval" title="' + esc('Wert von „' + o.name + '“ am Anfang und am Ende der Messung (wie die Linie im Chart)') + '">' +
+        eur(o.values[i], { dec: 0 }) + ' → ' + eur(o.values[j], { dec: 0 }) + '</div>' +
+      '<div class="tt-dchg ' + sgn(delta) + '" title="' + esc('Veränderung von „' + o.name + '“ in € im gemessenen Zeitraum') + '">' +
+        eurS(delta, 0) + '</div>' +
       '</div>';
   }
-  function sideRow(label, v, text, title) {
-    return '<div class="tt-dr" title="' + esc(title) + '">' + label + '<span class="tt-dv ' + sgn(v) + '">' + text + '</span></div>';
-  }
-  /** Name + % and "Gleicher Wert" rows of a benchmark over [a, b] (pValues/bValues: VALUE series). */
-  function benchRows(x, pValues, bValues, a, b) {
-    var w = E.equalValueWindow ? E.equalValueWindow(pValues, bValues, a, b) : null;
-    var ret = get(w, 'ret'), eq = get(w, 'pl');
-    return sideRow('<span class="tt-dn" style="--c:' + x.color + '"><i></i>' + esc(x.name) + '</span>', ret, pct(ret),
-        'Veränderung von „' + x.name + '“ im gemessenen Zeitraum') +
-      sideRow('<span class="tt-dl">Gleicher Wert</span>', eq, eurS(eq),
-        'Gleicher Wert: Veränderung von „' + x.name + '“, wenn es zu Beginn der Messung genauso groß gewesen wäre wie das Portfolio' +
-        (get(w, 'base') !== null ? ' (' + eur(w.base) + ')' : ''));
-  }
   /**
-   * Side boxes of a measurement: one per benchmark shown in the chart, in card order ("Mein Depot" first), each with its
-   * % and "Gleicher Wert" over the span. list: [{ x, values }] (VALUE series); '' when empty.
+   * Measurement as one block for MainChart: the measured span (la – lb) as a small caption, then one box per line in the
+   * chart – the Yacht ("Portfolio" / "Was-wäre-wenn") first, then the benchmarks in card order ("Mein Depot" first).
+   * lines: [{ name, color, values }] (VALUE series).
    */
-  function sideBoxesHTML(list, pValues, a, b) {
-    var h = list.map(function (o) { return '<div class="tt-d">' + benchRows(o.x, pValues, o.values, a, b) + '</div>'; });
-    return h.length ? '<div class="tt-sides">' + h.join('') + '</div>' : '';
+  function measureBlock(la, lb, lines, a, b) {
+    return '<div class="tt-cap">' + esc(la) + ' – ' + esc(lb) + '</div>' +
+      '<div class="tt-sides">' + lines.map(function (o) { return measureBox(o, a, b); }).join('') + '</div>';
+  }
+  function measureLines(yachtValues, yachtName, benches) {
+    var lines = [{ name: yachtName, color: 'var(--accent)', values: yachtValues }];
+    benches.forEach(function (x) { if (x.s) lines.push({ name: x.name, color: x.color, values: x.s.value }); });
+    return lines;
   }
 
   function intraHoverHTML(i, maxBench) {
@@ -516,16 +505,11 @@
     I.benches.slice(0, maxBench).forEach(function (o) { rows += ttRow(o.x.name, o.x.color, pl ? eurS(o.s.pl[i]) : eur(o.s.value[i]), o.s.ret[i]); });
     return '<div class="tt-one">' + main + '</div>' + (rows ? '<div class="tt-h">' + rows + '</div>' : '');
   }
-  /** Sub-daily chart: measure box + "Mein Depot" box ({ main, side } for MainChart); a/b are points of the frame. */
+  /** Sub-daily chart: measurement block (a/b are points of the frame; both directions). */
   function intraMeasureHTML(a, b) {
-    var I = cur.intra, pl = state.mode === 'pl';
-    var w = E.intradayWindow(I.value, a, b);
-    var list = I.benches.filter(function (o) { return o.s; }).map(function (o) { return { x: o.x, values: o.s.value }; });
-    return {
-      main: measureBox(slotLabel(I, a), slotLabel(I, b), pl ? eurS(I.pl[a]) : eur(I.value[a]), pl ? eurS(I.pl[b]) : eur(I.value[b]),
-        get(w, 'pl'), get(w, 'ret')),
-      side: sideBoxesHTML(list, I.value, a, b)
-    };
+    var I = cur.intra;
+    return measureBlock(slotLabel(I, Math.min(a, b)), slotLabel(I, Math.max(a, b)),
+      measureLines(I.value, I.orig ? 'Was-wäre-wenn' : 'Portfolio', I.benches.map(function (o) { return { name: o.x.name, color: o.x.color, s: o.s }; })), a, b);
   }
 
   /** Single-point hover box; maxBench (optional) caps the benchmark rows – MainChart sizes the band above the plot with it. */
@@ -545,18 +529,13 @@
     return '<div class="tt-one">' + main + '</div>' + (rows ? '<div class="tt-h">' + rows + '</div>' : '');
   }
 
-  /** Measurement over [a, b] (indices into the range): { main: measure box, side: "Mein Depot" box or '' }. */
+  /** Measurement over [a, b] (indices into the range): the block of boxes (Portfolio + shown benchmarks) with the span as caption. */
   function measureHTML(a, b) {
     var M = cur, p = M && M.p;
     if (!p) return '';
     if (M.intra) return intraMeasureHTML(a, b);
-    var pl = state.mode === 'pl';
-    var w = win(a, b), list = M.selB.filter(function (x) { return x.s; }).map(function (x) { return { x: x, values: x.s.value }; });
-    return {
-      main: measureBox(dateLabel(M.R.start + a), dateLabel(M.R.start + b), pl ? eurS(p.pl[a]) : eur(p.value[a]), pl ? eurS(p.pl[b]) : eur(p.value[b]),
-        get(w, 'pl'), get(w, 'totalReturn')),
-      side: sideBoxesHTML(list, p.value, a, b)
-    };
+    return measureBlock(dateLabel(M.R.start + Math.min(a, b)), dateLabel(M.R.start + Math.max(a, b)),
+      measureLines(p.value, M.orig ? 'Was-wäre-wenn' : 'Portfolio', M.selB), a, b);
   }
 
   function ddReadout(i) {
@@ -793,9 +772,13 @@
   // becomes an ordinary own card (editable, deletable, shown); start "card" ("Mein Depot") is also a card at load. The
   // fields show whole percentages, the exact weight stays behind a field until it is typed in (row.exact)
   var PRESETS = (Array.isArray(D.card_presets) ? D.card_presets : []).filter(function (p) {
-    return Object.keys(p.weights || {}).some(function (i) { return INSTR_BY[i]; });
+    return (p.schedule && p.schedule.steps && p.schedule.steps.length) || Object.keys(p.weights || {}).some(function (i) { return INSTR_BY[i]; });
   });
   function presetCard(p) {
+    if (p.schedule) {                    // "Depot-Historie" (user 29.09.): replayed transactions – a fixed card, no % rows
+      return { id: 'bm' + (++cardSeq), name: String(p.name).slice(0, 40), defName: String(p.name).slice(0, 40), color: nextColor(),
+        show: true, rows: [], preset: p.id, schedule: p.schedule, description: p.description || '' };
+    }
     var rows = Object.keys(p.weights).filter(function (i) { return INSTR_BY[i]; })
       .map(function (i) { return newRow(i, fmtShare(Math.round(p.weights[i])), p.weights[i]); });
     var name = String(p.name || nextName()).slice(0, 40);
@@ -881,6 +864,10 @@
       return { b: b, id: b.id, name: b.name || b.id, color: colorOf(b.id), show: !!state.fixedOn[b.id] };
     });
     state.cards.forEach(function (c) {
+      if (c.schedule) {
+        out.push({ b: { id: c.id, name: cardName(c), schedule: c.schedule, description: c.description }, id: c.id, name: cardName(c), color: c.color, show: c.show });
+        return;
+      }
       var info = cardInfo(c);
       if (!info.valid) return;
       var desc = c.rows.filter(function (r) { return r.isin && rowVal(r) > 0; }).map(function (r) {
@@ -919,7 +906,20 @@
       ' spellcheck="false" aria-label="Anteil ' + (k + 1) + ' in Prozent"><span class="bb-pcts" aria-hidden="true">%</span></span>' +
       '<button type="button" class="bb-x" data-act="delrow" title="Zeile entfernen" aria-label="Zeile ' + (k + 1) + ' entfernen">×</button></div>';
   }
+  /** Fixed card of a replayed depot (schedule): name, return, what it is; show/hide and delete only. */
+  function schedCardHTML(c) {
+    var st = c.schedule.steps, last = st[st.length - 1], n = Object.keys(last.holdings).length;
+    return '<div class="bb-card bb-card--fixed" role="group" data-card="' + c.id + '" style="--c:' + c.color + '">' +
+      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i>Echte Transaktionen</span><span class="bb-icons">' +
+      showBtn() + iconBtn('del', 'trash', 'Löschen') + '</span></div>' +
+      '<div class="bb-namerow" title="' + esc(c.description || '') + '"><span class="bb-fixname">' + esc(c.name) + '</span><b class="bb-ret"></b></div>' +
+      '<div class="bb-meta">Wertpapierwert ab ' + esc(F.date(c.schedule.start || st[0].date, 'short')) + ', ohne Cash · ' + st.length +
+      ' Depotstände<br>endet bei den heutigen Stückzahlen (' + n + (n === 1 ? ' Position' : ' Positionen') + ')</div>' +
+      '<div class="bb-hold" title="' + esc(c.description || '') + '">' + esc(Object.keys(last.holdings).map(function (i) {
+        return INSTR_BY[i] ? INSTR_BY[i].short : i; }).join(' · ')) + '</div></div>';
+  }
   function cardHTML(c) {
+    if (c.schedule) return schedCardHTML(c);
     return '<div class="bb-card" role="group" data-card="' + c.id + '" style="--c:' + c.color + '">' +
       '<div class="bb-top"><label class="bb-lbl" for="bbn-' + c.id + '"><i class="bb-dot"></i>Name</label><span class="bb-icons">' +
       showBtn() + iconBtn('dup', 'copy', 'Duplizieren') + iconBtn('del', 'trash', 'Löschen') + '</span></div>' +
@@ -938,6 +938,8 @@
       '<button type="button" class="bb-mi" role="menuitem" data-act="empty"><b>Leere Karte</b><span>Instrumente und Anteile selbst wählen</span></button>' +
       (PRESETS.length ? '<div class="bb-msep">Vorlagen</div>' : '') +
       PRESETS.map(function (p) {
+        if (p.schedule) return '<button type="button" class="bb-mi" role="menuitem" data-act="preset" data-p="' + esc(p.id) + '" title="' + esc(p.description || '') + '">' +
+          '<b>' + esc(p.name) + '</b><span>' + esc('Echte Transaktionen ab ' + F.date(p.schedule.start, 'short') + ' · Wertpapierwert') + '</span></button>';
         var ws = Object.keys(p.weights).filter(function (i) { return INSTR_BY[i]; }).sort(function (a, b) { return p.weights[b] - p.weights[a]; });
         var sub = ws.slice(0, 3).map(function (i) { return fmtShare(Math.round(p.weights[i])) + ' % ' + INSTR_BY[i].short; }).join(' · ') +
           (ws.length > 3 ? ' · +' + (ws.length - 3) : '');
@@ -967,7 +969,7 @@
     focusCard(c.id, '.bb-name', false, true);
   }
   function makeEl(html) { var t = document.createElement('div'); t.innerHTML = html; return t.firstChild; }
-  function cardSig(c) { return c ? c.rows.map(function (r) { return r.id; }).join(',') : 'fixed'; }
+  function cardSig(c) { return c ? (c.schedule ? 'sched' : c.rows.map(function (r) { return r.id; }).join(',')) : 'fixed'; }
 
   /** Builds missing / structurally changed cards (every other card and the field being typed in stay), then patches the derived parts. */
   function renderBenchCards(M) {
@@ -1013,7 +1015,7 @@
     rb.className = 'bb-ret ' + sgn(r);
     rb.textContent = pct(r);
     rb.title = x ? 'Rendite im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') : 'wird erst bei 100 % berechnet';
-    if (!c) return;
+    if (!c || c.schedule) return;
     var info = cardInfo(c), tot = el.querySelector('.bb-total'), hint = el.querySelector('.bb-hint');
     el.classList.toggle('is-invalid', !info.valid);
     tot.textContent = fmtShare(info.total) + ' %';
@@ -1302,30 +1304,27 @@
     if (window.visualViewport) window.visualViewport.addEventListener('resize', placeDrop);
   }
 
+  /**
+   * Above the chart: only the legend line (each line's return over the period). The period and the notes (coverage,
+   * 1T cut-off, YTD/1J clip) go to the muted row under the chart (#chartNote); the empty state replaces the legend.
+   */
   function renderHeadline(M) {
-    var s = M.ps, R = M.R, main = $('hlMain'), sub = $('hlSub'), note = state.custom ? '' : clipNote(state.preset, R);
+    var s = M.ps, R = M.R, noteEl = $('chartNote'), note = state.custom ? '' : clipNote(state.preset, R);
     if (M.cover) note = 'Beginn ' + F.date(ctx.dates[R.start], 'short') + ': erst ab da haben ≥ 90 % des heutigen Werts Kurse' +
       (M.flat.length ? '; ohne Kurs, flach gerechnet: ' + M.flat.slice(0, 3).map(function (x) { return x.short + (x.first ? ' ab ' + F.date(x.first, 'short') : ''); }).join(', ') +
         (M.flat.length > 3 ? ' +' + (M.flat.length - 3) : '') : '');
     if (M.intra && M.intra.oneT) note = IV_LONG[M.intra.key] + ' bis ' + F.asofBerlin(M.intra.asof) + ' Uhr' +
       (M.intra.missing.length ? ', ' + M.intra.missing.length + ' Werte ohne Intraday-Kurse' : '');
-    var period = 'im Zeitraum ' + periodText(R) + (note ? ' <span class="weak">(' + esc(note) + ')</span>' : '');
+    var period = 'Zeitraum ' + periodText(R) + (note ? ' (' + note + ')' : '');
     if (!M.p || !s) {
       // actionable: the button switches „Einzelwerte“ on (also when hidden), scrolls to it and focuses the next step (openAssets)
       var zero = state.selected.size && ctx !== ctx0;
-      main.innerHTML = '<span class="hl-empty"><span class="weak">' + esc(zero ? 'Keine Bestände in der Auswahl' : 'Keine Position ausgewählt') + '</span>' +
+      $('legend').innerHTML = '<span class="hl-empty"><span class="weak">' + esc(zero ? 'Keine Bestände in der Auswahl' : 'Keine Position ausgewählt') + '</span>' +
         '<button type="button" class="hl-act" data-hl-act="assets">' + (zero ? 'Stück anpassen' : 'Positionen auswählen') + '</button></span>';
-      sub.innerHTML = (zero ? 'Was-wäre-wenn: alle ausgewählten Positionen stehen auf 0 Stück · ' : 'Auswahl über die Liste „Einzelwerte“ · ') + period;
-      $('legend').innerHTML = '';
+      noteEl.textContent = (zero ? 'Was-wäre-wenn: alle ausgewählten Positionen stehen auf 0 Stück · ' : 'Auswahl über die Liste „Einzelwerte“ · ') + period;
       return;
     }
-    if (state.mode === 'value') {
-      main.innerHTML = eur(s.endValue);
-      sub.innerHTML = colored(s.pl, eurS(s.pl) + ' (' + pct(s.totalReturn) + ')') + ' ' + period;
-    } else {
-      main.innerHTML = '<span class="' + (isNum(s.pl) && s.pl < 0 ? 'neg' : 'pos') + '">' + eurS(s.pl) + '</span>';
-      sub.innerHTML = colored(s.totalReturn, pct(s.totalReturn)) + ' ' + period + ' · Endwert ' + eur(s.endValue);
-    }
+    noteEl.textContent = period;
     var lg = '<span class="lg-item" style="--c:var(--accent)"><i></i><span>' + (M.orig ? 'Was-wäre-wenn' : 'Portfolio') + '</span>' +
       '<b class="' + sgn(s.totalReturn) + '">' + pct(s.totalReturn) + '</b></span>';
     if (M.orig) {
@@ -1941,7 +1940,7 @@
     if (t) t.focus({ preventScroll: true });
   }
   function bindLists() {
-    $('hlMain').addEventListener('click', function (ev) { if (ev.target.closest('[data-hl-act="assets"]')) openAssets(); });
+    $('legend').addEventListener('click', function (ev) { if (ev.target.closest('[data-hl-act="assets"]')) openAssets(); });
     $('listToggles').addEventListener('click', function (ev) {
       var b = ev.target.closest('[data-list]');
       if (!b) return;

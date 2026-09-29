@@ -1,0 +1,212 @@
+date;time;status;reference;description;assetType;type;isin;shares;price;amount;fee;tax;currency
+2026-09-24;19:29:36;Cancelled;"SCALeYQGftcTv3v";"Leverage Shares 2x Alphabet ETP";Security;Sell;IE00BF01VY89;0;0,00;0,00;0,00;0,00;EUR
+2026-09-24;15:55:13;Executed;"SCALnTqer1kQvrn";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;35;141,86;-4.965,10;0,00;0,00;EUR
+2026-09-24;15:53:24;Executed;"SCALba5BShbCu1d";"Alphabet A";Security;Buy;US02079K3059;33;297,20;-9.807,60;0,00;0,00;EUR
+2026-09-24;15:52:22;Executed;"SCALiz3G5sVEquM";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;141;141,56;-19.959,96;0,00;0,00;EUR
+2026-09-24;15:51:42;Executed;"SCALs1NkVSDWefT";"Alphabet A Long 2x Factor GS";Security;Sell;DE000GX6ZLS7;4.308;6,099;26.274,492;0,00;-105,52;EUR
+2026-09-21;21:37:32;Executed;"SCAL972gca2Gwxf";"Broadcom Call 350,00 BNP";Security;Sell;DE000PK3XT09;108;7,89;852,12;0,00;22,37;EUR
+2026-09-17;05:42:04;Cancelled;"SCALYQ2YhUiC9sy";"WisdomTree WTI Crude Oil 1x Daily Short";Security;Sell;JE00B24DK975;0;0,00;0,00;0,00;0,00;EUR
+2026-09-15;15:27:59;Executed;"TUY6VQDCTKDSLVDKG9KQGZ";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-300,00;0,00;;EUR
+2026-09-14;10:46:37;Executed;"SCALTDf3CxJLZBS";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;8;30,97;247,76;0,99;-0,24;EUR
+2026-09-14;10:43:11;Executed;"SCAL9kezHHF5418";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;1;30,985;30,985;0,99;-0,19;EUR
+2026-09-14;10:40:17;Executed;"SCAL9Fmyvhb9gaH";"Coca-Cola";Security;Buy;US1912161007;4;77,37;-309,48;0,00;0,00;EUR
+2026-09-14;10:36:20;Executed;"SCALLiFwFjtdNVq";"Broadcom";Security;Buy;US11135F1012;1;303,50;-303,50;0,00;0,00;EUR
+2026-09-14;10:19:28;Executed;"SCALvAzZBMBjSVT";"Broadcom Call 350,00 BNP";Security;Buy;DE000PK3XT09;108;7,15;-772,20;0,00;0,00;EUR
+2026-09-14;09:57:49;Cancelled;"SCALSbeENCTBssx";"Broadcom Call 350,00 BNP";Security;Buy;DE000PK3XT09;0;0,00;0,00;0,00;0,00;EUR
+2026-09-14;09:27:02;Executed;"SCALHMA3R9hy6TM";"WTI Crude Oil Future Long 10x Factor MS";Security;Sell;DE000MR1T947;15;4,88;73,20;0,99;-1,35;EUR
+2026-09-14;09:25:50;Cancelled;"SCALMbjkasfKASB";"WTI Crude Oil Future Long 10x Factor MS";Security;Sell;DE000MR1T947;0;0,00;0,00;0,00;0,00;EUR
+2026-09-14;09:25:34;Executed;"SCALnS5wvMf6Gcd";"WisdomTree WTI Crude Oil 1x Daily Short";Security;Buy;JE00B24DK975;39;6,45;-251,55;0,00;0,00;EUR
+2026-09-14;09:11:54;Executed;"SCALq7g4c7BWQ3H";"WTI Crude Oil Future Long 10x Factor MS";Security;Buy;DE000MR1T947;15;5,07;-76,05;0,99;0,00;EUR
+2026-09-13;02:00:00;Executed;"802989_edsTx1VDfEAnNTSt1c8WK3";"Alphabet A";Cash;Distribution;US02079K3059;;;0,15;0,00;0,04;EUR
+2026-09-10;23:10:19;Cancelled;"SCALVgQ3iXEbyp7";"Broadcom Long 10x Factor MS";Security;Buy;DE000MR1LSV7;0;0,00;0,00;0,00;0,00;EUR
+2026-09-10;02:00:00;Executed;"5JC6CFLJ9MXBFKWY";"Entgelt PRIME+ Broker";Cash;Fee;;;;-4,99;0,00;;EUR
+2026-09-09;15:27:03;Executed;"SCAL4QQfH1dkd8r";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;447;133,75;-59.786,25;0,00;0,00;EUR
+2026-09-09;15:26:35;Cancelled;"SCALvk1eNzSQTgx";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;0;0,00;0,00;0,00;0,00;EUR
+2026-09-09;15:24:28;Executed;"SCALCfiUfjs4xEZ";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Sell;FR0010342592;7.450;9,393;69.977,85;0,00;8,77;EUR
+2026-09-09;15:15:26;Cancelled;"SCALHciV7MTo7vx";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Sell;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-09-09;15:12:53;Executed;"SCALZQ76YBYizSQ";"WisdomTree PHLX Semiconductor 3x Daily Leveraged ETP";Security;Sell;XS3091657729;13;93,295;1.212,835;0,00;9,10;EUR
+2026-09-08;02:00:00;Executed;"260908-IPNUX8LGHMCWBUKOLLNMMN";"";Cash;Deposit;;;;750,00;0,00;;EUR
+2026-09-06;16:51:11;Executed;"QMRWFQH4U2FZ7PAP1DFFKU";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-50,00;0,00;;EUR
+2026-09-05;14:39:21;Executed;"IHGBN1UY6KWE3ETWAUG6WR";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-35,00;0,00;;EUR
+2026-09-05;00:02:13;Executed;"3ITUHZZWOHHLBNUVBR4D3N";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-200,00;0,00;;EUR
+2026-09-05;00:02:13;Executed;"IQTWTSIKBZTRTQKVCCJJHO";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-50,00;0,00;;EUR
+2026-09-02;09:28:20;Executed;"SCALBiLwc4V6B6T";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;9;31,00;-279,00;0,00;0,00;EUR
+2026-09-02;09:10:48;Executed;"SCALavDBjN8obEY";"Alphabet A";Security;Buy;US02079K3059;1;291,30;-291,30;0,00;0,00;EUR
+2026-09-01;17:22:39;Executed;"SCALcgkXHWybXPK";"Taiwan Semiconductor Manufact. ADR";Security;Sell;US8740391003;1;358,00;358,00;0,00;-0,43;EUR
+2026-09-01;17:14:30;Cancelled;"SCALMnqnE2yPfUk";"Taiwan Semiconductor Manufact. ADR";Security;Sell;US8740391003;0;0,00;0,00;0,00;0,00;EUR
+2026-09-01;17:08:05;Executed;"SCALZm6urbqC7qx";"Broadcom";Security;Sell;US11135F1012;1;316,50;316,50;0,00;2,69;EUR
+2026-09-01;17:01:16;Executed;"SCALhXot5B9ZB2R";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;2.790;9,315;-25.988,85;0,00;0,00;EUR
+2026-09-01;10:29:03;Executed;"SCALBecm5zMsBrm";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Sell;FR0010342592;2.656;9,327;24.772,512;0,00;8,90;EUR
+2026-08-31;16:23:37;Executed;"SCALvZbdQRAfb86";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;211;140,91;-29.732,01;0,00;0,00;EUR
+2026-08-31;16:22:09;Executed;"SCALfGtAZMHBE6K";"Alphabet A Long 2x Factor GS";Security;Sell;DE000GX6ZLS7;4.949;6,06;29.990,94;0,00;-293,70;EUR
+2026-08-31;15:53:16;Executed;"SCALNkXHwwEaFpD";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;50;145,98;-7.299,00;0,00;0,00;EUR
+2026-08-31;15:52:18;Cancelled;"SCALGEDgR2nDJMT";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;0;0,00;0,00;0,00;0,00;EUR
+2026-08-31;15:48:41;Executed;"SCAL7k5DgMj7LTT";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;34;145,15;-4.935,10;0,00;0,00;EUR
+2026-08-31;15:43:48;Executed;"SCALjxFUjwmEbnT";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;102;145,36;-14.826,72;0,00;0,00;EUR
+2026-08-31;15:43:27;Cancelled;"SCALna4zAqxMBcg";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;0;0,00;0,00;0,00;0,00;EUR
+2026-08-31;14:20:39;Executed;"SCALXiWR6pnhgAb";"Coherent";Security;Sell;US19247G1076;4;241,00;964,00;0,00;-6,84;EUR
+2026-08-31;14:20:05;Executed;"SCALGt6i6XgpR6Y";"Bloom Energy A";Security;Sell;US0937121079;3;181,50;544,50;0,00;-4,02;EUR
+2026-08-31;14:19:23;Executed;"SCALhiPr6F1eHbu";"Lumentum Holdings";Security;Sell;US55024U1097;1;775,00;775,00;0,00;5,89;EUR
+2026-08-31;14:19:00;Executed;"SCALGe9hGMyrLzA";"Broadcom";Security;Sell;US11135F1012;1;319,00;319,00;0,00;3,38;EUR
+2026-08-28;18:30:32;Cancelled;"SCALGecyfsdzMw2";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;0;0,00;0,00;0,00;0,00;EUR
+2026-08-28;17:31:05;Cancelled;"SCALyfC7NQsyAG1";"Leverage Shares 3x Alphabet ETP";Security;Buy;IE00BK5BZX59;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;17:32:16;Executed;"SCALVJWKnHUf2YL";"Micron Technology";Security;Sell;US5951121038;1;809,50;809,50;0,00;3,51;EUR
+2026-08-26;17:32:07;Executed;"SCALwEymctZR1Yi";"SK Hynix GDR";Security;Sell;US78392B1070;1;1.040,00;1.040,00;0,00;0,00;EUR
+2026-08-26;15:33:04;Executed;"SCALPQy425kkeV3";"Coherent";Security;Sell;US19247G1076;2;248,00;496,00;0,00;-0,45;EUR
+2026-08-26;15:30:26;Executed;"SCALvfPSb9xiG6K";"SK HYNIX INC.";Security;Sell;US78392B2060;2;136,66;273,32;0,00;0,17;EUR
+2026-08-26;13:04:52;Cancelled;"SCALPYrcjSDKNYT";"Coherent";Security;Sell;US19247G1076;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;12:35:34;Executed;"SCALhPGLSXB37xf";"Lumentum Holdings";Security;Sell;US55024U1097;1;754,00;754,00;0,00;0,00;EUR
+2026-08-26;09:11:09;Cancelled;"SCAL8kpdafVgyqT";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;09:09:34;Executed;"SCALuKhuCQ9uH3h";"NVIDIA";Security;Sell;US67066G1040;1;183,06;183,06;0,99;-0,56;EUR
+2026-08-26;08:29:29;Executed;"SCAL6Gj7mVsvecP";"Lumentum Holdings";Security;Buy;US55024U1097;2;754,00;-1.508,00;0,00;0,00;EUR
+2026-08-26;08:28:39;Cancelled;"SCAL4voQgRJJ9sk";"Lumentum Holdings";Security;Buy;US55024U1097;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;08:27:46;Executed;"SCALnmBppYiNUW5";"NVIDIA";Security;Buy;US67066G1040;1;183,10;-183,10;0,99;0,00;EUR
+2026-08-26;08:26:38;Cancelled;"SCALRLyzq6pvp6v";"Lumentum Holdings";Security;Buy;US55024U1097;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;08:26:34;Cancelled;"SCAL4WSGSSLk27w";"Lumentum Holdings";Security;Buy;US55024U1097;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;08:25:32;Executed;"SCALUUgP3oEqTWz";"Broadcom";Security;Buy;US11135F1012;2;306,90;-613,80;0,00;0,00;EUR
+2026-08-26;08:25:10;Executed;"SCALq1Z57qEeuJJ";"WisdomTree PHLX Semiconductor 3x Daily Leveraged ETP";Security;Buy;XS3091657729;13;90,80;-1.180,40;0,00;0,00;EUR
+2026-08-26;08:23:00;Cancelled;"SCALQZRvpoxHf4y";"SK HYNIX INC.";Security;Sell;US78392B2060;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;08:22:58;Executed;"SCAL6Ns1duxFGMJ";"Bloom Energy A";Security;Buy;US0937121079;3;186,28;-558,84;0,00;0,00;EUR
+2026-08-26;08:21:05;Executed;"SCALta8WL1yeETh";"SK Hynix GDR";Security;Buy;US78392B1070;1;1.040,00;-1.040,00;0,00;0,00;EUR
+2026-08-26;08:19:30;Cancelled;"SCALETiYiNKNyUu";"Lumentum Holdings";Security;Buy;US55024U1097;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;08:12:27;Executed;"SCALo5y9xPRSGEW";"Micron Technology";Security;Buy;US5951121038;1;797,00;-797,00;0,00;0,00;EUR
+2026-08-26;08:09:00;Executed;"SCALwXprh4Jpnuu";"Coherent";Security;Buy;US19247G1076;4;247,10;-988,40;0,00;0,00;EUR
+2026-08-26;08:07:36;Cancelled;"SCALGkqzxhe8P1E";"Lumentum Holdings";Security;Buy;US55024U1097;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;08:07:31;Cancelled;"SCALqkCTRSiq2Hf";"Lumentum Holdings";Security;Buy;US55024U1097;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;08:05:26;Executed;"SCALhyPRiXJUkXy";"Marvell Technology";Security;Buy;US5738741041;2;206,00;-412,00;0,00;0,00;EUR
+2026-08-26;08:04:45;Cancelled;"SCALLqgkPx2nLoi";"Coherent";Security;Buy;US19247G1076;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;08:03:32;Executed;"SCALPzYWCYBQDTM";"Taiwan Semiconductor Manufact. ADR";Security;Buy;US8740391003;1;359,50;-359,50;0,00;0,00;EUR
+2026-08-26;08:01:13;Executed;"SCALHMX9jzPJPAi";"SK HYNIX INC.";Security;Buy;US78392B2060;2;136,34;-272,68;0,00;0,00;EUR
+2026-08-26;07:59:50;Executed;"SCALCwyyUMnH7Gf";"Coherent";Security;Buy;US19247G1076;2;248,80;-497,60;0,00;0,00;EUR
+2026-08-26;07:25:01;Cancelled;"SCALeyaztxJJ5vH";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;07:22:55;Cancelled;"SCALUjYiB2H8oox";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;07:22:37;Cancelled;"SCAL7k84LqAbMbN";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;07:22:17;Cancelled;"SCALopBph3QQYVz";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;06:36:48;Cancelled;"SCAL5TUPCKmjHGv";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-08-26;06:33:19;Cancelled;"SCALHXfQMY1Y89N";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-08-25;02:00:00;Executed;"260824-UGPC15AZIYGAFDK2BN8UDJ";"";Cash;Deposit;;;;800,00;0,00;;EUR
+2026-08-22;17:58:58;Cancelled;"SCAL8m5ur7ziyM8";"Leverage Shares 2x Alphabet ETP";Security;Sell;IE00BF01VY89;0;0,00;0,00;0,00;0,00;EUR
+2026-08-22;17:58:54;Cancelled;"SCALXZ7jDg1JSyk";"Leverage Shares 2x Alphabet ETP";Security;Sell;IE00BF01VY89;0;0,00;0,00;0,00;0,00;EUR
+2026-08-22;17:58:50;Cancelled;"SCALHzXXxiRNSVW";"Leverage Shares 2x Alphabet ETP";Security;Sell;IE00BF01VY89;0;0,00;0,00;0,00;0,00;EUR
+2026-08-20;17:15:29;Executed;"SCALoB3bH482BPr";"Alphabet A Long 2x Factor GS";Security;Buy;DE000GX6ZLS7;822;6,089;-5.005,158;0,00;0,00;EUR
+2026-08-20;17:14:40;Executed;"SCALRrpx997CEy7";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Sell;FR0010342592;536;9,324;4.997,664;0,00;3,88;EUR
+2026-08-20;14:37:47;Executed;"SCAL9v4vQjp71J1";"Alphabet A Long 2x Factor GS";Security;Buy;DE000GX6ZLS7;500;6,165;-3.082,50;0,00;0,00;EUR
+2026-08-20;14:08:23;Executed;"SCALMxewyVev1mF";"Alphabet A Long 2x Factor GS";Security;Buy;DE000GX6ZLS7;1.935;6,187;-11.971,845;0,00;0,00;EUR
+2026-08-20;14:06:07;Executed;"SCAL719upwbZ9tF";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;165;30,87;5.093,55;0,00;-20,05;EUR
+2026-08-20;14:05:54;Cancelled;"SCALEGoPQe3eQvV";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-08-20;14:03:41;Cancelled;"SCAL6e93F9kJcyY";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-08-20;14:03:39;Executed;"SCALaCwTTRXuRnZ";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Sell;FR0010342592;645;9,306;6.002,37;0,00;2,41;EUR
+2026-08-20;14:01:54;Cancelled;"SCALsaYAnDePuGv";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Sell;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-08-20;13:56:32;Cancelled;"SCALXbxSCvmWwoK";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-08-20;13:55:46;Cancelled;"SCALCz5NMVp6PTZ";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Sell;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-08-19;03:03:40;Executed;"6RBV3QGWGNVHSIK6YUN3KD";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-1.000,00;0,00;;EUR
+2026-08-18;17:30:40;Executed;"SCAL5g16iLMpSRy";"Alphabet A Long 2x Factor GS";Security;Buy;DE000GX6ZLS7;6.000;6,272;-37.632,00;0,00;0,00;EUR
+2026-08-18;17:30:40;Executed;"SCALUkbaULEzDuQ";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;1.582;31,61;50.007,02;0,00;37,19;EUR
+2026-08-18;17:02:43;Cancelled;"SCALkBaPQjnmDEu";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-08-18;17:00:47;Cancelled;"SCALZA2r1seCVKY";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-08-18;16:47:31;Cancelled;"SCALcBdXRXjCJsk";"Alphabet A Long 2x Factor GS";Security;Buy;DE000GX6ZLS7;0;0,00;0,00;0,00;0,00;EUR
+2026-08-18;16:47:03;Cancelled;"SCAL5DJmFrmie7B";"Alphabet A Long 2x Factor GS";Security;Buy;DE000GX6ZLS7;0;0,00;0,00;0,00;0,00;EUR
+2026-08-18;16:45:32;Cancelled;"SCAL6aFxCATFWGF";"Alphabet A Long 2x Factor GS";Security;Buy;DE000GX6ZLS7;0;0,00;0,00;0,00;0,00;EUR
+2026-08-12;19:37:53;Cancelled;"SCALUoFFiMjDA79";"Alphabet A Long 2x Factor GS";Security;Buy;DE000GX6ZLS7;0;0,00;0,00;0,00;0,00;EUR
+2026-08-12;18:02:49;Executed;"SCALQumsPGXUUTf";"Alphabet A";Security;Sell;US02079K3059;59;297,30;17.540,70;0,00;47,53;EUR
+2026-08-12;14:45:57;Cancelled;"SCALaiHWrrb7y2Q";"Alphabet A";Security;Sell;US02079K3059;0;0,00;0,00;0,00;0,00;EUR
+2026-08-11;22:58:17;Executed;"SCALqEGRFZGZ6fZ";"Leverage Shares 2x Alphabet ETP";Security;Buy;IE00BF01VY89;160;217,737;-34.837,92;0,00;0,00;EUR
+2026-08-11;02:00:00;Executed;"BQE18EL90EF37PVY";"Entgelt PRIME+ Broker";Cash;Fee;;;;-4,99;0,00;;EUR
+2026-08-07;02:00:00;Executed;"260807-KDWRXLAIRKFHXHY8PB8ARR";"";Cash;Deposit;;;;30,00;0,00;;EUR
+2026-08-04;10:10:00;Executed;"SCALQ3JPQi4agai";"Alphabet A";Security;Sell;US02079K3059;6;323,05;1.938,30;0,99;62,69;EUR
+2026-08-04;08:12:30;Executed;"SCALoi2UAE2UFqz";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;3.203;31,20;99.933,60;0,99;2.418,31;EUR
+2026-08-04;08:12:30;Executed;"SCALNMNZwkjZKJc";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;3.094;31,49;-97.430,06;0,00;0,00;EUR
+2026-08-04;08:12:30;Executed;"SCALaKTpycxTtMJ";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;10.488;9,29;-97.433,52;0,00;0,00;EUR
+2026-08-04;08:12:30;Executed;"SCALgBSZuWhTbyy";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;3.203;31,205;99.949,615;0,99;4.503,62;EUR
+2026-08-03;23:21:01;Cancelled;"SCALyQc4wa7um4w";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-07-26;17:35:35;Executed;"MTMOOUPGDJUVW68GOCV9FR";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-27,21;0,00;;EUR
+2026-07-26;02:00:00;Executed;"260725-AZISNR4TARLNMVOCXCF6RD";"";Cash;Deposit;;;;700,00;0,00;;EUR
+2026-07-21;21:19:48;Executed;"SCALEj5mgFduD8g";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;2.390;9,56;-22.848,40;0,00;0,00;EUR
+2026-07-21;21:19:48;Executed;"SCALzHqtFr8fFnm";"NVIDIA";Security;Sell;US67066G1040;129;181,60;23.426,40;0,99;1.267,14;EUR
+2026-07-20;17:54:09;Executed;"SCAL67PTK29f5qn";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;2.692;9,34;-25.143,28;0,00;0,00;EUR
+2026-07-20;17:31:27;Executed;"SCALEDXayTHt6g3";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;2.691;9,287;-24.991,317;0,00;0,00;EUR
+2026-07-20;17:23:17;Cancelled;"SCALmyfpvbXQpZ9";"Amundi Nasdaq-100 Daily (2x) Leveraged (Acc)";Security;Buy;FR0010342592;0;0,00;0,00;0,00;0,00;EUR
+2026-07-20;16:24:17;Executed;"SCALs7fYLY3My8b";"NVIDIA";Security;Sell;US67066G1040;44;180,50;7.942,00;0,99;339,31;EUR
+2026-07-20;16:24:17;Executed;"SCALbmD2CVjCdKF";"Microsoft";Security;Sell;US5949181045;29;342,00;9.918,00;0,99;-159,92;EUR
+2026-07-20;16:24:17;Executed;"SCALpoCM626XAUT";"NVIDIA";Security;Sell;US67066G1040;27;180,50;4.873,50;0,99;256,67;EUR
+2026-07-20;16:24:17;Executed;"SCALSjjpTprVdXm";"Microsoft";Security;Sell;US5949181045;58;342,50;19.865,00;0,99;-2,69;EUR
+2026-07-20;16:24:17;Executed;"SCAL89fCcaQYZgP";"Alphabet A";Security;Sell;US02079K3059;25;313,15;7.828,75;0,99;0,00;EUR
+2026-06-25;02:00:00;Executed;"673062_edsTx1VDfEAnNTSt1c8WK3";"NVIDIA";Cash;Distribution;US67066G1040;;;32,51;0,00;11,53;EUR
+2026-06-14;02:00:00;Executed;"612903_edsTx1VDfEAnNTSt1c8WK3";"Alphabet A";Cash;Distribution;US02079K3059;;;12,62;0,00;4,48;EUR
+2026-06-10;02:00:00;Executed;"609067_edsTx1VDfEAnNTSt1c8WK3";"Microsoft";Cash;Distribution;US5949181045;;;51,16;0,00;18,17;EUR
+2026-06-08;08:36:21;Executed;"TNQ5MYDDZGFCNM8ZIN9N79";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-300,00;0,00;;EUR
+2026-06-04;13:22:24;Executed;"SCALvmggjfQf6XN";"Microsoft";Security;Sell;US5949181045;1;370,40;370,40;0,99;2,69;EUR
+2026-06-03;20:42:54;Executed;"MZJKINN45PBGALVRZPYJT9";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-66,02;0,00;;EUR
+2026-06-02;17:01:17;Executed;"SCALWozfVMbCmHK";"Alphabet A";Security;Buy;US02079K3059;10;309,00;-3.090,00;0,99;0,00;EUR
+2026-06-02;15:28:46;Cancelled;"SCALpJyzFeHmmLX";"Alphabet A";Security;Buy;US02079K3059;0;0,00;0,00;0,00;0,00;EUR
+2026-06-02;14:49:03;Executed;"SCALifxfVjXnYSP";"Alphabet A";Security;Buy;US02079K3059;10;314,20;-3.142,00;0,99;0,00;EUR
+2026-06-02;02:00:00;Executed;"260602-EZTBRAT4GPR4QGCTN41TX8";"";Cash;Deposit;;;;6.300,00;0,00;;EUR
+2026-05-14;21:40:39;Executed;"GCYI827PEEGZBMZCAAX79R";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-46,51;0,00;;EUR
+2026-05-08;10:23:26;Executed;"SCAL3NBk3ac54Lv";"Microsoft";Security;Buy;US5949181045;6;358,75;-2.152,50;0,99;0,00;EUR
+2026-05-08;02:00:00;Executed;"260508-87SQGO9RYZX7YBRHG621DD";"";Cash;Deposit;;;;200,00;0,00;;EUR
+2026-05-08;02:00:00;Executed;"260508-PY9LXO3R5SPNX3MF67GHY6";"";Cash;Deposit;;;;2.000,00;0,00;;EUR
+2026-04-26;23:50:56;Executed;"RO8SOYCC2YOH3MX8KR1CGT";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-214,35;0,00;;EUR
+2026-04-21;18:02:30;Executed;"SCALQhNLmYiofYU";"Microsoft";Security;Buy;US5949181045;32;362,35;-11.595,20;0,99;0,00;EUR
+2026-04-17;16:06:46;Executed;"SCALFmwLhLFA8GN";"Alphabet A";Security;Buy;US02079K3059;70;285,55;-19.988,50;0,99;0,00;EUR
+2026-04-17;15:36:41;Executed;"SCALC6PZEfN6D7Y";"Microsoft";Security;Buy;US5949181045;50;358,849;-17.942,45;0,99;0,00;EUR
+2026-04-16;15:11:02;Executed;"SCALHv6QRD28Pa9";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Sell;FR0010755611;1.946;25,69;49.992,74;0,99;251,66;EUR
+2026-04-09;02:00:00;Executed;"PMKVSM8W3QDMEJ8TVZQDAK";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-110,00;0,00;;EUR
+2026-04-01;02:00:00;Executed;"498d3c9b-16dd-4a2d-9af4-dc68673e4f01";;Cash;Interest;;;;59,22;0,00;0,00;EUR
+2026-03-27;14:54:59;Executed;"SCALavneNgLWj56";"NVIDIA";Security;Buy;US67066G1040;200;146,50;-29.300,00;0,99;0,00;EUR
+2026-03-23;09:03:34;Executed;"SCALtPHXyTSpXmB";"Vanguard FTSE All-World (Acc)";Security;Sell;IE00BK5BQT80;209;140,46;29.356,14;0,99;0,00;EUR
+2026-03-17;08:52:26;Executed;"SCAL3RtRhfEvrb3";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;2.850;24,34;-69.369,00;0,00;0,00;EUR
+2026-03-17;08:18:34;Cancelled;"SCAL9ggNkZeBANq";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-03-17;01:00:00;Executed;"MTPS1JIWCYCIM9DMWPJK3C";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-51,67;0,00;;EUR
+2026-03-13;22:12:48;Cancelled;"SCAL5PRZNfWQgFV";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-03-13;19:14:59;Cancelled;"SCALbwVyifsdxtB";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-03-13;18:57:37;Cancelled;"SCALVoWHgdQG3VM";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-03-13;01:00:00;Executed;"260313-CFQYXTEYQWNCQXKSXZCSLB";"3";Cash;Deposit;;;;9.400,00;0,00;;EUR
+2026-03-13;01:00:00;Executed;"GYCP1J3AXD7ARUU6USUHXT";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-2,41;0,00;;EUR
+2026-03-12;18:23:22;Cancelled;"SCALeMoCyE73XaR";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-03-12;01:00:00;Executed;"260312-MTBEJZJ8YBZZLGMQSOSYCS";"2";Cash;Deposit;;;;20.000,00;0,00;;EUR
+2026-03-11;01:00:00;Executed;"260311-QIWRQXD3NXQSXFYHFLQSMR";"1";Cash;Deposit;;;;20.000,00;0,00;;EUR
+2026-03-10;01:00:00;Executed;"260310-N4VSG818UDIPYEVMXMHUOE";"E";Cash;Deposit;;;;20.000,00;0,00;;EUR
+2026-03-09;08:33:43;Executed;"SCALexTnvmknuCb";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;3.355;23,89;-80.150,95;0,00;0,00;EUR
+2026-03-09;01:00:00;Executed;"260309-WTFY4J7WW8SJTM9HXZO2XR";"D";Cash;Deposit;;;;20.000,00;0,00;;EUR
+2026-03-08;11:40:05;Cancelled;"SCALVT7qpZG15B9";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-03-08;01:00:00;Executed;"260308-FESH2BRHDQYRQBJNNGSMZV";"C";Cash;Deposit;;;;20.000,00;0,00;;EUR
+2026-03-08;01:00:00;Executed;"CDS_DTA_ow6ujzjZYovxCsmf3puFEq_0_p7GncLExjJHncv22JSefRo_20260308155756976";"";Cash;Taxes;;;;1,31;0,00;;EUR
+2026-03-07;01:00:00;Executed;"260307-4UDO7ICVFKVKQWAFSUDGTF";"A";Cash;Deposit;;;;1,00;0,00;;EUR
+2026-03-07;01:00:00;Executed;"260307-5DOZDHJ8XOUGS3QJCWQBBT";"B";Cash;Deposit;;;;19.999,00;0,00;;EUR
+2026-03-06;21:50:51;Cancelled;"SCALVwdLyvh1k5Y";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;0;0,00;0,00;0,00;0,00;EUR
+2026-03-06;01:00:00;Executed;"260306-KX44VH3MCSU2UOTCRMUYYU";"";Cash;Deposit;;;;20.000,00;0,00;;EUR
+2026-02-20;01:00:00;Executed;"HZ8ZN25MJPP6MCN4JB92R2";"Scalable Capital Broker Auszahlung";Cash;Withdrawal;;;;-800,00;0,00;;EUR
+2026-02-13;12:27:30;Executed;"SCALDsQ4hR5FvSu";"Amundi MSCI USA Daily (2x) Leveraged (Acc)";Security;Buy;FR0010755611;800;23,84;-19.072,00;0,00;0,00;EUR
+2026-02-13;01:00:00;Executed;"260213-OAR6RQ647YWQUH756MWI1I";"";Cash;Deposit;;;;20.000,00;0,00;;EUR
+2026-01-24;01:00:00;Executed;"358558_edsTx1VDfEAnNTSt1c8WK3";"Vorabpauschale: Vanguard FTSE All-World U.ETF (IE00BK5BQT80)";Cash;Taxes;;;;-1,31;0,00;;EUR
+2026-01-01;01:00:00;Executed;"8beaf353-50b1-4d51-a51b-cdf159a7106f";;Cash;Interest;;;;4,99;0,00;0,00;EUR
+2025-12-30;01:00:00;Executed;"325728_edsTx1VDfEAnNTSt1c8WK3";"D-Wave Quantum Long 24,58 $ Turbo Open End HSBC";Security;Corporate action;DE000HM0L6H3;-150;0,001;-0,15;;;EUR
+2025-12-30;01:00:00;Executed;"325728_edsTx1VDfEAnNTSt1c8WK3";"D-Wave Quantum Long 24,58 $ Turbo Open End HSBC";Cash;Distribution;DE000HM0L6H3;;;0,15;0,00;0,00;EUR
+2025-12-17;22:00:06;Expired;"SCALuDYjD26nera";"D-Wave Quantum Long 24,58 $ Turbo Open End HSBC";Security;Sell;DE000HM0L6H3;0;0,00;0,00;0,00;0,00;EUR
+2025-12-17;16:16:18;Executed;"SCALBwxJ6UR3qd4";"D-Wave Quantum Long 24,58 $ Turbo Open End HSBC";Security;Buy;DE000HM0L6H3;150;0,19;-28,50;0,99;0,00;EUR
+2025-12-11;14:56:21;Executed;"SCALdn62Vrqm5KV";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;3;144,10;-432,30;0,99;0,00;EUR
+2025-12-11;12:59:25;Executed;"SCALsz7CH8KpL71";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;40;144,18;-5.767,20;0,99;0,00;EUR
+2025-12-10;16:37:01;Executed;"SCALTSJwwy8JTfU";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;25;144,44;-3.611,00;0,99;0,00;EUR
+2025-12-10;16:34:31;Executed;"SCALddo4EEj2M34";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;25;144,52;-3.613,00;0,99;0,00;EUR
+2025-12-10;16:02:55;Cancelled;"SCALabeNBqNSbnK";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;0;0,00;0,00;0,00;0,00;EUR
+2025-12-10;08:18:04;Executed;"SCALgLwET75UFSG";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;4;144,68;-578,72;0,99;0,00;EUR
+2025-12-10;07:45:18;Executed;"SCALuaS6eH78Ru4";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;20;144,70;-2.894,00;0,99;0,00;EUR
+2025-12-10;01:00:00;Executed;"251210-SIUWCK2FXFCAEEXWEVVVVZ";"";Cash;Deposit;;;;7.500,00;0,00;;EUR
+2025-12-09;18:56:47;Executed;"SCALv8RFMuQHTpZ";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;18;144,80;-2.606,40;0,99;0,00;EUR
+2025-12-09;18:43:04;Cancelled;"SCALFWKduv56FN3";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;0;0,00;0,00;0,00;0,00;EUR
+2025-12-09;18:42:58;Cancelled;"SCALMEDw8MNMNv2";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;0;0,00;0,00;0,00;0,00;EUR
+2025-12-09;18:11:12;Executed;"SCALMANP9Kviyro";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;18;144,90;-2.608,20;0,99;0,00;EUR
+2025-12-09;15:40:55;Executed;"SCALzWKBekCLKpG";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;30;144,74;-4.342,20;0,99;0,00;EUR
+2025-12-09;14:43:29;Cancelled;"SCALBCTdU7NGMC4";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;0;0,00;0,00;0,00;0,00;EUR
+2025-12-09;01:00:00;Executed;"251209-58GKZTR8AIJUTDZEVTLA7W";"";Cash;Deposit;;;;8.000,00;0,00;;EUR
+2025-12-09;01:00:00;Executed;"251209-SQLGGXFVGHT1D7XYMGPRVJ";"";Cash;Deposit;;;;10.000,00;0,00;;EUR
+2025-12-08;20:11:38;Cancelled;"SCAL7GuczeibJdt";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;0;0,00;0,00;0,00;0,00;EUR
+2025-12-08;16:24:03;Executed;"SCALGWS4m6dtSz5";"Vanguard FTSE All-World (Acc)";Security;Buy;IE00BK5BQT80;26;145,04;-3.771,04;0,99;0,00;EUR
+2025-12-08;01:00:00;Executed;"251208-E8BUZPTDJQU3QZWDJSBWHO";"";Cash;Deposit;;;;3.700,00;0,00;;EUR
+2025-12-08;01:00:00;Executed;"251208-KAI7LCSBXQRE4XQBP94Q9C";"";Cash;Deposit;;;;1.000,00;0,00;;EUR
+2025-12-08;01:00:00;Executed;"251208-JKXYMOBTYXQZJ3U5SPELMU";"";Cash;Deposit;;;;2,00;0,00;;EUR
+2025-12-05;01:00:00;Executed;"251205-XWMST2QPLAGYNNCJT3PTCE";"";Cash;Deposit;;;;100,00;0,00;;EUR
+2025-12-03;20:15:58;Executed;"SCALFXCJrMfsXTi";"iShares MSCI World Small Cap (Acc)";Security;Buy;IE00BF4RFH31;1;7,67;-7,67;0,99;0,00;EUR
+2025-12-03;20:15:25;Cancelled;"SCALN1pmFCwmHjz";"iShares MSCI World Small Cap (Acc)";Security;Buy;IE00BF4RFH31;0;0,00;0,00;0,00;0,00;EUR
+2025-12-03;01:00:00;Executed;"251203-GNYJ3NE3JCSJBPLCUPOAH6";"";Cash;Deposit;;;;10,00;0,00;;EUR
+2025-12-02;01:00:00;Executed;"251202-VOXAJPKASRGME5EFWZIIAL";"";Cash;Deposit;;;;1,00;0,00;;EUR

@@ -74,8 +74,71 @@ for j, i in enumerate(isins):
 # holdings "ISIN:qty|…" = locked preset with fixed quantities; "ISIN:20%|…" = weighting preset (must total 100 %), offered in
 # the "+ Benchmark" menu; start "card" = also an editable own card at load, shown in the chart (user 28.09.2026: only Mein
 # Depot), "menu" (or empty) = only in the menu
+# "Depot-Historie" (user 29.09.2026): the real depot replayed from the Scalable transaction export (depot_transactions.csv,
+# semicolon CSV with German decimals). Securities value only (shares x daily close; no cash), from START on; per trading day
+# the holdings after that day's executed trades. Alphabet 2x Factor GS has no prices: its shares count as the Leverage
+# Shares 2x Alphabet ETP scaled by the mean ratio of its trade prices to that ETP's close; the Broadcom call's value is
+# bridged linearly from its purchase amount to its sale amount; SK Hynix ADR, the WTI 10x factor and the D-Wave turbo
+# (same-day trades / before START) are left out. The preset row in benchmarks.csv has holdings = "transactions".
+DEPOT_HISTORY = {'file': 'depot_transactions.csv', 'start': '2026-03-17',
+                 'proxy': {'DE000GX6ZLS7': 'IE00BF01VY89'}, 'bridge': ['DE000PK3XT09'],
+                 'ignore': ['US78392B2060', 'DE000MR1T947', 'DE000HM0L6H3']}
+
+def de_num(s):
+    s = (s or '').strip()
+    return float(s.replace('.', '').replace(',', '.')) if s else 0.0
+
+def depot_schedule(dates_daily, prices_daily):
+    """-> {start, steps: [{date, holdings: {ISIN: qty}, extra: EUR}], proxies, info} (steps only where something changes)"""
+    cfg, f = DEPOT_HISTORY, D/DEPOT_HISTORY['file']
+    if not f.exists(): return None
+    tx = [r for r in csv.DictReader(open(f, encoding='utf-8-sig'), delimiter=';') if r['status'] == 'Executed'
+          and r['assetType'] == 'Security' and r['type'] in ('Buy', 'Sell') and r['isin'] not in cfg['ignore']]
+    tx.sort(key=lambda r: (r['date'], r['time']))
+    # proxy factor per replaced ISIN: mean(trade price / proxy close on the trade date)
+    factor = {}
+    for i, pi in cfg['proxy'].items():
+        rs = [de_num(r['price']) / prices_daily[pi][dates_daily.index(r['date'])] for r in tx
+              if r['isin'] == i and r['date'] in dates_daily and prices_daily[pi][dates_daily.index(r['date'])]]
+        if not rs: errors.append(f'Depot-Historie: no proxy prices for {i}'); return None
+        factor[i] = sum(rs) / len(rs)
+    # bridged instruments: (buy date, buy amount, sell date, sell amount) -> value per day in between
+    bridge = {}
+    for i in cfg['bridge']:
+        b = [r for r in tx if r['isin'] == i]
+        buys = [r for r in b if r['type'] == 'Buy']; sells = [r for r in b if r['type'] == 'Sell']
+        if buys and sells:
+            bridge[i] = (buys[0]['date'], -de_num(buys[0]['amount']), sells[-1]['date'], de_num(sells[-1]['amount']))
+    hold, k, steps, prev = {}, 0, [], None
+    for d in [x for x in dates_daily if x >= cfg['start']]:
+        while k < len(tx) and tx[k]['date'] <= d:
+            r = tx[k]; k += 1
+            if r['isin'] in bridge: continue
+            q = de_num(r['shares']) * (1 if r['type'] == 'Buy' else -1)
+            i = r['isin']
+            if i in factor: i, q = cfg['proxy'][i], q * factor[i]
+            hold[i] = hold.get(i, 0) + q
+            if abs(hold[i]) < 1e-9: del hold[i]
+        extra = 0.0
+        for i, (d0, a0, d1, a1) in bridge.items():
+            if d0 <= d < d1:
+                days = [x for x in dates_daily if d0 <= x <= d1]
+                extra += a0 + (a1 - a0) * days.index(d) / (len(days) - 1)
+        cur = ({i: round(q, 10) for i, q in sorted(hold.items())}, round(extra, 2))
+        if cur != prev: steps.append({'date': d, 'holdings': cur[0], 'extra': cur[1]}); prev = cur
+    for s in steps:
+        for i in s['holdings']:
+            if i not in prices_daily: errors.append(f'Depot-Historie: {i} is not a price column')
+    return {'start': cfg['start'], 'steps': steps, 'proxies': {i: [cfg['proxy'][i], factor[i]] for i in factor},
+            'bridged': sorted(bridge), 'ignored': cfg['ignore'], 'transactions': len(tx)}
+
 benchmarks, card_presets = [], []
 for b in bench:
+    if b['holdings'].strip() == 'transactions':               # Depot-Historie: replayed from the transaction export
+        sch = depot_schedule([r[0] for r in rows], {i: [num(r[3 + j]) if 3 + j < len(r) else None for r in rows] for j, i in enumerate(isins)})
+        if sch: card_presets.append({'id': b['id'], 'name': b['name'], 'description': b['description'],
+                                     'start': (b.get('start') or 'menu').strip(), 'schedule': sch})
+        continue
     parts = [x.split(':') for x in b['holdings'].split('|') if x.strip()]
     pct = [v.strip().endswith('%') for _, v in parts]
     if any(pct) and not all(pct): errors.append(f"benchmarks.csv {b['id']}: mix of quantities and percentages"); continue
