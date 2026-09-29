@@ -11,7 +11,7 @@ Use `python` (Windows) or `python3` where `python` is missing. Read-only Scalabl
 1. **Plan**: `python data/update_prices.py --plan`
    - `WARNING: … more than three_months covers` → stop and ask the user how to proceed.
    - Otherwise it prints one prompt per batch (`--- prompt 1/2 ---` …). Do not print them to the user.
-2. **Fetch**: start one agent per printed prompt, **all in one message** (agent type `price-fetcher`, model `haiku`),
+2. **Fetch**: start one agent per printed prompt, **all in one message** (agent type `price-fetcher`, model `claude-sonnet-5-5`),
    each prompt copied exactly. Wait for all answers. The hook `.claude/hooks/save-chart.cjs` writes the files; each agent
    only answers `SAVED n of m` plus any problem lines.
    - Any answer `HOOK NOT ACTIVE` → stop. Tell the user the quote-saving hook did not run: Node must be installed and on
