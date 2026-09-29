@@ -14,7 +14,6 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 - **Design (29.09.):** no headline figure above the chart any more (only the legend with each line's %; period and notes
   in a muted line under the chart); measurement = one caption with the span + one equal box per line (Portfolio first):
   "● name %", "start → end" in € as drawn (Startwert applies), € change; "Gleicher Wert" removed.
-  `tools/acceptance-check.cjs` still expects the old headline/boxes and needs a rewrite before its next run.
 - **Depot-Historie (29.09.):** preset in the "+ Benchmark" menu – the real depot replayed from the transaction export
   `data/depot_transactions.csv` (securities value from 17.03.2026, ends at today's holdings). A newer export replaces the
   file; `python data/build_data.py` rebuilds it.
@@ -73,9 +72,10 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 
 ## Verification
 - `node tests/engine.test.cjs`, `python tests/crosscheck.py && node tests/crosscheck.cjs` (numbers in the status block).
-- Browser acceptance: `tools/acceptance-check.cjs` (Playwright, real mouse/keyboard/touch at 1903/1400/375 px); final run
-  27.09.2026: 92 of 92 checks passed (Chromium 141, Segoe UI metrics via Selawik), results and screenshots in
-  `docs/verification/2026-09-27/`. Not covered: real Segoe UI on Windows, Edge, a physical touch device, a session still
+- Browser acceptance: `tools/acceptance-check.cjs` (Playwright, real mouse/keyboard/touch at 1903/1400/375 px); rewritten
+  29.09.2026 for the current dashboard (menu presets, one measurement block, legend-only headline, Startwert buttons; dates
+  and counts read from the data, the chart scrolled into view on phones): 92 of 92 checks passed (Segoe UI metrics via
+  Selawik – without it the list-width checks fail), results and screenshots in `docs/verification/2026-09-29/`. Not covered: real Segoe UI on Windows, Edge, a physical touch device, a session still
   in progress (only unit-tested).
   Usage and the Segoe UI font fallback for Linux: `docs/VERIFICATION.md`.
 
