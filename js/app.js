@@ -793,9 +793,13 @@
   // becomes an ordinary own card (editable, deletable, shown); start "card" ("Mein Depot") is also a card at load. The
   // fields show whole percentages, the exact weight stays behind a field until it is typed in (row.exact)
   var PRESETS = (Array.isArray(D.card_presets) ? D.card_presets : []).filter(function (p) {
-    return Object.keys(p.weights || {}).some(function (i) { return INSTR_BY[i]; });
+    return (p.schedule && p.schedule.steps && p.schedule.steps.length) || Object.keys(p.weights || {}).some(function (i) { return INSTR_BY[i]; });
   });
   function presetCard(p) {
+    if (p.schedule) {                    // "Depot-Historie" (user 29.09.): replayed transactions – a fixed card, no % rows
+      return { id: 'bm' + (++cardSeq), name: String(p.name).slice(0, 40), defName: String(p.name).slice(0, 40), color: nextColor(),
+        show: true, rows: [], preset: p.id, schedule: p.schedule, description: p.description || '' };
+    }
     var rows = Object.keys(p.weights).filter(function (i) { return INSTR_BY[i]; })
       .map(function (i) { return newRow(i, fmtShare(Math.round(p.weights[i])), p.weights[i]); });
     var name = String(p.name || nextName()).slice(0, 40);
@@ -881,6 +885,10 @@
       return { b: b, id: b.id, name: b.name || b.id, color: colorOf(b.id), show: !!state.fixedOn[b.id] };
     });
     state.cards.forEach(function (c) {
+      if (c.schedule) {
+        out.push({ b: { id: c.id, name: cardName(c), schedule: c.schedule, description: c.description }, id: c.id, name: cardName(c), color: c.color, show: c.show });
+        return;
+      }
       var info = cardInfo(c);
       if (!info.valid) return;
       var desc = c.rows.filter(function (r) { return r.isin && rowVal(r) > 0; }).map(function (r) {
@@ -919,7 +927,20 @@
       ' spellcheck="false" aria-label="Anteil ' + (k + 1) + ' in Prozent"><span class="bb-pcts" aria-hidden="true">%</span></span>' +
       '<button type="button" class="bb-x" data-act="delrow" title="Zeile entfernen" aria-label="Zeile ' + (k + 1) + ' entfernen">×</button></div>';
   }
+  /** Fixed card of a replayed depot (schedule): name, return, what it is; show/hide and delete only. */
+  function schedCardHTML(c) {
+    var st = c.schedule.steps, last = st[st.length - 1], n = Object.keys(last.holdings).length;
+    return '<div class="bb-card bb-card--fixed" role="group" data-card="' + c.id + '" style="--c:' + c.color + '">' +
+      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i>Echte Transaktionen</span><span class="bb-icons">' +
+      showBtn() + iconBtn('del', 'trash', 'Löschen') + '</span></div>' +
+      '<div class="bb-namerow" title="' + esc(c.description || '') + '"><span class="bb-fixname">' + esc(c.name) + '</span><b class="bb-ret"></b></div>' +
+      '<div class="bb-meta">Wertpapierwert ab ' + esc(F.date(c.schedule.start || st[0].date, 'short')) + ', ohne Cash · ' + st.length +
+      ' Depotstände<br>endet bei den heutigen Stückzahlen (' + n + (n === 1 ? ' Position' : ' Positionen') + ')</div>' +
+      '<div class="bb-hold" title="' + esc(c.description || '') + '">' + esc(Object.keys(last.holdings).map(function (i) {
+        return INSTR_BY[i] ? INSTR_BY[i].short : i; }).join(' · ')) + '</div></div>';
+  }
   function cardHTML(c) {
+    if (c.schedule) return schedCardHTML(c);
     return '<div class="bb-card" role="group" data-card="' + c.id + '" style="--c:' + c.color + '">' +
       '<div class="bb-top"><label class="bb-lbl" for="bbn-' + c.id + '"><i class="bb-dot"></i>Name</label><span class="bb-icons">' +
       showBtn() + iconBtn('dup', 'copy', 'Duplizieren') + iconBtn('del', 'trash', 'Löschen') + '</span></div>' +
@@ -938,6 +959,8 @@
       '<button type="button" class="bb-mi" role="menuitem" data-act="empty"><b>Leere Karte</b><span>Instrumente und Anteile selbst wählen</span></button>' +
       (PRESETS.length ? '<div class="bb-msep">Vorlagen</div>' : '') +
       PRESETS.map(function (p) {
+        if (p.schedule) return '<button type="button" class="bb-mi" role="menuitem" data-act="preset" data-p="' + esc(p.id) + '" title="' + esc(p.description || '') + '">' +
+          '<b>' + esc(p.name) + '</b><span>' + esc('Echte Transaktionen ab ' + F.date(p.schedule.start, 'short') + ' · Wertpapierwert') + '</span></button>';
         var ws = Object.keys(p.weights).filter(function (i) { return INSTR_BY[i]; }).sort(function (a, b) { return p.weights[b] - p.weights[a]; });
         var sub = ws.slice(0, 3).map(function (i) { return fmtShare(Math.round(p.weights[i])) + ' % ' + INSTR_BY[i].short; }).join(' · ') +
           (ws.length > 3 ? ' · +' + (ws.length - 3) : '');
@@ -967,7 +990,7 @@
     focusCard(c.id, '.bb-name', false, true);
   }
   function makeEl(html) { var t = document.createElement('div'); t.innerHTML = html; return t.firstChild; }
-  function cardSig(c) { return c ? c.rows.map(function (r) { return r.id; }).join(',') : 'fixed'; }
+  function cardSig(c) { return c ? (c.schedule ? 'sched' : c.rows.map(function (r) { return r.id; }).join(',')) : 'fixed'; }
 
   /** Builds missing / structurally changed cards (every other card and the field being typed in stay), then patches the derived parts. */
   function renderBenchCards(M) {
@@ -1013,7 +1036,7 @@
     rb.className = 'bb-ret ' + sgn(r);
     rb.textContent = pct(r);
     rb.title = x ? 'Rendite im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') : 'wird erst bei 100 % berechnet';
-    if (!c) return;
+    if (!c || c.schedule) return;
     var info = cardInfo(c), tot = el.querySelector('.bb-total'), hint = el.querySelector('.bb-hint');
     el.classList.toggle('is-invalid', !info.valid);
     tot.textContent = fmtShare(info.total) + ' %';

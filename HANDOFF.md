@@ -11,6 +11,9 @@ The former local folder `C:\Users\simon\Downloads\simon\yacht portfolio dashboar
 <!-- data-status:end -->
 (The block above is rewritten by `--finish` / `--finish-add`; do not edit it by hand.)
 
+- **Depot-Historie (29.09.):** preset in the "+ Benchmark" menu – the real depot replayed from the transaction export
+  `data/depot_transactions.csv` (securities value from 17.03.2026, ends at today's holdings). A newer export replaces the
+  file; `python data/build_data.py` rebuilds it.
 - **Depot + Startwert (29.09.):** `data/depot.csv` / `depot_ref.csv` = the real Scalable depot (9 positions, read with
   get_portfolio_holdings/overview on 29.09.; "update depot" refreshes them). The top shows the real Yacht and "Mein Depot"
   (value + G/V seit Kauf) side by side. Startwert: empty = all lines start at the Yacht's value, buttons "Yacht" / "Mein

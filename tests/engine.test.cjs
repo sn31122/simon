@@ -924,6 +924,21 @@ test('depotNow: real depot value at the latest price and G/V seit Kauf from the 
   assert.strictEqual(E.depotNow(E.prepare(d)), null, 'unknown ISIN');
 });
 
+test('schedule benchmark: holdings changing over time, flat before the first step, extra € amounts', () => {
+  const dates = ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05'];
+  const c = ctxOf(dates, { prices: { A: [10, 11, 12, 13], B: [100, 100, 110, 120] } });
+  const bench = { id: 'h', name: 'H', schedule: { steps: [
+    { date: '2026-03-03', holdings: { A: 2 }, extra: 0 },
+    { date: '2026-03-04', holdings: { A: 2, B: 1 }, extra: 5 },
+    { date: '2026-03-05', holdings: { B: 1 }, extra: 0 }] } };
+  const raw = [22, 22, 2 * 12 + 110 + 5, 120];                     // flat before 03.03., then holdings × price (+ extra)
+  const s = E.benchmark(c, bench, 0, 3, 1000);
+  approxArr(s.value, raw.map((x) => 1000 * x / raw[0]), 1e-12, 'normalized to the base');
+  approxArr(s.raw, raw, 1e-12, 'raw');
+  const s2 = E.benchmark(c, bench, 2, 3);
+  approxArr(s2.value, [139, 120], 1e-12, 'range start inside the schedule');
+});
+
 test('prepare without res: everything counts as daily (dailyFrom 0)', () => {
   const c = ctxOf(['2026-03-02', '2026-03-03']);
   assert.strictEqual(c.dailyFrom, 0); assert.deepStrictEqual(c.res, ['d', 'd']);

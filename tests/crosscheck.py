@@ -8,7 +8,8 @@ def parse_preset(h):   # benchmarks.csv: "ISIN:qty|…" = fixed quantities (Mein
     parts = [x.split(':') for x in h.split('|')]
     if all(v.endswith('%') for _, v in parts): return ('weights', {i: float(v[:-1]) for i, v in parts})
     return ('holdings', {i: float(v) for i, v in parts})
-presets = {b['id']: parse_preset(b['holdings']) for b in csv.DictReader(open(R/'data/benchmarks.csv', encoding='utf-8'))}
+presets = {b['id']: parse_preset(b['holdings']) for b in csv.DictReader(open(R/'data/benchmarks.csv', encoding='utf-8'))
+           if b['holdings'].strip() != 'transactions'}          # Depot-Historie (replayed transactions): unit-tested in engine.test
 # fixed test benchmarks, independent of the UI: ('holdings', {ISIN: qty}) = constant quantities,
 # ('weights', {ISIN: %}) = benchmark card, bought at the range start and held (buy and hold)
 # the real depot's share counts of 25.09.2026 (locked "Mein Depot" until 28.09.): tests the quantity path of benchmarkRealPl
