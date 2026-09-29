@@ -1,6 +1,6 @@
 // PostToolUse hook for the Scalable MCP tool get_security_chart (matcher in .claude/settings.json).
 // Saves the chart points straight to the fetch files of the price update and replaces what the model sees with one line,
-// so a fetch agent spends ~80 tokens per call instead of ~6k and never copies numbers by hand.
+// so a fetch agent sees about 150 tokens of chart output per call instead of ~6k (estimates) and never copies numbers by hand.
 //
 //   seven_days   -> data/incoming/<ISIN>.csv      30-min points (6 sessions): closes + 30-min history
 //   one_month    -> data/incoming/2h/<ISIN>.csv   2-hour points (~1 month): 2-h history

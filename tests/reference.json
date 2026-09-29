@@ -2,7 +2,7 @@
  "dates": [
   "2016-09-30",
   "2026-09-28",
-  328
+  360
  ],
  "cases": [
   {
@@ -42,7 +42,7 @@
     "US8740541094"
    ],
    "start": 0,
-   "end": 327,
+   "end": 359,
    "startDate": "2016-09-30",
    "endDate": "2026-09-28",
    "startValueInput": null,
@@ -399,7 +399,7 @@
     "US8740541094"
    ],
    "start": 107,
-   "end": 327,
+   "end": 359,
    "startDate": "2025-09-29",
    "endDate": "2026-09-28",
    "startValueInput": null,
@@ -621,8 +621,8 @@
     "US8740391003",
     "US8740541094"
    ],
-   "start": 261,
-   "end": 327,
+   "start": 293,
+   "end": 359,
    "startDate": "2026-06-26",
    "endDate": "2026-09-28",
    "startValueInput": null,
@@ -795,8 +795,8 @@
     "US8740391003",
     "US8740541094"
    ],
-   "start": 306,
-   "end": 327,
+   "start": 338,
+   "end": 359,
    "startDate": "2026-08-28",
    "endDate": "2026-09-28",
    "startValueInput": null,
@@ -975,8 +975,8 @@
     "US8740391003",
     "US8740541094"
    ],
-   "start": 322,
-   "end": 327,
+   "start": 354,
+   "end": 359,
    "startDate": "2026-09-21",
    "endDate": "2026-09-28",
    "startValueInput": null,
@@ -1106,8 +1106,8 @@
     "US8740391003",
     "US8740541094"
    ],
-   "start": 199,
-   "end": 327,
+   "start": 231,
+   "end": 359,
    "startDate": "2026-03-27",
    "endDate": "2026-09-28",
    "startValueInput": null,
@@ -1296,8 +1296,8 @@
     "US7960508882",
     "US8740391003"
    ],
-   "start": 180,
-   "end": 286,
+   "start": 212,
+   "end": 318,
    "startDate": "2026-03-02",
    "endDate": "2026-07-31",
    "startValueInput": 100000.0,
@@ -1488,7 +1488,7 @@
   "all_90": 55,
   "semis_90": 0,
   "all_50": 0,
-  "daily_from": 139
+  "daily_from": 171
  },
  "whatif": {
   "overrides": {
@@ -1533,8 +1533,8 @@
   {
    "name": "1W_m30",
    "key": "m30",
-   "start": 322,
-   "end": 327,
+   "start": 354,
+   "end": 359,
    "m": 161,
    "last": 160,
    "days": [
@@ -2430,8 +2430,8 @@
   {
    "name": "1M_h2",
    "key": "h2",
-   "start": 306,
-   "end": 327,
+   "start": 338,
+   "end": 359,
    "m": 190,
    "last": 189,
    "days": [
@@ -3697,8 +3697,8 @@
   {
    "name": "custom_0901_0907_h2",
    "key": "h2",
-   "start": 308,
-   "end": 312,
+   "start": 340,
+   "end": 344,
    "m": 37,
    "last": 36,
    "days": [
@@ -3930,57 +3930,57 @@
   {
    "label": "1T",
    "preset": "1T",
-   "start": 326,
-   "end": 327,
+   "start": 358,
+   "end": 359,
    "key": "m30"
   },
   {
    "label": "1W",
    "preset": "1W",
-   "start": 322,
-   "end": 327,
+   "start": 354,
+   "end": 359,
    "key": "m30"
   },
   {
    "label": "1M",
    "preset": "1M",
-   "start": 306,
-   "end": 327,
+   "start": 338,
+   "end": 359,
    "key": "h2"
   },
   {
    "label": "3M",
    "preset": "3M",
-   "start": 261,
-   "end": 327,
+   "start": 293,
+   "end": 359,
    "key": "day"
   },
   {
    "label": "6M",
    "preset": "6M",
-   "start": 199,
-   "end": 327,
+   "start": 231,
+   "end": 359,
    "key": "day"
   },
   {
    "label": "YTD",
    "preset": "YTD",
-   "start": 138,
-   "end": 327,
+   "start": 170,
+   "end": 359,
    "key": "day"
   },
   {
    "label": "1J",
    "preset": "1J",
    "start": 107,
-   "end": 327,
+   "end": 359,
    "key": "day"
   },
   {
    "label": "MAX",
    "preset": "MAX",
    "start": 0,
-   "end": 327,
+   "end": 359,
    "key": "day"
   },
   {
@@ -3988,8 +3988,8 @@
    "preset": "custom",
    "frm": "2026-09-18",
    "to": "2026-09-25",
-   "start": 321,
-   "end": 326,
+   "start": 353,
+   "end": 358,
    "key": "m30"
   },
   {
@@ -3997,8 +3997,8 @@
    "preset": "custom",
    "frm": "2026-09-01",
    "to": "2026-09-07",
-   "start": 308,
-   "end": 312,
+   "start": 340,
+   "end": 344,
    "key": "h2"
   },
   {
@@ -4006,8 +4006,8 @@
    "preset": "custom",
    "frm": "2026-08-10",
    "to": "2026-08-17",
-   "start": 292,
-   "end": 297,
+   "start": 324,
+   "end": 329,
    "key": "day"
   },
   {
@@ -4015,8 +4015,8 @@
    "preset": "custom",
    "frm": "2026-09-01",
    "to": "2026-09-21",
-   "start": 308,
-   "end": 322,
+   "start": 340,
+   "end": 354,
    "key": "h2"
   },
   {
@@ -4024,8 +4024,8 @@
    "preset": "custom",
    "frm": "2026-09-24",
    "to": "2026-09-25",
-   "start": 325,
-   "end": 326,
+   "start": 357,
+   "end": 358,
    "key": "m30"
   },
   {
@@ -4033,8 +4033,8 @@
    "preset": "custom",
    "frm": "2026-08-25",
    "to": "2026-09-01",
-   "start": 303,
-   "end": 308,
+   "start": 335,
+   "end": 340,
    "key": "h2"
   },
   {
@@ -4042,8 +4042,8 @@
    "preset": "custom",
    "frm": "2026-08-20",
    "to": "2026-08-27",
-   "start": 300,
-   "end": 305,
+   "start": 332,
+   "end": 337,
    "key": "day"
   },
   {
@@ -4051,8 +4051,8 @@
    "preset": "custom",
    "frm": "2026-07-01",
    "to": "2026-09-25",
-   "start": 264,
-   "end": 326,
+   "start": 296,
+   "end": 358,
    "key": "day"
   }
  ],
