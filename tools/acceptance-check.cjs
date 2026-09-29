@@ -37,6 +37,12 @@ async function open(browser, width, height, touch) {
   page.on('pageerror', (e) => page.errors.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') page.errors.push('console: ' + m.text()); });
   await page.route('**/favicon.ico', (r) => r.fulfill({ status: 204 }));
+  // helpers (29.09.): own cards = every card except the "Mein Depot" preset card; names of the drawn benchmarks
+  await page.addInitScript(() => {
+    window.__own = (k) => PFApp.state.cards.filter((c) => c.preset !== 'my_depot')[k || 0];
+    window.__ownAll = () => PFApp.state.cards.filter((c) => c.preset !== 'my_depot');
+    window.__shown = () => PFApp.model().selB.map((x) => x.name).join();
+  });
   page.fallbackFont = FONT_DIR ? await addSegoeFallback(page, FONT_DIR) : false;
   await page.goto(URL, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.PFApp && document.querySelector('#benchCards .bb-card'));
@@ -67,7 +73,8 @@ async function scrollSettled(page) {
 
 /** Builds a card through the UI: rows = [[query, percent], ...]; returns the card id. */
 async function addCard(page, rows) {
-  await page.click('#benchCards [data-act="new"]');
+  await page.click('#benchCards .bb-add');           // "+ Benchmark" opens its menu (29.09.) -> "Leere Karte"
+  await page.click('#bbMenu .bb-mi[data-act="empty"]');
   for (let k = 0; k < rows.length; k++) {
     await page.keyboard.type(rows[k][0]);
     await page.keyboard.press('Enter');               // highlighted entry -> focus moves to the % field
@@ -112,7 +119,17 @@ async function chartGeo(page) {
   });
 }
 /** Real mouse drag inside the main chart between fractions fa and fb of the plot width. */
+/** On phones the chart can start below the fold (top blocks, Statistik panel above it): bring it into view first. */
+async function chartIntoView(page) {
+  await page.evaluate(() => {
+    const r = document.getElementById('mainChart').getBoundingClientRect(), bar = document.getElementById('topBar');
+    const top = bar ? bar.getBoundingClientRect().bottom : 0;
+    if (r.top < top || r.bottom > innerHeight) window.scrollBy(0, r.top - top - Math.max(0, (innerHeight - top - r.height) / 2));
+  });
+  await settle(page);
+}
 async function drag(page, fa, fb) {
+  await chartIntoView(page);
   const box = await page.locator('#mainChart svg').boundingBox();
   const L = await page.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
   const y = box.y + (L.top + L.bottom) / 2, xa = box.x + L.padL + L.plotW * fa, xb = box.x + L.padL + L.plotW * fb;
@@ -124,32 +141,33 @@ async function drag(page, fa, fb) {
   await settle(page);
 }
 async function hoverAt(page, f) {
+  await chartIntoView(page);
   const box = await page.locator('#mainChart svg').boundingBox();
   const L = await page.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
   await page.mouse.move(box.x + L.padL + L.plotW * f, box.y + (L.top + L.bottom) / 2, { steps: 2 });
   await settle(page);
 }
-/** Side box ("Mein Depot") numbers vs an independent engine computation for the pinned span. */
+/**
+ * Measurement boxes (29.09.: one tooltip, one equal box per line – Portfolio first, then the drawn benchmarks): every box's
+ * % / "start → end" / € change vs the drawn value series at the measured points. rows/expect = the "Mein Depot" box.
+ */
 async function depotBoxCheck(page) {
   return page.evaluate(() => {
-    const E = window.PFEngine, F = E.fmt, S = PFApp.state, M = PFApp.model(), pin = PFApp.sync.pinned() || PFApp.sync.measure;
-    const tip2 = document.querySelectorAll('#mainChart .pc-tip')[1];
-    if (!pin || !tip2 || tip2.hidden) return { side: false };
-    const a = Math.min(pin.a, pin.b), b = Math.max(pin.a, pin.b), ctx0 = E.prepare(window.PORTFOLIO_DATA);
-    const intra = !!M.intra, target = S.depotValue != null ? S.depotValue : E.benchmarkValueNow(ctx0, 'my_depot');
-    let pv, dv, i, j;
-    if (intra) { const d = M.intra.benches.find((o) => o.x.id === 'my_depot'); pv = M.intra.value; dv = d.s.value; i = a; j = b; }
-    else { const d = M.selB.find((x) => x.id === 'my_depot'); pv = M.p.value; dv = d.s.value; i = M.R.start + a; j = M.R.start + b; }
-    // sub-daily chart (1T/1W/1M/custom): the real change is read on the same frame, rebuilt here from the fresh context
-    const frame = intra ? E.gridFrame(ctx0, M.intra.key, M.R.start, M.R.end, { context: !!M.intra.frame.context, trim: M.R.end - M.R.start > 1 }) : null;
-    const w = E.equalValueWindow(pv, dv, a, b), real = E.benchmarkRealPl(ctx0, 'my_depot', i, j, { frame, target });
-    const rows = Array.from(tip2.querySelectorAll('.tt-dv')).map((n) => n.textContent.trim());
-    const labels = tip2.textContent;
-    return {
-      side: true, rows,
-      expect: [F.pct(w.ret, { sign: true, dec: 2 }), F.eur(w.pl, { sign: true, dec: 2 }), F.eur(real, { sign: true, dec: 2 })],
-      targetLabel: F.eur(target, { dec: 0 }).replace(/\s/g, ' '), hasTarget: labels.indexOf(F.eur(target, { dec: 0 })) >= 0
-    };
+    const E = window.PFEngine, F = E.fmt, M = PFApp.model(), pin = PFApp.sync.pinned() || PFApp.sync.measure;
+    const tip = document.querySelector('#mainChart .pc-tip');
+    if (!pin || !tip || tip.hidden || !tip.querySelector('.tt-d')) return { side: false };
+    const a = Math.min(pin.a, pin.b), b = Math.max(pin.a, pin.b);
+    const lines = M.intra ? [['Portfolio', M.intra.value]].concat(M.intra.benches.map((o) => [o.x.name, o.s.value]))
+      : [['Portfolio', M.p.value]].concat(M.selB.filter((x) => x.s).map((x) => [x.name, x.s.value]));
+    const boxes = Array.from(tip.querySelectorAll('.tt-d')).map((d) => [d.querySelector('.tt-dv').textContent.trim(),
+      d.querySelector('.tt-dval').textContent.trim(), d.querySelector('.tt-dchg').textContent.trim()]);
+    const exp = lines.map(([, v]) => {
+      const w = E.intradayWindow(v, a, b);
+      return [F.pct(w.ret, { sign: true, dec: 2 }), F.eur(v[a], { dec: 0 }) + ' → ' + F.eur(v[b], { dec: 0 }), F.eur(w.pl, { sign: true, dec: 0 })];
+    });
+    const k = lines.findIndex((l) => l[0] === 'Mein Depot');
+    return { side: k > 0 && boxes.length === lines.length, n: boxes.length, nl: lines.length, rows: k > 0 ? boxes[k] : null, expect: k > 0 ? exp[k] : null,
+      all: JSON.stringify(boxes) === JSON.stringify(exp), caption: (tip.querySelector('.tt-cap') || {}).textContent || '', hasTarget: true };
   });
 }
 
@@ -163,68 +181,72 @@ async function depotBoxCheck(page) {
     let page = await open(browser, 1903, 1000);
     pages.push(page);
     const data = await page.evaluate(() => {
-      const D = window.PORTFOLIO_DATA, ins = D.instruments.map((i) => i.isin);
-      const g = (k) => D.grids && D.grids[k] ? D.grids[k].dates[0] + '..' + D.grids[k].dates[D.grids[k].dates.length - 1] + ' (' + D.grids[k].dates.length + ')' : null;
+      const D = window.PORTFOLIO_DATA, ins = D.instruments.map((i) => i.isin), n = D.dates.length, last = D.dates[n - 1];
+      const g = (k) => D.grids && D.grids[k] ? D.grids[k].dates[D.grids[k].dates.length - 1] : null;
+      const hist = (D.res || []).filter((r) => r !== 'd').length;
       return {
-        instruments: ins.length, prices: Object.keys(D.prices).length, dates: D.dates.length, first: D.dates[0], last: D.dates[D.dates.length - 1],
-        lastStatus: D.status[D.status.length - 1], m30: g('m30'), h2: g('h2'), bloom: ins.filter((i) => i === 'US0937121079').length,
-        newOnes: ['US19247G1076', 'US55024U1097', 'US5949181045', 'US67066G1040'].every((i) => ins.indexOf(i) >= 0 && D.prices[i]),
-        added27: ['NL0009805522', 'US21873S1087', 'US21874A1060', 'AU0000185993', 'US36828A1016', 'US92537N1081', 'US21037T1097', 'US0255371017',
-          'US92840M1027', 'US2333311072', 'US3379321074', 'US6293775085', 'US1258961002', 'US83418M1036'].every((i) => ins.indexOf(i) >= 0 && D.prices[i]),
-        presets: (D.card_presets || []).map((b) => b.id + ':' + Object.keys(b.weights).length + ':' + Object.values(b.weights).reduce((a, x) => a + x, 0)),
-        benchmarks: D.benchmarks.map((b) => b.id), positions: D.positions.length
+        instruments: ins.length, prices: Object.keys(D.prices).length, dates: n, last, lastStatus: D.status[n - 1],
+        intradayOnlyLast: D.status.slice(0, -1).every((x) => x === 'final'), m30: g('m30'), h2: g('h2'), hist, dailyFrom: D.meta.daily_from,
+        res: Array.isArray(D.res) && D.res.length === n, bloom: ins.filter((i) => i === 'US0937121079').length,
+        presets: (D.card_presets || []).map((b) => b.id + ':' + b.start), benchmarks: D.benchmarks.map((b) => b.id), positions: D.positions.length,
+        depot: !!(D.depot && D.depot.holdings && Object.keys(D.depot.holdings).length), allPriced: ins.every((i) => D.prices[i])
       };
     });
-    // data.intraday (last 2 sessions) was replaced by data.grids (chart interval, 27.09.): 30 min 18.–25.09., 2 h 25.08.–25.09.
-    check('data', '64 instruments and price series (50 + 14 added 27.09.), 188 final rows to 2026-09-25, grids 30 min 18.–25.09. (6) and 2 h 25.08.–25.09. (24)',
-      data.instruments === 64 && data.prices === 64 && data.added27 && data.dates === 188 && data.last === '2026-09-25' && data.lastStatus === 'final' &&
-      data.m30 === '2026-09-18..2026-09-25 (6)' && data.h2 === '2026-08-25..2026-09-25 (24)', data);
-    check('data', 'four new stocks present, Bloom once, locked preset my_depot + weighting preset energie (11 ISINs, 100 %), 32 positions',
-      data.newOnes && data.bloom === 1 && data.benchmarks.join() === 'my_depot' && data.presets.join() === 'energie:11:100' && data.positions === 32);
+    check('data', 'every instrument has a price series; only the last row may be intraday; history rows before the daily data; 30-min and 2-h grids end on the last daily date',
+      data.instruments === data.prices && data.allPriced && data.intradayOnlyLast && data.res && data.hist > 100 && data.dailyFrom === '2026-01-02' &&
+      data.m30 === data.last && data.h2 === data.last, data);
+    check('data', 'Bloom once, 32 positions, no locked presets; presets Mein Depot (card) + Energie, Old portfolio, Situational Awareness, Depot-Historie (menu); depot data present',
+      data.bloom === 1 && data.positions === 32 && data.benchmarks.length === 0 && data.depot &&
+      ['my_depot:card', 'energie:menu', 'old_portfolio:menu', 'situational_awareness:menu', 'depot_history:menu'].every((x) => data.presets.indexOf(x) >= 0), data);
 
     // ================================================================= benchmark cards
     const init = await page.evaluate(() => {
-      const cards = document.querySelectorAll('#benchCards .bb-card'), f = cards[0], e = cards[1], c = PFApp.state.cards[0];
-      return { n: cards.length, fixed: f.classList.contains('bb-card--fixed'), acts: Array.from(f.querySelectorAll('[data-act]')).map((b) => b.getAttribute('data-act')),
-        inputs: f.querySelectorAll('input').length, shown: PFApp.state.benchmarks.join(), legend: document.getElementById('legend').textContent,
-        energie: e && c ? { name: c.name, show: c.show, rows: c.rows.length, first: c.rows[0].q + ' ' + c.rows[0].pct, hidden: e.classList.contains('is-hidden'),
-          total: e.querySelector('.bb-total').textContent, ret: e.querySelector('.bb-ret').textContent, del: !!e.querySelector('[data-act="del"]'),
-          pctInputs: e.querySelectorAll('.bb-pct').length } : null };
+      const cards = document.querySelectorAll('#benchCards .bb-card'), f = cards[0], c = PFApp.state.cards.find((x) => x.preset === 'my_depot');
+      return { n: cards.length, name: c && c.name, preset: c && c.preset, show: c && c.show, color: c && c.color,
+        acts: Array.from(f.querySelectorAll('[data-act]')).map((b) => b.getAttribute('data-act')), pctInputs: f.querySelectorAll('.bb-pct').length,
+        pcts: Array.from(f.querySelectorAll('.bb-pct')).map((x) => x.value), total: f.querySelector('.bb-total').textContent,
+        shown: window.__shown(), legend: document.getElementById('legend').textContent };
     });
-    check('cards', 'initially the locked Mein Depot card (shown, no edit/delete controls) and the editable Energie preset card, hidden in the chart',
-      init.n === 2 && init.fixed && init.acts.join() === 'show' && init.inputs === 0 && init.shown === 'my_depot' && /Mein Depot/.test(init.legend) &&
-      !!init.energie && init.energie.name === 'Energie' && !init.energie.show && init.energie.hidden && init.energie.rows === 11 &&
-      init.energie.first === 'GE Vernova 20' && init.energie.total === '100 %' && /%/.test(init.energie.ret) && init.energie.del && init.energie.pctInputs === 11 &&
-      !/Energie/.test(init.legend), init);
-    const eid = await page.evaluate(() => PFApp.state.cards[0].id);
-    await page.click('#benchCards [data-card="' + eid + '"] [data-act="show"]');
+    check('cards', 'initially only the "Mein Depot" preset card: editable (% rows, whole numbers, total 100 %), white, shown in the chart',
+      init.n === 1 && init.name === 'Mein Depot' && init.preset === 'my_depot' && init.show && init.color.toLowerCase() === '#f2f3f4' &&
+      init.pctInputs >= 9 && init.pcts.every((v) => /^\d+$/.test(v)) && init.total === '100 %' && init.shown === 'Mein Depot' && /Mein Depot/.test(init.legend) &&
+      ['show', 'dup', 'del'].every((a) => init.acts.indexOf(a) >= 0), init);
+    await page.click('#benchCards .bb-add');
+    const menu = await page.evaluate(() => ({ open: !document.getElementById('bbMenu').hidden,
+      items: Array.from(document.querySelectorAll('#bbMenu .bb-mi')).map((b) => b.getAttribute('data-p') || b.getAttribute('data-act')) }));
+    await page.click('#bbMenu .bb-mi[data-p="energie"]');
     await settle(page);
-    const eShown = await page.evaluate((id) => ({ shown: PFApp.state.benchmarks.join(), legend: /Energie/.test(document.getElementById('legend').textContent),
-      lines: PFApp.charts.main.model.benches.length, table: Array.from(document.querySelectorAll('#benchTable tbody tr')).some((r) => /Energie/.test(r.textContent)) }), eid);
+    const eid = await page.evaluate(() => PFApp.state.cards[PFApp.state.cards.length - 1].id);
+    const eShown = await page.evaluate((id) => ({ shown: window.__shown(), legend: /Energie/.test(document.getElementById('legend').textContent),
+      lines: PFApp.charts.main.model.benches.length, table: Array.from(document.querySelectorAll('#benchTable tbody tr')).some((r) => /Energie/.test(r.textContent)),
+      rows: PFApp.state.cards.find((c) => c.id === id).rows.length }), eid);
     await page.click('#benchCards [data-card="' + eid + '"] [data-act="del"]');
     await settle(page);
-    const eDel = await page.evaluate(() => ({ cards: PFApp.state.cards.length, dom: document.querySelectorAll('#benchCards .bb-card').length, shown: PFApp.state.benchmarks.join() }));
-    check('cards', 'Energie preset: the eye draws it (legend, chart line, Benchmark-Vergleich), the trash deletes it like an own card',
-      eShown.shown === 'my_depot,' + eid && eShown.legend && eShown.lines === 2 && eShown.table && eDel.cards === 0 && eDel.dom === 1 && eDel.shown === 'my_depot', { eShown, eDel });
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    const eDel = await page.evaluate(() => ({ cards: PFApp.state.cards.length, dom: document.querySelectorAll('#benchCards .bb-card').length, shown: window.__shown() }));
+    check('cards', '"+ Benchmark" menu: Leere Karte + every preset; Energie is added shown (legend, chart line, Benchmark-Vergleich), the trash deletes it',
+      menu.open && ['empty', 'my_depot', 'energie', 'old_portfolio', 'situational_awareness', 'depot_history'].every((x) => menu.items.indexOf(x) >= 0) &&
+      eShown.shown === 'Mein Depot,Energie' && eShown.legend && eShown.lines === 2 && eShown.table && eShown.rows === 11 &&
+      eDel.cards === 1 && eDel.dom === 1 && eDel.shown === 'Mein Depot', { menu, eShown, eDel });
+    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
     await settle(page);
     const hidden = await page.evaluate(() => ({ shown: PFApp.state.benchmarks.length, legend: document.getElementById('legend').textContent,
       lines: PFApp.charts.main.model.benches.length, table: document.querySelectorAll('#benchTable tbody tr').length }));
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
     await settle(page);
-    const reshown = await page.evaluate(() => PFApp.state.benchmarks.join());
+    const reshown = await page.evaluate(() => window.__shown());
     check('cards', 'Mein Depot hide/show removes and restores it everywhere',
-      hidden.shown === 0 && !/Mein Depot/.test(hidden.legend) && hidden.lines === 0 && reshown === 'my_depot', hidden);
+      hidden.shown === 0 && !/Mein Depot/.test(hidden.legend) && hidden.lines === 0 && reshown === 'Mein Depot', hidden);
 
-    await page.click('#benchCards [data-act="new"]');
+    await page.click('#benchCards .bb-add');
+    await page.click('#bbMenu .bb-mi[data-act="empty"]');
     await settle(page);
     const fresh = await page.evaluate(() => {
-      const a = document.activeElement, c = PFApp.state.cards[0], drop = document.getElementById('bbDrop');
+      const a = document.activeElement, c = window.__own(0), drop = document.getElementById('bbDrop');
       return { focusIns: a && a.classList.contains('bb-ins'), inCard: !!(a && a.closest('[data-card="' + c.id + '"]')), rows: c.rows.length,
         name: c.name, open: !drop.hidden, opts: drop.querySelectorAll('.bb-opt').length, all: window.PORTFOLIO_DATA.instruments.length, color: c.color };
     });
-    check('cards', 'new card: "Benchmark 1", one empty row, focus in its instrument field, list open with every instrument (64)',
-      fresh.focusIns && fresh.inCard && fresh.rows === 1 && fresh.name === 'Benchmark 1' && fresh.open && fresh.opts === fresh.all && fresh.all === 64, fresh);
+    check('cards', 'new card: "Benchmark 1", one empty row, focus in its instrument field, list open with every instrument',
+      fresh.focusIns && fresh.inCard && fresh.rows === 1 && fresh.name === 'Benchmark 1' && fresh.open && fresh.opts === fresh.all && fresh.all === data.instruments, fresh);
 
     async function searchTop(q) {
       await selectAllAndType(page, q);
@@ -250,7 +272,7 @@ async function depotBoxCheck(page) {
     const hi2 = await page.evaluate(() => document.querySelector('#bbDrop .is-hi b').textContent);
     await page.keyboard.press('Enter');
     await settle(page);
-    const picked = await page.evaluate(() => { const c = PFApp.state.cards[0], a = document.activeElement; return { isin: c.rows[0].isin, q: c.rows[0].q, pctFocus: a.classList.contains('bb-pct'), closed: document.getElementById('bbDrop').hidden }; });
+    const picked = await page.evaluate(() => { const c = window.__own(0), a = document.activeElement; return { isin: c.rows[0].isin, q: c.rows[0].q, pctFocus: a.classList.contains('bb-pct'), closed: document.getElementById('bbDrop').hidden }; });
     check('cards', 'arrows wrap, Enter picks the highlighted entry and moves to the % field',
       nNas > 1 && wrapUp && picked.q === hi2 && picked.pctFocus && picked.closed, { nNas, wrapUp, hi2, picked });
     // Esc on a changed instrument field reverts it
@@ -258,7 +280,7 @@ async function depotBoxCheck(page) {
     await selectAllAndType(page, 'gold');
     await page.keyboard.press('Escape');
     await settle(page);
-    const esc1 = await page.evaluate(() => ({ val: document.activeElement.value, open: !document.getElementById('bbDrop').hidden, isin: PFApp.state.cards[0].rows[0].isin }));
+    const esc1 = await page.evaluate(() => ({ val: document.activeElement.value, open: !document.getElementById('bbDrop').hidden, isin: window.__own(0).rows[0].isin }));
     check('cards', 'Esc closes the list and reverts the typed text', esc1.val === picked.q && !esc1.open && esc1.isin === picked.isin, esc1);
     // Esc with nothing to revert reaches the page: clears a measurement
     await page.evaluate(() => { PFApp.sync.measureStart(10); PFApp.sync.measureEnd(40); PFApp.sync.flush(); });
@@ -270,26 +292,26 @@ async function depotBoxCheck(page) {
     await settle(page);
     await page.keyboard.press('Tab');
     await settle(page);
-    const tab1 = await page.evaluate(() => ({ q: PFApp.state.cards[0].rows[0].q, pct: document.activeElement.classList.contains('bb-pct') }));
+    const tab1 = await page.evaluate(() => ({ q: window.__own(0).rows[0].q, pct: document.activeElement.classList.contains('bb-pct') }));
     check('cards', 'Tab with changed text picks the highlighted entry and moves to the % field', tab1.q === 'Micron' && tab1.pct, tab1);
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Tab');
     await settle(page);
-    check('cards', 'Tab on an unchanged field keeps the instrument', await page.evaluate(() => PFApp.state.cards[0].rows[0].q === 'Micron'));
+    check('cards', 'Tab on an unchanged field keeps the instrument', await page.evaluate(() => window.__own(0).rows[0].q === 'Micron'));
     await page.keyboard.press('Shift+Tab');
     await selectAllAndType(page, 'us5949181045');
     await page.evaluate(() => document.activeElement.blur());
     await settle(page);
-    const blur1 = await page.evaluate(() => PFApp.state.cards[0].rows[0].q);
-    await page.locator('#benchCards .bb-card:not(.bb-card--fixed) .bb-ins').first().click();
+    const blur1 = await page.evaluate(() => window.__own(0).rows[0].q);
+    await page.locator('#benchCards .bb-card:nth-child(2) .bb-ins').first().click();
     await selectAllAndType(page, 'Micr');
     await page.evaluate(() => document.activeElement.blur());
     await settle(page);
-    const blur2 = await page.evaluate(() => PFApp.state.cards[0].rows[0].q);
+    const blur2 = await page.evaluate(() => window.__own(0).rows[0].q);
     check('cards', 'blur: exact ISIN picks it, partial text is reverted', blur1 === 'Microsoft' && blur2 === 'Microsoft', { blur1, blur2 });
 
     // percentages and validity
-    const cid = await page.evaluate(() => PFApp.state.cards[0].id);
+    const cid = await page.evaluate(() => window.__own(0).id);
     const pctSel = '#benchCards [data-card="' + cid + '"] .bb-pct';
     async function pctState(text) {
       await page.locator(pctSel).first().click();
@@ -384,7 +406,7 @@ async function depotBoxCheck(page) {
     check('cards', 'hover % reads the period series (bought at the range start)', bw.hoverHas, bw);
 
     // consumers agree for a custom card (hide Mein Depot so the card is the first shown benchmark)
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
     await settle(page);
     const agree = await page.evaluate((id) => {
       const el = document.querySelector('[data-card="' + id + '"]'), card = el.querySelector('.bb-ret').textContent;
@@ -399,7 +421,7 @@ async function depotBoxCheck(page) {
     }, cid);
     check('cards', 'card return = legend = Benchmark-Vergleich = Kennzahlen bench line; monthly row, drawdown line + readout',
       agree.card === agree.legend && agree.card === agree.table && agree.kpi && agree.kpi.indexOf(agree.card) >= 0 && agree.month && agree.dd && agree.readout, agree);
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
     await settle(page);
     // invalid card excluded everywhere
     await page.locator(pctSel).first().click();
@@ -441,11 +463,11 @@ async function depotBoxCheck(page) {
     // structure: duplicate, second card, colours, same instrument in another card, clear, delete row, delete card
     await page.click('#benchCards [data-card="' + cid + '"] [data-act="dup"]');
     await settle(page);
-    const dup = await page.evaluate(() => { const c = PFApp.state.cards; const a = document.activeElement; return { n: c.length, name: c[1].name, rows: c[1].rows.map((r) => [r.isin, r.pct]), colors: c.map((x) => x.color), focusName: a.classList.contains('bb-name') && a.value === c[1].name }; });
+    const dup = await page.evaluate(() => { const c = window.__ownAll(); const a = document.activeElement; return { n: c.length, name: c[1].name, rows: c[1].rows.map((r) => [r.isin, r.pct]), colors: c.map((x) => x.color), focusName: a.classList.contains('bb-name') && a.value === c[1].name }; });
     check('cards', 'duplicate: "… (Kopie)", same rows, new colour, focus on its name',
       dup.n === 2 && dup.name === 'Benchmark 1 (Kopie)' && dup.rows.length === 2 && dup.colors[0] !== dup.colors[1] && dup.focusName, dup);
     const cid3 = await addCard(page, [['Microsoft', '100']]);
-    const three = await page.evaluate((id) => { const c = PFApp.state.cards; return { valid: PFApp.model().benches.some((b) => b.id === id), colors: c.map((x) => x.color) }; }, cid3);
+    const three = await page.evaluate((id) => { const c = window.__ownAll(); return { valid: PFApp.model().benches.some((b) => b.id === id), colors: c.map((x) => x.color) }; }, cid3);
     const palette = ['#28ebcf', '#e78e78', '#f2f3f4'];
     check('cards', 'same instrument allowed in another card; colours distinct and away from accent/neg/white',
       three.valid && new Set(three.colors).size === three.colors.length && three.colors.every((c) => palette.indexOf(c.toLowerCase()) < 0), three);
@@ -454,7 +476,7 @@ async function depotBoxCheck(page) {
     const cleared = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, empty: !c.rows[0].isin && !c.rows[0].pct, focus: a.classList.contains('bb-ins') && !!a.closest('[data-card="' + id + '"]') }; }, cid3);
     check('cards', 'clear leaves one empty row and focuses its instrument field', cleared.rows === 1 && cleared.empty && cleared.focus, cleared);
     await page.keyboard.press('Escape');
-    const dupId = await page.evaluate(() => PFApp.state.cards[1].id);
+    const dupId = await page.evaluate(() => window.__own(1).id);
     await page.click('#benchCards [data-card="' + dupId + '"] [data-act="delrow"]');
     await settle(page);
     const delrow = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, focusInCard: !!a.closest('[data-card="' + id + '"]') }; }, dupId);
@@ -462,7 +484,7 @@ async function depotBoxCheck(page) {
     const freed = await page.evaluate((id) => PFApp.state.cards.find((x) => x.id === id).color, dupId);
     await page.click('#benchCards [data-card="' + dupId + '"] [data-act="del"]');
     await settle(page);
-    const del = await page.evaluate(() => { const a = document.activeElement; return { n: PFApp.state.cards.length, focus: a && (a.getAttribute('data-act') || a.className) }; });
+    const del = await page.evaluate(() => { const a = document.activeElement; return { n: window.__ownAll().length, focus: a && (a.getAttribute('data-act') || a.className) }; });
     const cid4 = await addCard(page, [['Gold', '100']]);
     const reuse = await page.evaluate((id) => PFApp.state.cards.find((x) => x.id === id).color, cid4);
     check('cards', 'delete card moves focus to a sensible control; freed colour is reused', del.n === 2 && !!del.focus && reuse === freed, { del, freed, reuse });
@@ -528,10 +550,10 @@ async function depotBoxCheck(page) {
     const m1 = await page.evaluate(() => ({ pin: PFApp.sync.pinned(), btn: !document.getElementById('applyMeasure').hidden }));
     const g1 = await chartGeo(page), d1 = await depotBoxCheck(page);
     check('measure', 'forward drag pins a measurement; "Zeitraum auf Auswahl setzen" shown', !!m1.pin && m1.pin.b > m1.pin.a && m1.btn, m1);
-    check('measure', 'Yacht box + Mein Depot box beside it, inside the chart, not covering lines/labels',
-      g1.tips.length === 2 && g1.hits.length === 0 && g1.inside && Math.abs(g1.tips[0].top - g1.tips[1].top) < 1, g1);
-    check('measure', 'Mein Depot box: % / Gleicher Wert / Echt match an independent engine computation, label shows the real depot value',
-      d1.side && JSON.stringify(d1.rows) === JSON.stringify(d1.expect) && d1.hasTarget, d1);
+    check('measure', 'one measurement block (caption + one box per line), inside the chart, not covering lines/labels',
+      g1.tips.length === 1 && g1.hits.length === 0 && g1.inside && d1.n === d1.nl && /–/.test(d1.caption), { g1, n: d1.n, nl: d1.nl, caption: d1.caption });
+    check('measure', 'every box (Portfolio, Mein Depot): % / start → end € / € change match the drawn series at the measured points; no "Gleicher Wert"',
+      d1.side && d1.all && !(await page.evaluate(() => /Gleicher Wert/.test(document.getElementById('mainChart').textContent))), d1);
     await shot(page, 'measure-ytd-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: 'pinned YTD measurement with the Mein Depot box' });
     await page.keyboard.press('Escape');
     await settle(page);
@@ -543,7 +565,7 @@ async function depotBoxCheck(page) {
     await drag(page, 0.8, 0.35);
     const rev = await page.evaluate(() => PFApp.sync.pinned());
     const drev = await depotBoxCheck(page);
-    check('measure', 'reverse drag pins the same kind of span (a < b) with correct numbers', !!rev && rev.a < rev.b && drev.side && JSON.stringify(drev.rows) === JSON.stringify(drev.expect), { rev, drev });
+    check('measure', 'reverse drag pins the same kind of span (a < b) with correct numbers', !!rev && rev.a < rev.b && drev.side && drev.all, { rev, drev });
     // click - follow - click
     await page.keyboard.press('Escape');
     const box = await page.locator('#mainChart svg').boundingBox();
@@ -557,7 +579,7 @@ async function depotBoxCheck(page) {
     await settle(page);
     const ended = await page.evaluate(() => PFApp.sync.measure === null);
     check('measure', 'click sets the start, the end follows the pointer (live boxes), the next click ends it',
-      follow.following && follow.measure && follow.measure.b > follow.measure.a && follow.tips === 2 && ended, { follow, ended });
+      follow.following && follow.measure && follow.measure.b > follow.measure.a && follow.tips === 1 && ended, { follow, ended });
     await page.mouse.move(1, 1);
     // edges and full range
     const edges = {};
@@ -568,7 +590,7 @@ async function depotBoxCheck(page) {
       await page.keyboard.press('Escape');
     }
     check('measure', 'left-edge, right-edge and full-range spans stay inside the chart and cover nothing',
-      Object.values(edges).every((e) => e.tips === 2 && e.hits.length === 0 && e.inside), edges);
+      Object.values(edges).every((e) => e.tips === 1 && e.hits.length === 0 && e.inside), edges);
     // Gesamtrendite, Startwert, Mein Depot (€), hidden Mein Depot
     await drag(page, 0.4, 0.9);
     const base0 = await depotBoxCheck(page);
@@ -576,7 +598,7 @@ async function depotBoxCheck(page) {
     await settle(page);
     const plMode = await page.evaluate(() => { const t = document.querySelector('#mainChart .pc-tip'); return { pinned: !!PFApp.sync.pinned(), text: t.textContent }; });
     const dpl = await depotBoxCheck(page);
-    check('measure', 'Gesamtrendite keeps the measurement, signed values, same Mein Depot numbers',
+    check('measure', 'Gesamtrendite keeps the measurement and the same box numbers (the value series as drawn)',
       plMode.pinned && /[+−-]\d/.test(plMode.text) && JSON.stringify(dpl.rows) === JSON.stringify(base0.rows), { text: plMode.text.slice(0, 80), rows: dpl.rows });
     await page.click('#modeToggle [data-mode="value"]');
     const sv = {};
@@ -586,39 +608,48 @@ async function depotBoxCheck(page) {
       await settle(page);
       sv[v || 'leer'] = await depotBoxCheck(page);
     }
-    check('measure', 'Startwert 10.000 / 1.000.000 / empty: Gleicher Wert follows the scaled value, Echt unchanged, numbers match the engine',
-      Object.values(sv).every((d) => d.side && JSON.stringify(d.rows) === JSON.stringify(d.expect)) &&
-      sv['10000'].rows[2] === sv['leer'].rows[2] && sv['1000000'].rows[2] === sv['leer'].rows[2] &&
+    check('measure', 'Startwert 10.000 / 1.000.000 / empty: the boxes follow the scaled lines (same %, other €), numbers match the drawn series',
+      Object.values(sv).every((d) => d.side && d.all) && sv['10000'].rows[0] === sv['leer'].rows[0] && sv['1000000'].rows[0] === sv['leer'].rows[0] &&
       new Set([sv['10000'].rows[1], sv['1000000'].rows[1], sv['leer'].rows[1]]).size === 3,
       { s10k: sv['10000'].rows, s1m: sv['1000000'].rows, leer: sv['leer'].rows });
-    await page.locator('#depotValue').click();
-    await page.keyboard.type('150000');
+    // buttons next to Startwert (29.09.): "Mein Depot" = the real depot's current value, "Yacht" = empty
+    await page.click('#svDepot');
     await settle(page);
-    const dv = await depotBoxCheck(page);
-    check('measure', '"Mein Depot (€)" updates the open box (label + Echt), no hard-coded 298.811',
-      dv.side && dv.targetLabel === '150.000 €' && dv.hasTarget && JSON.stringify(dv.rows) === JSON.stringify(dv.expect), dv);
+    const svd = await page.evaluate(() => { const d = PFEngine.depotNow(PFEngine.prepare(window.PORTFOLIO_DATA));
+      return { sv: PFApp.state.startValue, want: Math.round(d.value), on: document.getElementById('svDepot').classList.contains('is-on'), start: Math.round(PFApp.model().p.value[0]) }; });
+    const dvb = await depotBoxCheck(page);
+    await page.click('#svYacht');
+    await settle(page);
+    const svy = await page.evaluate(() => ({ sv: PFApp.state.startValue, field: document.getElementById('startValue').value, on: document.getElementById('svYacht').classList.contains('is-on') }));
+    check('measure', '"Mein Depot" button: Startwert = the real depot value, every line starts there, boxes follow; "Yacht" empties it',
+      svd.sv === svd.want && svd.on && svd.start === svd.want && dvb.side && dvb.all && svy.sv === null && svy.field === '' && svy.on, { svd, svy });
+    await page.locator('#startValue').click();
     await selectAllAndType(page, '');
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
     await settle(page);
     await drag(page, 0.4, 0.9);
     const noDepot = await chartGeo(page);
-    check('measure', 'Mein Depot hidden: only the Yacht box', noDepot.tips.length === 1 && noDepot.hits.length === 0, noDepot.tips);
+    const nd = await depotBoxCheck(page);
+    const ndTxt = await page.evaluate(() => document.querySelector('#mainChart .pc-tip').textContent);
+    check('measure', 'Mein Depot hidden: no Mein Depot box (Portfolio + the other shown cards)',
+      noDepot.tips.length === 1 && noDepot.hits.length === 0 && nd.n === nd.nl && nd.rows === null && !/Mein Depot/.test(ndTxt), { tips: noDepot.tips, n: nd.n });
     await page.keyboard.press('Escape');
-    await page.click('#benchCards .bb-card--fixed [data-act="show"]');
+    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
     await settle(page);
     // 1T
     await page.click('#rangeTabs [data-preset="1T"]');
     await settle(page);
     const t1 = await page.evaluate(() => ({ x: Array.from(document.querySelectorAll('#mainChart .pc-xlabel')).map((n) => n.textContent),
-      note: document.getElementById('hlSub').textContent, intra: !!PFApp.model().intra, dates: PFApp.model().intra && PFApp.model().intra.dates }));
+      note: document.getElementById('chartNote').textContent, intra: !!PFApp.model().intra, dates: PFApp.model().intra && PFApp.model().intra.dates,
+      last2: window.PORTFOLIO_DATA.dates.slice(-2) }));
     const dayWords = t1.x.filter((t) => /^(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag|Gestern|Heute)$/.test(t));
-    check('data', '1T shows the 30-min sessions of 24./25.09. (two day labels, note "30-Minuten-Kurse bis 22:59 Uhr")',
-      t1.intra && JSON.stringify(t1.dates) === JSON.stringify(['2026-09-24', '2026-09-25']) && dayWords.length === 2 && /30-Minuten-Kurse bis 22:59 Uhr/.test(t1.note), { x: t1.x, dates: t1.dates, note: t1.note.slice(0, 120) });
+    check('data', '1T shows the 30-min sessions of the last two trading days (two day labels, note "30-Minuten-Kurse bis HH:MM Uhr" under the chart)',
+      t1.intra && JSON.stringify(t1.dates) === JSON.stringify(t1.last2) && dayWords.length === 2 && /30-Minuten-Kurse bis \d\d:\d\d Uhr/.test(t1.note), { x: t1.x, dates: t1.dates, note: t1.note.slice(0, 120) });
     await drag(page, 0.35, 0.6);
     const g1t = await chartGeo(page), d1t = await depotBoxCheck(page);
-    const lbl = await page.evaluate(() => document.querySelector('#mainChart .pc-tip .tt-date').textContent);
-    check('measure', '1T: slot labels, both boxes, intraday Echt/Gleicher Wert match the engine, nothing covered',
-      /, \d\d:\d\d$/.test(lbl) && g1t.tips.length === 2 && g1t.hits.length === 0 && d1t.side && JSON.stringify(d1t.rows) === JSON.stringify(d1t.expect), { lbl, g1t, d1t });
+    const lbl = await page.evaluate(() => document.querySelector('#mainChart .pc-tip .tt-cap').textContent);
+    check('measure', '1T: slot labels in the caption, both boxes match the 30-min lines, nothing covered',
+      /, \d\d:\d\d/.test(lbl) && g1t.tips.length === 1 && g1t.hits.length === 0 && d1t.side && d1t.all, { lbl, g1t, d1t });
     await shot(page, 'measure-1t-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: '1T measurement' });
     await page.keyboard.press('Escape');
     await page.click('#rangeTabs [data-preset="YTD"]');
@@ -635,7 +666,7 @@ async function depotBoxCheck(page) {
       return { key: M.iv.key, want: M.iv.want, note: document.getElementById('chartIv').textContent, m: I ? I.m : null, dates: I ? I.dates : null,
         x: Array.from(document.querySelectorAll('#mainChart .pc-xlabel')).map((n) => n.textContent),
         ddLen: PFApp.charts.dd.model && PFApp.charts.dd.model.dd ? PFApp.charts.dd.model.dd.length : null,
-        endGap: I && M.ps ? Math.abs(I.value[I.last] - M.ps.endValue) : null, baseGap: I && M.p ? Math.abs(I.base - M.p.startValue) : null,
+        endGap: I && M.ps ? Math.abs(I.value[I.last] - M.ps.endValue) : null, baseGap: I && M.p ? Math.abs(I.base - M.p.startValue) : null, endValue: M.ps ? M.ps.endValue : null,
         btn: !document.getElementById('applyMeasure').hidden, ranges: document.getElementById('dateRange').classList.contains('is-custom') };
     });
     /** Types a range into Von/Bis like a user (TT.MM.JJJJ digits, commit on the complete year); order keeps it valid. */
@@ -658,6 +689,7 @@ async function depotBoxCheck(page) {
       await typeRange(a, b);
       iv[name] = Object.assign(await ivState(), { custom: await page.evaluate(() => PFApp.state.custom) });
     }
+    const lastIntraday = await page.evaluate(() => window.PORTFOLIO_DATA.status.at(-1) === 'intraday');
     const ivKeys = Object.fromEntries(Object.entries(iv).map(([k, v]) => [k, v.key]));
     check('interval', 'interval per range: 1T/1W 30 min, 1M 2 h, 3M daily; custom week in the 30-min data 30 min, early-Sept. week 2 h, Aug. week daily, 3 weeks 2 h',
       JSON.stringify(ivKeys) === JSON.stringify({ '1T': 'm30', '1W': 'm30', '1M': 'h2', '3M': 'day', 'week in 30 min': 'm30', 'week early Sept.': 'h2', 'week in Aug.': 'day', '3 weeks': 'h2' }) &&
@@ -668,13 +700,14 @@ async function depotBoxCheck(page) {
       /^Intervall: 1 Tag · keine 30-Min- oder 2-Std-Kurse für diesen Zeitraum$/.test(iv['week in Aug.'].note) && /^Intervall: 2 Std\.$/.test(iv['3 weeks'].note),
       Object.fromEntries(Object.entries(iv).map(([k, v]) => [k, v.note])));
     check('interval', 'sub-daily charts start on the daily start value and end on the daily end value (headline = chart end); points per interval',
-      ['1W', '1M', 'week in 30 min', 'week early Sept.', '3 weeks'].every((k) => iv[k].endGap < 1e-6 && iv[k].baseGap < 1e-6) &&
-      iv['1W'].m === 161 && iv['1M'].m === 208 && iv['week early Sept.'].m === 37 && iv['1T'].m === 64 && iv['3M'].m === null,
+      // an open (intraday) last day: the grid's latest point may lie a few minutes after the daily price (tiny gap allowed)
+      ['1W', '1M', 'week in 30 min', 'week early Sept.', '3 weeks'].every((k) => iv[k].baseGap < 1e-6 && (iv[k].endGap < 1e-6 || (lastIntraday && iv[k].endGap / iv[k].endValue < 1e-3))) &&
+      iv['1W'].m > 100 && iv['1M'].m > iv['1W'].m && iv['week early Sept.'].m > 10 && iv['1T'].m === 64 && iv['3M'].m === null,
       Object.fromEntries(Object.entries(iv).map(([k, v]) => [k, { m: v.m, endGap: v.endGap, baseGap: v.baseGap }])));
-    check('interval', 'x axis: 1T unchanged (day words + 15:15), 1W one label per session "Mo 21.09.", 1M dates at week starts; drawdown on the same grid',
-      /^(Donnerstag|Gestern)$/.test(iv['1T'].x[0]) && iv['1T'].x.indexOf('15:15') > 0 &&
-      JSON.stringify(iv['1W'].x) === JSON.stringify(['Mo 21.09.', 'Di 22.09.', 'Mi 23.09.', 'Do 24.09.', 'Fr 25.09.']) &&
-      iv['1M'].x[0] === '26. Aug.' && iv['1M'].x.indexOf('7. Sept.') > 0 && ['1T', '1W', '1M', 'week early Sept.'].every((k) => iv[k].ddLen === iv[k].m),
+    check('interval', 'x axis: 1T day words + 15:15, 1W one label per session ("Mo 21.09."), 1M dates at week starts ("31. Aug."); drawdown on the same grid',
+      /^(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Gestern|Heute)$/.test(iv['1T'].x[0]) && iv['1T'].x.indexOf('15:15') > 0 &&
+      iv['1W'].x.length === 5 && iv['1W'].x.every((t) => /^(Mo|Di|Mi|Do|Fr) \d\d\.\d\d\.$/.test(t)) &&
+      /^\d+\. \S+$/.test(iv['1M'].x[0]) && ['1T', '1W', '1M', 'week early Sept.'].every((k) => iv[k].ddLen === iv[k].m),
       { '1T': iv['1T'].x, '1W': iv['1W'].x, '1M': iv['1M'].x, earlySept: iv['week early Sept.'].x });
     await shot(page, 'interval-2h-custom-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: 'custom 3-week range on the 2-h grid' });
     // 1W: hover labels, drag both directions, click-follow-click, boxes, Esc, Gesamtrendite, Startwert, what-if, empty
@@ -686,15 +719,15 @@ async function depotBoxCheck(page) {
     await hoverAt(page, 0.47);
     const h1 = await page.evaluate(() => ({ t: document.querySelector('#mainChart .pc-tip .tt-date').textContent, dd: document.getElementById('ddReadout').textContent }));
     await page.mouse.move(1, 1);
-    check('interval', '1W hover: date + time ("Mi 23.09., 14:30"), the start point "Fr 18.09., Schluss"; drawdown read-out with the same label',
-      h0 === 'Fr 18.09., Schluss' && /^(Mo|Di|Mi|Do|Fr) \d\d\.\d\d\., \d\d:\d\d$/.test(h1.t) && h1.dd.indexOf(h1.t) === 0, { h0, h1 });
+    check('interval', '1W hover: date + time ("Mi 23.09., 14:30"), the start point "…, Schluss"; drawdown read-out with the same label',
+      /^(Mo|Di|Mi|Do|Fr) \d\d\.\d\d\., Schluss$/.test(h0) && /^(Mo|Di|Mi|Do|Fr) \d\d\.\d\d\., \d\d:\d\d$/.test(h1.t) && h1.dd.indexOf(h1.t) === 0, { h0, h1 });
     await drag(page, 0.3, 0.75);
     const w1 = await page.evaluate(() => ({ pin: PFApp.sync.pinned(), btn: !document.getElementById('applyMeasure').hidden,
-      dates: Array.from(document.querySelectorAll('#mainChart .pc-tip--measure .tt-date')).map((n) => n.textContent), help: document.getElementById('chartHelp').textContent }));
+      dates: ((document.querySelector('#mainChart .pc-tip .tt-cap') || {}).textContent || '').split(' – ').filter(Boolean), help: document.getElementById('chartHelp').textContent }));
     const gw1 = await chartGeo(page), dw1 = await depotBoxCheck(page);
-    check('interval', '1W forward drag: pinned, both boxes with date + time labels, Mein Depot numbers match the engine on the 30-min grid, nothing covered, no "Zeitraum auf Auswahl setzen"',
+    check('interval', '1W forward drag: pinned, caption with date + time, the boxes match the 30-min lines, nothing covered, no "Zeitraum auf Auswahl setzen"',
       !!w1.pin && w1.pin.b > w1.pin.a && !w1.btn && w1.dates.length === 2 && w1.dates.every((t) => /^(Mo|Di|Mi|Do|Fr) \d\d\.\d\d\., (\d\d:\d\d|Schluss)$/.test(t)) &&
-      gw1.tips.length === 2 && gw1.hits.length === 0 && gw1.inside && dw1.side && JSON.stringify(dw1.rows) === JSON.stringify(dw1.expect) && /^Messung .+, \d\d:\d\d – /.test(w1.help),
+      gw1.tips.length === 1 && gw1.hits.length === 0 && gw1.inside && dw1.side && dw1.all && /^Messung .+, \d\d:\d\d – /.test(w1.help),
       { w1, hits: gw1.hits, rows: dw1.rows, expect: dw1.expect });
     await shot(page, 'measure-1w-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: '1W (30 min) measurement' });
     await page.keyboard.press('Escape');
@@ -708,7 +741,7 @@ async function depotBoxCheck(page) {
     await page.keyboard.press('Escape');
     await settle(page);
     check('interval', '1W reverse drag (a < b, numbers match), Gesamtrendite keeps it with signed values and the same Mein Depot numbers, Esc clears',
-      !!wrev && wrev.a < wrev.b && JSON.stringify(dwrev.rows) === JSON.stringify(dwrev.expect) && wpl.pinned && /[+−-]\d/.test(wpl.text) &&
+      !!wrev && wrev.a < wrev.b && dwrev.all && wpl.pinned && /[+−-]\d/.test(wpl.text) &&
       JSON.stringify(dwpl.rows) === JSON.stringify(dwrev.rows) && (await page.evaluate(() => PFApp.sync.measure === null)), { wrev, rows: dwrev.rows, pl: dwpl.rows });
     const bw1 = await page.locator('#mainChart svg').boundingBox();
     const Lw = await page.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
@@ -720,7 +753,7 @@ async function depotBoxCheck(page) {
     await page.mouse.click(bw1.x + Lw.padL + Lw.plotW * 0.25, yw);
     await settle(page);
     check('interval', '1W click-follow-click (leftwards): live boxes, the next click ends it',
-      wf.following && wf.m && wf.m.b < wf.m.a && wf.tips === 2 && (await page.evaluate(() => PFApp.sync.measure === null)), wf);
+      wf.following && wf.m && wf.m.b < wf.m.a && wf.tips === 1 && (await page.evaluate(() => PFApp.sync.measure === null)), wf);
     await page.mouse.move(1, 1);
     await page.locator('#startValue').click();
     await selectAllAndType(page, '100000');
@@ -733,7 +766,7 @@ async function depotBoxCheck(page) {
     await selectAllAndType(page, '');
     await settle(page);
     check('interval', '1W with Startwert 100.000: grid scaled from 100.000 €, ends on the scaled daily end, measure numbers match',
-      Math.abs(wsv.base - 100000) < 1e-6 && Math.abs(wsv.end - wsv.ps) < 1e-6 && JSON.stringify(dwsv.rows) === JSON.stringify(dwsv.expect), { wsv, rows: dwsv.rows });
+      Math.abs(wsv.base - 100000) < 1e-6 && Math.abs(wsv.end - wsv.ps) < 1e-6 && dwsv.all, { wsv, rows: dwsv.rows });
     const wwi = await page.evaluate(() => {
       const first = PFApp.model().assets[0].isin;
       PFApp.state.overrides = { [first]: 0 };
@@ -758,9 +791,9 @@ async function depotBoxCheck(page) {
     await settle(page);
     await drag(page, 0.15, 0.85);
     const gm1 = await chartGeo(page), dm1 = await depotBoxCheck(page);
-    const lm1 = await page.evaluate(() => Array.from(document.querySelectorAll('#mainChart .pc-tip--measure .tt-date')).map((n) => n.textContent));
+    const lm1 = await page.evaluate(() => ((document.querySelector('#mainChart .pc-tip .tt-cap') || {}).textContent || '').split(' – ').filter(Boolean));
     check('interval', '1M drag on the 2-h grid: boxes cover nothing, labels with time, Mein Depot numbers match',
-      gm1.tips.length === 2 && gm1.hits.length === 0 && gm1.inside && dm1.side && JSON.stringify(dm1.rows) === JSON.stringify(dm1.expect) &&
+      gm1.tips.length === 1 && gm1.hits.length === 0 && gm1.inside && dm1.side && dm1.all &&
       lm1.every((t) => /^(Mo|Di|Mi|Do|Fr) \d\d\.\d\d\., (\d\d:\d\d|Schluss)$/.test(t)), { lm1, hits: gm1.hits, rows: dm1.rows, expect: dm1.expect });
     await shot(page, 'measure-1m-1903', { clip: { x: 0, y: 0, width: 1903, height: 1000 }, note: '1M (2 h) measurement' });
     await page.keyboard.press('Escape');
@@ -854,10 +887,10 @@ async function depotBoxCheck(page) {
     await page.click('#selNone');
     await page.locator('#listToggles [data-list="assets"]').click();
     await settle(page);
-    const empty = await page.evaluate(() => ({ main: document.getElementById('hlMain').textContent, sub: document.getElementById('hlSub').textContent, btn: !!document.querySelector('#hlSub button, #hlSub a, .headline button'), assetsHidden: document.getElementById('assetBlock').hidden }));
+    const empty = await page.evaluate(() => ({ legend: document.getElementById('legend').textContent, btn: !!document.querySelector('#legend [data-hl-act="assets"]'), assetsHidden: document.getElementById('assetBlock').hidden }));
     let emptyOk = false;
     if (empty.btn) {
-      await page.click('#hlSub button, #hlSub a, .headline button');
+      await page.click('#legend [data-hl-act="assets"]');
       await page.waitForTimeout(150);
       await scrollSettled(page);
       emptyOk = await page.evaluate(() => { const b = document.getElementById('assetBlock'); const r = b.getBoundingClientRect(); return !b.hidden && r.top < innerHeight && r.bottom > 0 && PFApp.state.showAssets; });
@@ -890,8 +923,8 @@ async function depotBoxCheck(page) {
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForFunction(() => window.PFApp && document.querySelector('#benchCards .bb-card'));
     if (page.fallbackFont) await fontsReady(page);
-    const reset = await page.evaluate(() => ({ cards: PFApp.state.cards.length, shown: PFApp.state.benchmarks.join(), dom: document.querySelectorAll('#benchCards .bb-card').length, assets: PFApp.state.showAssets, hold: PFApp.state.showHold }));
-    check('cards', 'reload resets to Mein Depot + the hidden Energie preset (and list defaults); nothing persisted', reset.cards === 1 && reset.shown === 'my_depot' && reset.dom === 2 && !reset.assets && reset.hold, reset);
+    const reset = await page.evaluate(() => ({ cards: PFApp.state.cards.length, shown: window.__shown(), dom: document.querySelectorAll('#benchCards .bb-card').length, assets: PFApp.state.showAssets, hold: PFApp.state.showHold, sv: PFApp.state.startValue }));
+    check('cards', 'reload resets to the Mein Depot card only (and list defaults, empty Startwert); nothing persisted', reset.cards === 1 && reset.shown === 'Mein Depot' && reset.dom === 1 && !reset.assets && reset.hold && reset.sv === null, reset);
 
     // ================================================================= 1920 and 1400
     for (const w of [1920, 1400]) {
@@ -912,13 +945,13 @@ async function depotBoxCheck(page) {
         await settle(pg);
         await drag(pg, a, b);
         const g = await chartGeo(pg), d = await depotBoxCheck(pg), o = await overflow(pg);
-        ivw[p] = { key: await pg.evaluate(() => PFApp.model().iv.key), tips: g.tips.length, hits: g.hits, inside: g.inside, rows: JSON.stringify(d.rows) === JSON.stringify(d.expect), ok: o.sw <= o.w,
+        ivw[p] = { key: await pg.evaluate(() => PFApp.model().iv.key), tips: g.tips.length, hits: g.hits, inside: g.inside, rows: d.all, ok: o.sw <= o.w,
           x: await pg.evaluate(() => Array.from(document.querySelectorAll('#mainChart .pc-xlabel')).map((n) => n.textContent)) };
         await pg.keyboard.press('Escape');
       }
       await pg.click('#rangeTabs [data-preset="YTD"]');
       check('interval', w + ': 1W (30 min) and 1M (2 h) measurements cover nothing, Mein Depot numbers match, no page overflow',
-        ivw['1W'].key === 'm30' && ivw['1M'].key === 'h2' && Object.values(ivw).every((v) => v.tips === 2 && v.hits.length === 0 && v.inside && v.rows && v.ok && v.x.length >= 4), ivw);
+        ivw['1W'].key === 'm30' && ivw['1M'].key === 'h2' && Object.values(ivw).every((v) => v.tips === 1 && v.hits.length === 0 && v.inside && v.rows && v.ok && v.x.length >= 4), ivw);
       const btw = await badText(pg);
       check('general', w + ': no console errors, no NaN/undefined', pg.errors.length === 0 && !btw.nan && !btw.undef, { errors: pg.errors.slice(0, 5) });
     }
@@ -930,7 +963,7 @@ async function depotBoxCheck(page) {
     await drag(mp, 0.3, 0.8);
     const gm = await chartGeo(mp), dm = await depotBoxCheck(mp);
     check('mobile', 'measurement boxes stack, stay inside the chart, cover nothing; numbers match',
-      gm.tips.length === 2 && gm.tips[1].top >= gm.tips[0].bottom - 1 && gm.inside && gm.hits.length === 0 && JSON.stringify(dm.rows) === JSON.stringify(dm.expect), { gm, dm: dm.rows });
+      gm.tips.length === 1 && gm.inside && gm.hits.length === 0 && dm.all, { gm, dm: dm.rows });
     await shot(mp, 'measure-375', { clip: { x: 0, y: 0, width: 375, height: 812 }, note: 'stacked measurement boxes on a phone' });
     await mp.keyboard.press('Escape');
     await addCard(mp, [['MSCI World', '100']]);
@@ -953,7 +986,7 @@ async function depotBoxCheck(page) {
       noteRight: document.getElementById('chartIv').getBoundingClientRect().right <= innerWidth }));
     const o1w = await overflow(mp);
     check('mobile', '375 1W (30 min): reverse drag, stacked boxes cover nothing, numbers match; session labels and interval note fit, no page overflow',
-      gm1w.tips.length === 2 && gm1w.tips[1].top >= gm1w.tips[0].bottom - 1 && gm1w.inside && gm1w.hits.length === 0 && JSON.stringify(dm1w.rows) === JSON.stringify(dm1w.expect) &&
+      gm1w.tips.length === 1 && gm1w.inside && gm1w.hits.length === 0 && dm1w.all &&
       m1w.x.length >= 3 && /Intervall: 30 Min\./.test(m1w.note) && m1w.noteRight && o1w.sw <= o1w.w, { gm1w: gm1w.hits, rows: dm1w.rows, m1w, o1w });
     await shot(mp, 'measure-1w-375', { clip: { x: 0, y: 0, width: 375, height: 812 }, note: '1W measurement on a phone' });
     await mp.keyboard.press('Escape');
@@ -977,10 +1010,11 @@ async function depotBoxCheck(page) {
     // ================================================================= touch screen (375, emulated touch input)
     const tp = await open(browser, 375, 812, true);
     pages.push(tp);
+    await chartIntoView(tp);
     const tbox = await tp.locator('#mainChart svg').boundingBox();
     const TL = await tp.evaluate(() => ({ padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
     const ty = tbox.y + (TL.top + TL.bottom) / 2, tx = (f) => tbox.x + TL.padL + TL.plotW * f;
-    const outside = await tp.locator('#hlMain').boundingBox();
+    const outside = await tp.locator('#legend').boundingBox();
     await tp.touchscreen.tap(tx(0.3), ty);
     await settle(tp);
     const tap1 = await tp.evaluate(() => PFApp.sync.following());
@@ -1002,10 +1036,13 @@ async function depotBoxCheck(page) {
     await settle(tp);
     const tclear = await tp.evaluate(() => PFApp.sync.measure === null);
     check('mobile', 'touch: drag pins a measurement (boxes cover nothing); a tap outside keeps it; a tap in the plot clears it',
-      !!tpin && tpin.b > tpin.a && tgeo.tips.length === 2 && tgeo.hits.length === 0 && tkeep && tclear, { tpin, tips: tgeo.tips.length, hits: tgeo.hits, tkeep, tclear });
+      !!tpin && tpin.b > tpin.a && tgeo.tips.length === 1 && tgeo.hits.length === 0 && tkeep && tclear, { tpin, tips: tgeo.tips.length, hits: tgeo.hits, tkeep, tclear });
     // touch on the 30-min week: tap sets a start point (label with time), drag pins, a tap in the plot clears
+    await tp.evaluate(() => document.getElementById('rangeTabs').scrollIntoView({ block: 'center' }));
+    await settle(tp);
     await tp.touchscreen.tap((await tp.locator('#rangeTabs [data-preset="1W"]').boundingBox()).x + 10, (await tp.locator('#rangeTabs [data-preset="1W"]').boundingBox()).y + 10);
     await settle(tp);
+    await chartIntoView(tp);
     const tb2 = await tp.locator('#mainChart svg').boundingBox();
     const TL2 = await tp.evaluate(() => ({ key: PFApp.model().iv.key, padL: PFApp.charts.main.L.padL, plotW: PFApp.charts.main.L.plotW, top: PFApp.charts.main.L.top, bottom: PFApp.charts.main.L.bottom }));
     const ty2 = tb2.y + (TL2.top + TL2.bottom) / 2, tx2 = (f) => tb2.x + TL2.padL + TL2.plotW * f;
@@ -1023,8 +1060,8 @@ async function depotBoxCheck(page) {
     await settle(tp);
     const wtclear = await tp.evaluate(() => PFApp.sync.measure === null);
     check('mobile', 'touch 1W (30 min): tap = start point, drag pins (boxes cover nothing, numbers match), tap in the plot clears',
-      TL2.key === 'm30' && wt1.following && !!wtpin && wtpin.b > wtpin.a && wtgeo.tips.length === 2 && wtgeo.hits.length === 0 &&
-      JSON.stringify(wtd.rows) === JSON.stringify(wtd.expect) && wtclear, { key: TL2.key, wt1, wtpin, hits: wtgeo.hits, rows: wtd.rows, wtclear });
+      TL2.key === 'm30' && wt1.following && !!wtpin && wtpin.b > wtpin.a && wtgeo.tips.length === 1 && wtgeo.hits.length === 0 &&
+      wtd.all && wtclear, { key: TL2.key, wt1, wtpin, hits: wtgeo.hits, rows: wtd.rows, wtclear });
     check('general', 'touch page: no console errors', tp.errors.length === 0, tp.errors.slice(0, 5));
   } catch (e) {
     check('script', 'acceptance script ran to the end', false, String(e && e.stack || e).split('\n').slice(0, 4).join(' | '));
