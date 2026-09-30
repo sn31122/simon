@@ -52,6 +52,7 @@
     cards: [],                                 // own benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]}; not persisted
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
     selected: new Set(ALL), sort: { key: 'contrib', dir: -1 }, measure: null, hover: null,
+    yachtOn: true,                             // card "Yacht-Portfolio" (user 30.09.): its line in the chart, legend, measurement and Statistik
     sinceBuy: false, holdSort: 'value-desc',   // sinceBuy: pill "Seit Kauf" (chart shows MAX)
     showHold: true, showAssets: false,         // list section toggles "Portfolio" / "Einzelwerte" (independent; not persisted)
     whatIf: HAS_WHATIF, overrides: {}                // Stück are always editable (what-if): {ISIN: shares}; not persisted
@@ -481,7 +482,7 @@
       '<div class="tt-sides">' + lines.map(function (o) { return measureBox(o, a, b); }).join('') + '</div>';
   }
   function measureLines(yachtValues, yachtName, benches) {
-    var lines = [{ name: yachtName, color: 'var(--accent)', values: yachtValues }];
+    var lines = state.yachtOn ? [{ name: yachtName, color: 'var(--accent)', values: yachtValues }] : [];
     benches.forEach(function (x) { if (x.s) lines.push({ name: x.name, color: x.color, values: x.s.value }); });
     return lines;
   }
@@ -489,9 +490,9 @@
   function intraHoverHTML(i, maxBench) {
     var I = cur.intra, pl = state.mode === 'pl', v = pl ? I.pl[i] : I.value[i];
     var main = '<div class="tt-date">' + esc(slotLabel(I, i)) + '</div>' +
-      '<div class="tt-main ' + (pl ? sgn(v) : '') + '">' + (pl ? eurS(v) : eur(v)) + '</div>';
+      (state.yachtOn ? '<div class="tt-main ' + (pl ? sgn(v) : '') + '">' + (pl ? eurS(v) : eur(v)) + '</div>' : '');
     var rows = '';
-    if (I.orig) rows += ttRow('Original', 'var(--ghost)', pl ? eurS(I.orig.pl[i]) : eur(I.orig.value[i]), I.orig.ret[i]);
+    if (I.orig && state.yachtOn) rows += ttRow('Original', 'var(--ghost)', pl ? eurS(I.orig.pl[i]) : eur(I.orig.value[i]), I.orig.ret[i]);
     I.benches.slice(0, maxBench).forEach(function (o) { rows += ttRow(o.x.name, o.x.color, pl ? eurS(o.s.pl[i]) : eur(o.s.value[i]), o.s.ret[i]); });
     return '<div class="tt-one">' + main + '</div>' + (rows ? '<div class="tt-h">' + rows + '</div>' : '');
   }
@@ -510,9 +511,9 @@
     var pl = state.mode === 'pl';
     // as in the app: date, then the value (Gesamtrendite coloured by sign); benchmarks as small rows below
     var main = '<div class="tt-date">' + esc(dateLabel(M.R.start + i)) + '</div>' +
-      '<div class="tt-main ' + (pl ? sgn(p.pl[i]) : '') + '">' + (pl ? eurS(p.pl[i]) : eur(p.value[i])) + '</div>';
+      (state.yachtOn ? '<div class="tt-main ' + (pl ? sgn(p.pl[i]) : '') + '">' + (pl ? eurS(p.pl[i]) : eur(p.value[i])) + '</div>' : '');
     var rows = '';
-    if (M.orig) rows += ttRow('Original', 'var(--ghost)', pl ? eurS(M.orig.pl[i]) : eur(M.orig.value[i]), i > 0 ? origWin(0, i) : 0);
+    if (M.orig && state.yachtOn) rows += ttRow('Original', 'var(--ghost)', pl ? eurS(M.orig.pl[i]) : eur(M.orig.value[i]), i > 0 ? origWin(0, i) : 0);
     M.selB.filter(function (x) { return x.s; }).slice(0, maxBench).forEach(function (x) {
       rows += ttRow(x.name, x.color, pl ? eurS(x.s.pl[i]) : eur(x.s.value[i]), i > 0 ? benchWin(x, 0, i) : 0);
     });
@@ -534,7 +535,7 @@
     if (M.intra) {
       var I = M.intra, d = I.dd;
       if (i == null) return 'Aktuell <b class="' + sgn(d.current) + '">' + pctU(d.current) + '</b> · Max. <b class="neg">' + pctU(d.maxDD) + '</b>';
-      var o = esc(slotLabel(I, i)) + ': <b class="' + sgn(d.dd[i]) + '">' + pctU(d.dd[i]) + '</b>';
+      var o = esc(slotLabel(I, i)) + (state.yachtOn ? ': <b class="' + sgn(d.dd[i]) + '">' + pctU(d.dd[i]) + '</b>' : '');
       I.benches.forEach(function (b) { o += ' · <span class="sw" style="background:' + b.x.color + '"></span>' + esc(b.x.name) + ' ' + pctU(b.dd.dd[i]); });
       return o;
     }
@@ -543,7 +544,7 @@
       return 'Aktuell <b class="' + sgn(get(s, 'currentDD')) + '">' + pctU(get(s, 'currentDD')) + '</b> · Max. <b class="neg">' +
         pctU(get(s, 'maxDD')) + '</b>';
     }
-    var out = esc(F.date(ctx.dates[M.R.start + i], 'long')) + ': <b class="' + sgn(M.pdd.dd[i]) + '">' + pctU(M.pdd.dd[i]) + '</b>';
+    var out = esc(F.date(ctx.dates[M.R.start + i], 'long')) + (state.yachtOn ? ': <b class="' + sgn(M.pdd.dd[i]) + '">' + pctU(M.pdd.dd[i]) + '</b>' : '');
     M.selB.forEach(function (x) {
       if (x.dd && x.dd.dd) out += ' · <span class="sw" style="background:' + x.color + '"></span>' + esc(x.name) + ' ' + pctU(x.dd.dd[i]);
     });
@@ -552,6 +553,7 @@
 
   /** Empty state: nothing selected, or (what-if) every selected position set to 0 Stück. */
   function emptyText() {
+    if (state.selected.size && !state.yachtOn && !state.benchmarks.length) return 'Keine Linie eingeblendet – „Yacht-Portfolio“ oder eine Benchmark einblenden';
     return state.selected.size && ctx !== ctx0 ? 'Keine Bestände in der Auswahl (alle auf 0 Stück gesetzt)' : 'Keine Position ausgewählt';
   }
 
@@ -560,16 +562,17 @@
     var common = { dates: [], xTicks: ticks, last: I.last, emptyText: emptyText() };
     var main = extend({
       series: { values: pl ? I.pl : I.value },
-      ghost: I.orig ? { values: pl ? I.orig.pl : I.orig.value } : null,
+      ghost: I.orig && state.yachtOn ? { values: pl ? I.orig.pl : I.orig.value } : null,
       benches: I.benches.map(function (o) { return { id: o.x.id, color: o.x.color, values: pl ? o.s.pl : o.s.value }; }),
+      hideSeries: !state.yachtOn,
       baseline: pl ? 0 : I.base, ctxEnd: I.ctxEnd,
       axisLabel: function (v) { return F.num(v, 2); },
       lastLabel: function (v) { return F.num(v, 2); },
       hoverHTML: hoverHTML, measureHTML: measureHTML
     }, common);
-    var d = I.dd, mk = d && d.maxDD < 0 ? { i: d.trough, value: d.maxDD, label: 'Max. ' + pctU(d.maxDD) + (I.oneDay ? ' ' : ' am ') + slotLabel(I, d.trough) } : null;
+    var d = I.dd, mk = d && d.maxDD < 0 && state.yachtOn ? { i: d.trough, value: d.maxDD, label: 'Max. ' + pctU(d.maxDD) + (I.oneDay ? ' ' : ' am ') + slotLabel(I, d.trough) } : null;
     var dd = extend({
-      dd: padNull(d.dd, I.m),
+      dd: padNull(d.dd, I.m), hideSeries: !state.yachtOn,
       benches: I.benches.map(function (o) { return { id: o.x.id, color: o.x.color, dd: padNull(o.dd.dd, I.m) }; }),
       maxMarker: mk,
       axisLabel: function (v, step) { return F.pct(v, { sign: false, dec: step < 0.01 ? 1 : 0 }); },
@@ -592,8 +595,9 @@
     var benches = p ? M.selB.filter(function (x) { return x.s; }) : [];
     var main = extend({
       series: p ? { values: pl ? p.pl : p.value } : null,
-      ghost: p && M.orig ? { values: pl ? M.orig.pl : M.orig.value } : null,
+      ghost: p && M.orig && state.yachtOn ? { values: pl ? M.orig.pl : M.orig.value } : null,
       benches: benches.map(function (x) { return { id: x.id, color: x.color, values: pl ? x.s.pl : x.s.value }; }),
+      hideSeries: !state.yachtOn,
       baseline: p ? (pl ? 0 : p.startValue) : null,
       axisLabel: function (v) { return F.num(v, 2); },                 // app: "40.000,00"
       lastLabel: function (v) { return F.num(v, 2); },
@@ -602,11 +606,11 @@
       measureHTML: measureHTML
     }, common);
     var pdd = M.pdd, mk = null;
-    if (pdd && isNum(pdd.maxDD) && pdd.maxDD < 0 && isNum(pdd.trough) && dates[pdd.trough]) {
+    if (state.yachtOn && pdd && isNum(pdd.maxDD) && pdd.maxDD < 0 && isNum(pdd.trough) && dates[pdd.trough]) {
       mk = { i: pdd.trough, value: pdd.maxDD, label: 'Max. ' + pctU(pdd.maxDD) + ' am ' + F.date(dates[pdd.trough], 'short') };
     }
     var dd = extend({
-      dd: pdd ? pdd.dd : null,
+      dd: pdd ? pdd.dd : null, hideSeries: !state.yachtOn,
       benches: benches.filter(function (x) { return x.dd && x.dd.dd; }).map(function (x) { return { id: x.id, color: x.color, dd: x.dd.dd }; }),
       maxMarker: mk,
       axisLabel: function (v, step) { return F.pct(v, { sign: false, dec: step < 0.01 ? 1 : 0 }); },
@@ -679,6 +683,7 @@
   function renderHeader() {
     var title = META.title || 'Portfolio';
     document.title = title;
+    if (!$('metaLine')) return;                         // title bar removed (user 30.09.): only the window title
     $('title').textContent = title;
     var last = ctx.dates[ctx.n - 1];
     var parts = [ctx.positions.length + ' Positionen'];
@@ -797,9 +802,21 @@
   function cardById(id) { for (var k = 0; k < state.cards.length; k++) if (state.cards[k].id === id) return state.cards[k]; return null; }
   function rowById(c, id) { for (var k = 0; k < c.rows.length; k++) if (c.rows[k].id === id) return c.rows[k]; return null; }
   /** exact: the preset's weight behind a rounded field (null once the field is typed in, or for a typed row). */
-  function newRow(isin, pctText, exact) {
+  function newRow(isin, pctText, exact, auto) {
     var i = isin ? INSTR_BY[isin] : null;
-    return { id: 'r' + (++rowSeq), isin: i ? i.isin : null, q: i ? i.short : '', pct: pctText || '', exact: isNum(exact) ? exact : null };
+    return { id: 'r' + (++rowSeq), isin: i ? i.isin : null, q: i ? i.short : '', pct: pctText || '', exact: isNum(exact) ? exact : null, auto: !!auto };
+  }
+  /**
+   * Auto split (user 30.09.): rows added empty ("auto") share what the typed rows leave of 100 % equally – one row 100 %,
+   * two 50 %, three 33,333 % (the field shows whole %, the exact share counts) –; typing a share makes that row fixed.
+   */
+  function autoSplit(c) {
+    if (!c || c.schedule) return;
+    var auto = c.rows.filter(function (r) { return r.auto; }), fixed = 0;
+    if (!auto.length) return;
+    c.rows.forEach(function (r) { if (!r.auto) { var v = rowVal(r); if (isNum(v)) fixed += v; } });
+    var each = Math.max(0, 100 - fixed) / auto.length;
+    auto.forEach(function (r) { r.exact = each; r.pct = fmtShare(Math.round(each)); });
   }
   /** The row's percentage: the exact preset weight while the field is untouched, else the typed value (null = invalid). */
   function rowVal(r) { return r.exact !== null && r.exact !== undefined ? r.exact : pctVal(r.pct); }
@@ -886,6 +903,12 @@
       (now !== null ? '<br>Wert <b>' + eur(now) + '</b> am ' + esc(F.date(ctx0.dates[ctx0.n - 1], 'short')) : '') + '</div>' +
       '<div class="bb-hold" title="' + esc(names.join(', ')) + '">' + esc(names.join(' · ')) + '</div></div>';
   }
+  /** Card of the Yacht itself (user 30.09.): only name, return and show/hide – no holdings, not editable, not deletable. */
+  function yachtCardHTML() {
+    return '<div class="bb-card bb-card--fixed bb-card--yacht" role="group" data-card="' + YACHT_CARD + '" style="--c:var(--accent)">' +
+      '<div class="bb-top"><span class="bb-lbl"><i class="bb-dot"></i>Portfolio</span><span class="bb-icons">' + showBtn() + '</span></div>' +
+      '<div class="bb-namerow"><span class="bb-fixname">Yacht-Portfolio</span><b class="bb-ret"></b></div></div>';
+  }
   function rowHTML(r, k) {
     var i = r.isin ? INSTR_BY[r.isin] : null;
     return '<div class="bb-row" data-row="' + r.id + '">' +
@@ -959,18 +982,19 @@
     focusCard(c.id, '.bb-name', false, true);
   }
   function makeEl(html) { var t = document.createElement('div'); t.innerHTML = html; return t.firstChild; }
+  var YACHT_CARD = 'yacht';
   function cardSig(c) { return c ? (c.schedule ? 'sched' : c.rows.map(function (r) { return r.id; }).join(',')) : 'fixed'; }
 
   /** Builds missing / structurally changed cards (every other card and the field being typed in stay), then patches the derived parts. */
   function renderBenchCards(M) {
     var box = $('benchCards'), old = {}, prev = null;
     Array.prototype.forEach.call(box.children, function (el) { if (el.hasAttribute('data-card')) old[el.getAttribute('data-card')] = el; });
-    var list = ctx.benchmarks.map(function (b) { return { id: b.id, b: b }; })
+    var list = [{ id: YACHT_CARD, y: true }].concat(ctx.benchmarks.map(function (b) { return { id: b.id, b: b }; }))
       .concat(state.cards.map(function (c) { return { id: c.id, c: c }; }));
     list.forEach(function (o) {
       var el = old[o.id], sig = cardSig(o.c);
       if (!el || el._sig !== sig) {
-        var nu = makeEl(o.c ? cardHTML(o.c) : fixedCardHTML(o.b));
+        var nu = makeEl(o.y ? yachtCardHTML() : o.c ? cardHTML(o.c) : fixedCardHTML(o.b));
         nu._sig = sig;
         if (el) box.replaceChild(nu, el);
         el = nu;
@@ -990,9 +1014,10 @@
     }
   }
   function patchCard(el, o, M) {
-    var c = o.c, x = M && M.byId[o.id], shown = c ? c.show : !!state.fixedOn[o.id], r = x ? get(x.st, 'totalReturn') : null;
+    var c = o.c, x = o.y ? null : M && M.byId[o.id], shown = o.y ? state.yachtOn : c ? c.show : !!state.fixedOn[o.id];
+    var r = o.y ? get(M && M.ps, 'totalReturn') : x ? get(x.st, 'totalReturn') : null;
     el.classList.toggle('is-hidden', !shown);
-    el.setAttribute('aria-label', 'Benchmark ' + (c ? cardName(c) : o.b.name || o.id));
+    el.setAttribute('aria-label', o.y ? 'Yacht-Portfolio' : 'Benchmark ' + (c ? cardName(c) : o.b.name || o.id));
     var sb = el.querySelector('[data-act="show"]');
     if (sb.getAttribute('aria-pressed') !== String(shown)) {
       var lbl = shown ? 'Im Chart ausblenden' : 'Im Chart einblenden';
@@ -1004,7 +1029,7 @@
     var rb = el.querySelector('.bb-ret');
     rb.className = 'bb-ret ' + sgn(r);
     rb.textContent = pct(r);
-    rb.title = x ? 'Rendite im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') : 'wird erst bei 100 % berechnet';
+    rb.title = x || (o.y && isNum(r)) ? 'Rendite im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') : 'wird erst bei 100 % berechnet';
     if (!c || c.schedule) return;
     var info = cardInfo(c), tot = el.querySelector('.bb-total'), hint = el.querySelector('.bb-hint');
     el.classList.toggle('is-invalid', !info.valid);
@@ -1034,14 +1059,15 @@
     if (select && t.select) t.select();
   }
   function addCard() {
-    var name = nextName(), c = { id: 'bm' + (++cardSeq), name: name, defName: name, color: nextColor(), show: true, rows: [newRow()] };
+    var name = nextName(), c = { id: 'bm' + (++cardSeq), name: name, defName: name, color: nextColor(), show: true, rows: [newRow(null, '', null, true)] };
+    autoSplit(c);
     state.cards.push(c);
     benchChanged();
     focusCard(c.id, '.bb-ins', true);
   }
   function dupCard(c) {
     var d = { id: 'bm' + (++cardSeq), name: (cardName(c) + ' (Kopie)').slice(0, 40), defName: nextName(), color: nextColor(), show: true,
-      rows: c.rows.map(function (r) { return newRow(r.isin, r.pct, r.exact); }) };
+      rows: c.rows.map(function (r) { return newRow(r.isin, r.pct, r.exact, r.auto); }) };
     state.cards.splice(state.cards.indexOf(c) + 1, 0, d);
     benchChanged();
     focusCard(d.id, '.bb-name', false, true);
@@ -1055,21 +1081,24 @@
     if (nx) focusCard(nx.id, '[data-act="del"]'); else if (add) add.focus();
   }
   function addRow(c) {
-    var r = newRow();
+    var r = newRow(null, '', null, true);
     c.rows.push(r);
+    autoSplit(c);
     benchChanged();
     focusCard(c.id, '[data-row="' + r.id + '"] .bb-ins', true);
   }
   function clearRows(c) {
     if (drop && drop.cardId === c.id) closeDrop();
-    c.rows = [newRow()];
+    c.rows = [newRow(null, '', null, true)];
+    autoSplit(c);
     benchChanged();
     focusCard(c.id, '.bb-ins', true);
   }
   function delRow(c, r) {
     var k = c.rows.indexOf(r), only = c.rows.length === 1;
     if (drop && drop.rowId === r.id) closeDrop();
-    if (only) c.rows = [newRow()]; else c.rows.splice(k, 1);
+    if (only) c.rows = [newRow(null, '', null, true)]; else c.rows.splice(k, 1);
+    autoSplit(c);
     benchChanged();
     var nx = c.rows[Math.min(k, c.rows.length - 1)];
     focusCard(c.id, '[data-row="' + nx.id + '"] ' + (only ? '.bb-ins' : '.bb-x'), false);
@@ -1212,7 +1241,8 @@
         return;
       }
       if (act === 'show') {
-        if (o.c) o.c.show = !o.c.show; else if (o.id) state.fixedOn[o.id] = !state.fixedOn[o.id];
+        if (o.id === YACHT_CARD) state.yachtOn = !state.yachtOn;
+        else if (o.c) o.c.show = !o.c.show; else if (o.id) state.fixedOn[o.id] = !state.fixedOn[o.id];
         benchChanged();
         return;
       }
@@ -1229,7 +1259,14 @@
       if (f === 'ins' && o.r) { o.r.q = t.value; openDrop(t); return; }
       was = cardInfo(o.c).valid;
       if (f === 'name') o.c.name = t.value;
-      else if (f === 'pct' && o.r) { o.r.pct = t.value; o.r.exact = null; t.removeAttribute('title'); }   // typed: the field's value counts
+      else if (f === 'pct' && o.r) {                               // typed: the field's value counts, the auto rows share the rest
+        o.r.pct = t.value; o.r.exact = null; o.r.auto = false; t.removeAttribute('title');
+        autoSplit(o.c);
+        o.c.rows.forEach(function (rw) {
+          var f2 = rw.auto && t.closest('[data-card]').querySelector('[data-row="' + rw.id + '"] .bb-pct');
+          if (f2) f2.value = rw.pct;
+        });
+      }
       else return;
       if (was || cardInfo(o.c).valid) benchChanged();              // an invalid card stays out of everything: only its footer changes
       else patchCard(t.closest('[data-card]'), { id: o.c.id, c: o.c }, cur);
@@ -1315,9 +1352,9 @@
       return;
     }
     noteEl.textContent = period;
-    var lg = '<span class="lg-item" style="--c:var(--accent)"><i></i><span>' + (M.orig ? 'Was-wäre-wenn' : 'Portfolio') + '</span>' +
+    var lg = !state.yachtOn ? '' : '<span class="lg-item" style="--c:var(--accent)"><i></i><span>' + (M.orig ? 'Was-wäre-wenn' : 'Portfolio') + '</span>' +
       '<b class="' + sgn(s.totalReturn) + '">' + pct(s.totalReturn) + '</b></span>';
-    if (M.orig) {
+    if (M.orig && state.yachtOn) {
       var ro = get(M.origStats, 'totalReturn');
       lg += '<span class="lg-item lg-item--ghost"><i></i><span>Original</span><b class="' + sgn(ro) + '">' + pct(ro) + '</b></span>';
     }
@@ -1483,45 +1520,31 @@
     $('cmpSub').textContent = periodText(M.R);
     $('cmpSub').title = riskNote(M).replace(/^ · /, '');
     // user 29.09.: "Statistik" – end value, then the return; p.a., Vol. p.a., Sharpe, Max. DD (no Sortino)
-    var COLS = [['Wert', 'Wert am Ende des Zeitraums (wie im Chart: Startwert)'], ['Rendite', 'Gesamtrendite im Zeitraum'],
+    var COLS = [['Wert', 'Wert am Ende des Zeitraums (wie im Chart: Startwert)'], ['G/V €', 'Gewinn/Verlust in € im Zeitraum (Endwert − Startwert, wie im Chart)'],
+      ['Rendite', 'Gesamtrendite im Zeitraum'],
       ['p.a.', 'annualisierte Rendite (CAGR)'], ['Vol. p.a.', 'annualisierte Volatilität'], ['Sharpe', 'Sharpe-Ratio'], ['Max. DD', 'maximaler Drawdown']];
     var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + COLS.map(function (c) {
       return '<th title="' + esc(c[1]) + '">' + esc(c[0]) + '</th>';
     }).join('') + '</tr></thead>';
     function row(name, color, title, st, s) {
       var end = s && s.value && s.value.length ? s.value[s.value.length - 1] : null, weak = st && !st.cagrReliable;
+      var gv = isNum(end) && isNum(s.value[0]) ? end - s.value[0] : null;
       var cells = st ? '<td class="cmp-val">' + (isNum(end) ? eur(end, { dec: 0 }) : '–') + '</td>' +
+        '<td>' + colored(gv, eurS(gv, 0)) + '</td>' +
         '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td>' +
         '<td' + (weak ? ' class="dim" title="wenig aussagekräftig &lt; 3 Monate"' : '') + '>' +
         (weak ? pct(get(st, 'cagr')) : colored(get(st, 'cagr'), pct(get(st, 'cagr')))) + '</td>' +
         '<td>' + pctU(get(st, 'volAnn')) + '</td><td>' + ratio(get(st, 'sharpe')) + '</td>' +
         '<td>' + colored(get(st, 'maxDD'), pctU(get(st, 'maxDD'))) + '</td>'
-        : new Array(7).join('<td class="dash">–</td>');
+        : new Array(8).join('<td class="dash">–</td>');
       return '<tr><td class="l sticky"' + (title ? ' title="' + esc(title) + '"' : '') + '><span class="row-name"><i style="background:' + color +
         '"></i><span class="cmp-nm">' + esc(name) + '</span></span></td>' + cells + '</tr>';
     }
-    var body = row('Portfolio', 'var(--accent)', '', M.ps, M.p);
+    var body = state.yachtOn ? row(M.orig ? 'Was-wäre-wenn' : 'Portfolio', 'var(--accent)', '', M.ps, M.p) : '';
     M.selB.forEach(function (x) { body += row(x.name, x.color, x.name + (x.b.description ? ' · ' + x.b.description : ''), x.st, x.s); });
+    $('cmpPanel').hidden = !body;
     $('cmpTable').innerHTML = head + '<tbody>' + body + '</tbody>';
-    placeCmpPanel();
   }
-  /**
-   * Right of the chart when the space beside the page column fits the panel's natural width – then as wide as that space
-   * allows (user 29.09.: as wide as possible without touching the chart) –, otherwise above the chart.
-   */
-  function placeCmpPanel() {
-    var blk = $('cmpPanel').parentNode, el = $('cmpPanel');
-    el.style.width = '';
-    el.style.removeProperty('--cmp-nm');
-    blk.classList.add('cmp-side');
-    var room = document.documentElement.clientWidth - blk.getBoundingClientRect().right - 22;   // 16px gap + 6px to the window edge
-    var w0 = el.offsetWidth;
-    if (w0 <= room) {
-      el.style.width = Math.floor(room) + 'px';
-      el.style.setProperty('--cmp-nm', Math.floor(64 + room - w0) + 'px');     // the spare width goes to the names first
-    } else blk.classList.remove('cmp-side');
-  }
-
   // ------------------------------------------------------------------ group table
   // ------------------------------------------------------------------ asset table
   var ASSET_COLS = [
@@ -2188,7 +2211,6 @@
     }
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(box);
     else window.addEventListener('resize', onResize);
-    window.addEventListener('resize', placeCmpPanel);
   }
 
   // ------------------------------------------------------------------ start

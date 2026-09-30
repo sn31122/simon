@@ -54,13 +54,21 @@ button { -webkit-tap-highlight-color: transparent; }
 /* ------------------------------------------------------------------ header */
 /* sticky bar like the app: full window width, the page scrolls underneath it */
 .topbar { position: sticky; top: 0; z-index: 60; background: var(--bg); }
-.hdr { max-width: 868px; margin: 0 auto; padding: 18px 24px 12px; }
-.hdr-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
-.hdr-id { flex: 1 1 320px; min-width: 0; }
-.hdr .pills { margin-left: auto; }
-.block { scroll-margin-top: 96px; }
-.hdr-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
-.hdr-meta { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
+.hdr { max-width: 868px; margin: 0 auto; padding: 8px 24px; }
+.hdr-row { display: flex; justify-content: flex-end; }
+.block { scroll-margin-top: 56px; }
+/* wide windows (user 30.09.): the pills leave the bar and float as a column right of the page column (868px), so they
+   cover nothing; the bar is then only the what-if banner */
+@media (min-width: 1100px) {
+  .hdr { padding: 0 24px; }
+  .hdr .wi-banner { margin-bottom: 8px; }
+  .hdr .pills {
+    position: fixed; top: 18px; left: calc(50% + 434px + 12px); z-index: 61;
+    flex-direction: column; align-items: stretch; gap: 2px; padding: 4px; border-radius: 14px;
+  }
+  .hdr .pills .pill { height: 28px; padding: 0 12px; }
+  .block { scroll-margin-top: 16px; }
+}
 
 /* ------------------------------------------------------------------ range bar */
 /* tabs left, toggle right (as in the app); the date fields sit between them when there is room */
@@ -636,10 +644,7 @@ th.is-sorted { color: var(--text); }
 }
 @media (max-width: 720px) {
   .page { padding: 16px 16px 40px; }
-  .hdr { padding: 12px 16px 10px; }
-  .hdr-title { font-size: 19px; }
-  .hdr-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hdr .pills { margin-left: 0; }
+  .hdr { padding: 8px 16px; }
   .rangebar { margin-top: 28px; gap: 8px; }
   .tabs { width: 100%; gap: 0; }
   .tab { flex: 1 1 0; min-width: 0; height: 40px; padding: 0 2px; }
@@ -727,20 +732,21 @@ th.is-sorted { color: var(--text); }
 .sv-btn:hover { color: var(--text); border-color: #353a40; }
 .sv-btn.is-on { border-color: var(--accent); color: var(--accent); }
 .set-field--sv { flex-wrap: wrap; row-gap: 6px; }
-/* "Statistik" panel (user 28./29.09.; was "Im Zeitraum"): above the chart by default; .cmp-side (set by app.js when the window has room)
-   puts it into the free space right of the page column, top-aligned with the chart (user 28.09.) */
-.cmp { margin-bottom: 12px; }
+/* "Statistik" panel (user 30.09.): full column width under the two values at the top, above the range tabs */
+.cmp { margin-top: 26px; }
+.cmp + .rangebar { margin-top: 22px; }
 .cmp-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px 2px; }
 .cmp-t { color: #7d848a; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
 .cmp-sub { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .cmp .tscroll { border-radius: 0 0 var(--radius) var(--radius); }
 .tbl--cmp { font-size: 11.5px; }
-.tbl--cmp th, .tbl--cmp td { padding: 6px 5px; }
+.tbl--cmp th, .tbl--cmp td { padding: 6px 8px; }
 .tbl--cmp th:first-child, .tbl--cmp td:first-child { padding-left: 9px; }
 .tbl--cmp th:last-child, .tbl--cmp td:last-child { padding-right: 9px; }
 .tbl--cmp th { font-size: 11px; }
 .tbl--cmp .row-name { gap: 6px; }
 .tbl--cmp .row-name i { width: 10px; }
-.cmp-nm { display: inline-block; max-width: var(--cmp-nm, 64px); overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.cmp-nm { display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .tbl--cmp td.cmp-val { color: var(--text); font-weight: 600; }
-.chart-block.cmp-side .cmp { position: absolute; top: 0; left: calc(100% + 16px); width: max-content; margin: 0; }
+/* card "Yacht-Portfolio" (user 30.09.): name, return and show/hide only – as tall as its content, not the grid row */
+.bb-card--yacht { align-self: start; }

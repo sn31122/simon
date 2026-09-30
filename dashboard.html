@@ -8,14 +8,12 @@
   <link rel="stylesheet" href="css/dashboard.css">
 </head>
 <body>
-  <!-- sticky bar like the app: full window width, stays on top while the page scrolls underneath (pills always reachable) -->
+  <!-- user 30.09.: no title bar any more. The period pills float in the free space right of the page column (a vertical
+       column, fixed while scrolling); where that space is too narrow they sit in a slim sticky bar at the top instead.
+       The sticky bar also carries the what-if banner (height 0 while neither is in it). -->
   <div class="topbar" id="topBar">
     <header class="hdr">
       <div class="hdr-row">
-        <div class="hdr-id">
-          <h1 class="hdr-title" id="title">Portfolio</h1>
-          <p class="hdr-meta" id="metaLine"></p>
-        </div>
         <div class="pills" id="holdPills" role="group" aria-label="Zeitraum (gilt für Wert, Chart und Positionsliste)">
           <button type="button" class="pill" data-hp="1T">1T</button>
           <button type="button" class="pill" data-hp="1W">1W</button>
@@ -54,6 +52,12 @@
       </div>
     </section>
 
+    <!-- "Statistik" (user 30.09.): under the two values, above the range tabs; one row per line shown in the chart, incl. G/V € -->
+    <aside class="card cmp" id="cmpPanel" aria-label="Statistik">
+      <div class="cmp-h"><span class="cmp-t">Statistik</span><span class="cmp-sub" id="cmpSub"></span></div>
+      <div class="tscroll"><table class="tbl tbl--cmp" id="cmpTable"></table></div>
+    </aside>
+
     <div class="rangebar">
       <div class="tabs" id="rangeTabs" role="group" aria-label="Zeitraum">
         <button type="button" class="tab" data-preset="1T" title="1 Handelstag">1T</button>
@@ -76,11 +80,6 @@
     </section>
 
     <section class="chart-block" aria-label="Wertentwicklung">
-      <!-- "Im Zeitraum" of the Benchmark-Vergleich beside the chart (user 28.09.): left of it when the window has room, else above it -->
-      <aside class="card cmp" id="cmpPanel" aria-label="Statistik">
-        <div class="cmp-h"><span class="cmp-t">Statistik</span><span class="cmp-sub" id="cmpSub"></span></div>
-        <div class="tscroll"><table class="tbl tbl--cmp" id="cmpTable"></table></div>
-      </aside>
       <div id="mainChart"></div>
       <div class="chart-foot">
         <button type="button" class="btn btn--accent" id="applyMeasure" hidden>Zeitraum auf Auswahl setzen</button>

@@ -201,15 +201,15 @@ async function depotBoxCheck(page) {
 
     // ================================================================= benchmark cards
     const init = await page.evaluate(() => {
-      const cards = document.querySelectorAll('#benchCards .bb-card'), f = cards[0], c = PFApp.state.cards.find((x) => x.preset === 'my_depot');
+      const cards = document.querySelectorAll('#benchCards .bb-card'), f = cards[1], c = PFApp.state.cards.find((x) => x.preset === 'my_depot');
       return { n: cards.length, name: c && c.name, preset: c && c.preset, show: c && c.show, color: c && c.color,
         acts: Array.from(f.querySelectorAll('[data-act]')).map((b) => b.getAttribute('data-act')), pctInputs: f.querySelectorAll('.bb-pct').length,
         pcts: Array.from(f.querySelectorAll('.bb-pct')).map((x) => x.value), total: f.querySelector('.bb-total').textContent,
         shown: window.__shown(), legend: document.getElementById('legend').textContent };
     });
     check('cards', 'initially only the "Mein Depot" preset card: editable (% rows, whole numbers, total 100 %), white, shown in the chart',
-      init.n === 1 && init.name === 'Mein Depot' && init.preset === 'my_depot' && init.show && init.color.toLowerCase() === '#f2f3f4' &&
-      init.pctInputs >= 9 && init.pcts.every((v) => /^\d+$/.test(v)) && init.total === '100 %' && init.shown === 'Mein Depot' && /Mein Depot/.test(init.legend) &&
+      init.n === 2 && init.name === 'Mein Depot' && init.preset === 'my_depot' && init.show && init.color.toLowerCase() === '#f2f3f4' &&
+      init.pctInputs >= 5 && init.pcts.every((v) => /^\d+$/.test(v)) && init.total === '100 %' && init.shown === 'Mein Depot' && /Mein Depot/.test(init.legend) &&
       ['show', 'dup', 'del'].every((a) => init.acts.indexOf(a) >= 0), init);
     await page.click('#benchCards .bb-add');
     const menu = await page.evaluate(() => ({ open: !document.getElementById('bbMenu').hidden,
@@ -226,12 +226,12 @@ async function depotBoxCheck(page) {
     check('cards', '"+ Benchmark" menu: Leere Karte + every preset; Energie is added shown (legend, chart line, Benchmark-Vergleich), the trash deletes it',
       menu.open && ['empty', 'my_depot', 'energie', 'old_portfolio', 'situational_awareness', 'depot_history'].every((x) => menu.items.indexOf(x) >= 0) &&
       eShown.shown === 'Mein Depot,Energie' && eShown.legend && eShown.lines === 2 && eShown.table && eShown.rows === 11 &&
-      eDel.cards === 1 && eDel.dom === 1 && eDel.shown === 'Mein Depot', { menu, eShown, eDel });
-    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
+      eDel.cards === 1 && eDel.dom === 2 && eDel.shown === 'Mein Depot', { menu, eShown, eDel });
+    await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
     const hidden = await page.evaluate(() => ({ shown: PFApp.state.benchmarks.length, legend: document.getElementById('legend').textContent,
       lines: PFApp.charts.main.model.benches.length, table: document.querySelectorAll('#benchTable tbody tr').length }));
-    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
+    await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
     const reshown = await page.evaluate(() => window.__shown());
     check('cards', 'Mein Depot hide/show removes and restores it everywhere',
@@ -303,7 +303,7 @@ async function depotBoxCheck(page) {
     await page.evaluate(() => document.activeElement.blur());
     await settle(page);
     const blur1 = await page.evaluate(() => window.__own(0).rows[0].q);
-    await page.locator('#benchCards .bb-card:nth-child(2) .bb-ins').first().click();
+    await page.locator('#benchCards .bb-card:nth-child(3) .bb-ins').first().click();
     await selectAllAndType(page, 'Micr');
     await page.evaluate(() => document.activeElement.blur());
     await settle(page);
@@ -406,7 +406,7 @@ async function depotBoxCheck(page) {
     check('cards', 'hover % reads the period series (bought at the range start)', bw.hoverHas, bw);
 
     // consumers agree for a custom card (hide Mein Depot so the card is the first shown benchmark)
-    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
+    await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
     const agree = await page.evaluate((id) => {
       const el = document.querySelector('[data-card="' + id + '"]'), card = el.querySelector('.bb-ret').textContent;
@@ -421,7 +421,7 @@ async function depotBoxCheck(page) {
     }, cid);
     check('cards', 'card return = legend = Benchmark-Vergleich = Kennzahlen bench line; drawdown line + readout',
       agree.card === agree.legend && agree.card === agree.table && agree.kpi && agree.kpi.indexOf(agree.card) >= 0 && agree.dd && agree.readout, agree);
-    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
+    await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
     // invalid card excluded everywhere
     await page.locator(pctSel).first().click();
@@ -473,8 +473,8 @@ async function depotBoxCheck(page) {
       three.valid && new Set(three.colors).size === three.colors.length && three.colors.every((c) => palette.indexOf(c.toLowerCase()) < 0), three);
     await page.click('#benchCards [data-card="' + cid3 + '"] [data-act="clear"]');
     await settle(page);
-    const cleared = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, empty: !c.rows[0].isin && !c.rows[0].pct, focus: a.classList.contains('bb-ins') && !!a.closest('[data-card="' + id + '"]') }; }, cid3);
-    check('cards', 'clear leaves one empty row and focuses its instrument field', cleared.rows === 1 && cleared.empty && cleared.focus, cleared);
+    const cleared = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, empty: !c.rows[0].isin && c.rows[0].pct === '100' && c.rows[0].auto, focus: a.classList.contains('bb-ins') && !!a.closest('[data-card="' + id + '"]') }; }, cid3);
+    check('cards', 'clear leaves one empty row (auto 100 %, 30.09.) and focuses its instrument field', cleared.rows === 1 && cleared.empty && cleared.focus, cleared);
     await page.keyboard.press('Escape');
     const dupId = await page.evaluate(() => window.__own(1).id);
     await page.click('#benchCards [data-card="' + dupId + '"] [data-act="delrow"]');
@@ -625,7 +625,7 @@ async function depotBoxCheck(page) {
       svd.sv === svd.want && svd.on && svd.start === svd.want && dvb.side && dvb.all && svy.sv === null && svy.field === '' && svy.on, { svd, svy });
     await page.locator('#startValue').click();
     await selectAllAndType(page, '');
-    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
+    await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
     await drag(page, 0.4, 0.9);
     const noDepot = await chartGeo(page);
@@ -634,7 +634,7 @@ async function depotBoxCheck(page) {
     check('measure', 'Mein Depot hidden: no Mein Depot box (Portfolio + the other shown cards)',
       noDepot.tips.length === 1 && noDepot.hits.length === 0 && nd.n === nd.nl && nd.rows === null && !/Mein Depot/.test(ndTxt), { tips: noDepot.tips, n: nd.n });
     await page.keyboard.press('Escape');
-    await page.click('#benchCards .bb-card:first-child [data-act="show"]');
+    await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
     // 1T
     await page.click('#rangeTabs [data-preset="1T"]');
@@ -936,7 +936,7 @@ async function depotBoxCheck(page) {
     await page.waitForFunction(() => window.PFApp && document.querySelector('#benchCards .bb-card'));
     if (page.fallbackFont) await fontsReady(page);
     const reset = await page.evaluate(() => ({ cards: PFApp.state.cards.length, shown: window.__shown(), dom: document.querySelectorAll('#benchCards .bb-card').length, assets: PFApp.state.showAssets, hold: PFApp.state.showHold, sv: PFApp.state.startValue }));
-    check('cards', 'reload resets to the Mein Depot card only (and list defaults, empty Startwert); nothing persisted', reset.cards === 1 && reset.shown === 'Mein Depot' && reset.dom === 1 && !reset.assets && reset.hold && reset.sv === null, reset);
+    check('cards', 'reload resets to the Mein Depot card only (and list defaults, empty Startwert); nothing persisted', reset.cards === 1 && reset.shown === 'Mein Depot' && reset.dom === 2 && !reset.assets && reset.hold && reset.sv === null, reset);
 
     // ================================================================= 1920 and 1400
     for (const w of [1920, 1400]) {

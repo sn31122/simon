@@ -417,8 +417,11 @@
     this.L = null;
     var vals = M && M.series && M.series.values;
     var ghost = M && M.ghost && M.ghost.values ? M.ghost.values : null;          // what-if: original portfolio
-    var ext = vals && vals.length ?
-      extent([vals, ghost].concat((M.benches || []).map(function (b) { return b.values; })), [M.baseline]) : null;
+    // hideSeries (card "Yacht-Portfolio" switched off, user 30.09.): the portfolio is not drawn and the y scale fits the
+    // shown benchmarks only; nothing shown = empty state
+    var hide = !!(M && M.hideSeries), bvals = ((M && M.benches) || []).map(function (b) { return b.values; });
+    var ext = vals && vals.length && !(hide && !bvals.length) ?
+      extent((hide ? [] : [vals, ghost]).concat(bvals), [M.baseline]) : null;
     var W0 = Math.floor(this.el.clientWidth), compact = W0 < 560;
     this.el.classList.toggle('pc--compact', compact);                // before the boxes are measured (compact padding)
     // intraday: M.last = last slot with data (later slots stay empty, as in the app), M.ctxEnd = end of the grey
@@ -446,7 +449,7 @@
 
     // value box at the right edge decides how much room the plot leaves on the right
     var lastV = vals[lastI];
-    var lastTxt = isNum(lastV) && M.lastLabel ? M.lastLabel(lastV) : '';
+    var lastTxt = !hide && isNum(lastV) && M.lastLabel ? M.lastLabel(lastV) : '';
     var boxFont = '600 11px ' + ff;
     var boxW = lastTxt ? Math.ceil(textW(lastTxt, boxFont)) + 10 : 0;
     var X = xLayout(W, m, 1, lastTxt ? boxW + 10 : 8, M.xs);
@@ -481,14 +484,14 @@
       if (gd) svgEl('path', { d: gd, 'class': 'pc-ghost' }, this.gSeries);
     }
 
-    if (cEnd >= 0) {
+    if (cEnd >= 0 && !hide) {
       var cd = linePath(vals.slice(0, cEnd + 1), X.x, yOf);
       if (cd) svgEl('path', { d: cd, 'class': 'pc-line pc-line--ctx' }, this.gSeries);
     }
 
     // portfolio area as in the app: teal gradient above the baseline, red below (start value / 0 €)
-    var vExt = extent([main]);
-    var area = areaPath(main, X.x, yOf, yBase);
+    var vExt = hide ? null : extent([main]);
+    var area = hide ? null : areaPath(main, X.x, yOf, yBase);
     if (area && vExt) {
       var gArea = svgEl('g', { 'class': 'pc-area' }, this.gSeries);
       var idA = this.id + '-ga', idB = this.id + '-gb', cA = this.id + '-ca', cB = this.id + '-cb';
@@ -502,7 +505,9 @@
       if (yOf(vExt.lo) > yBase) svgEl('path', { d: area, fill: fillB, 'clip-path': 'url(#' + cB + ')' }, gArea);
     }
     // the line itself switches colour where it crosses the baseline
-    if (isNum(M.baseline)) {
+    if (hide) {
+      // portfolio line off
+    } else if (isNum(M.baseline)) {
       var sp = splitPaths(main, 0, X.x, yOf, M.baseline);
       if (sp.dn) svgEl('path', { d: sp.dn, 'class': 'pc-line pc-line--dn' }, this.gSeries);
       if (sp.up) svgEl('path', { d: sp.up, 'class': 'pc-line' }, this.gSeries);
@@ -579,7 +584,7 @@
     clear(g);
     var meas = S && S.measure, hov = S ? S.hoverI : null;
     if (!L || !M || !M.series) { this.hideTip(); this.svg.classList.remove('is-measuring'); return; }
-    var vals = M.series.values, m = L.m, yBot = L.bottom, yTop;
+    var vals = M.hideSeries ? [] : M.series.values, m = L.m, yBot = L.bottom, yTop;
     var measuring = !!(meas && meas.a !== meas.b && meas.a != null && meas.b != null);
     this.svg.classList.toggle('is-measuring', measuring);
     if (meas && !measuring && meas.a != null) hov = meas.a;       // pressed, not dragged yet
@@ -674,7 +679,8 @@
     this.L = null;
     this.readKey = null;
     var dd = M && M.dd;
-    var ext = dd && dd.length ? extent([dd].concat((M.benches || []).map(function (b) { return b.dd; })), [0]) : null;
+    var hide = !!(M && M.hideSeries), bdd = ((M && M.benches) || []).map(function (b) { return b.dd; });
+    var ext = dd && dd.length && !(hide && !bdd.length) ? extent((hide ? [] : [dd]).concat(bdd), [0]) : null;
     var ok = !!(ext && W > 60 && H > 60);
     this.msg.textContent = M && !ok ? (M.emptyText || '') : '';
     this.msg.hidden = !this.msg.textContent;
@@ -705,12 +711,12 @@
       if (bd) svgEl('path', { d: bd, 'class': 'pc-bench pc-bench--dd', style: 'stroke:' + benches[b].color }, this.gSeries);
     }
     var y0 = yOf(0), yMin = yOf(lo);
-    var area = areaPath(dd, X.x, yOf, y0);
+    var area = hide ? null : areaPath(dd, X.x, yOf, y0);
     if (area && yMin > y0 + 0.5) {
       var fill = gradient(this.defs, this.id + '-gdd', yMin, y0, 'var(--neg)', 0.45, 0.05);
       svgEl('path', { d: area, fill: fill, 'class': 'pc-ddarea' }, this.gSeries);
     }
-    svgEl('path', { d: linePath(dd, X.x, yOf), 'class': 'pc-ddline' }, this.gSeries);
+    if (!hide) svgEl('path', { d: linePath(dd, X.x, yOf), 'class': 'pc-ddline' }, this.gSeries);
 
     // max drawdown marker + label
     var mk = M.maxMarker;
@@ -764,7 +770,7 @@
         var bv = benches[k].dd && benches[k].dd[hov];
         if (isNum(bv)) svgEl('circle', { cx: r1(x), cy: r1(L.y(bv)), r: 2.5, fill: benches[k].color, 'class': 'pc-dot' }, g);
       }
-      if (isNum(M.dd[hov])) svgEl('circle', { cx: r1(x), cy: r1(L.y(M.dd[hov])), r: 3.5, 'class': 'pc-ring pc-ring--dd' }, g);
+      if (!M.hideSeries && isNum(M.dd[hov])) svgEl('circle', { cx: r1(x), cy: r1(L.y(M.dd[hov])), r: 3.5, 'class': 'pc-ring pc-ring--dd' }, g);
       this.setReadout(hov);
     } else {
       this.setReadout(null);
