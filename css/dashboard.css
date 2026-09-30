@@ -57,16 +57,13 @@ button { -webkit-tap-highlight-color: transparent; }
 .hdr { max-width: 868px; margin: 0 auto; padding: 8px 24px; }
 .hdr-row { display: flex; justify-content: flex-end; }
 .block { scroll-margin-top: 56px; }
-/* wide windows (user 30.09.): the pills leave the bar and float as a column right of the page column (868px), so they
-   cover nothing; the bar is then only the what-if banner */
-@media (min-width: 1100px) {
+/* wide windows (user 30.09.): the pills keep their look (one row) but leave the bar: fixed right of the content column
+   (820px), level with the two values at the top, so they cover nothing; the bar is then only the what-if banner.
+   The row is ~315px wide, so this needs >= 1500px; narrower windows keep the slim sticky bar. */
+@media (min-width: 1500px) {
   .hdr { padding: 0 24px; }
   .hdr .wi-banner { margin-bottom: 8px; }
-  .hdr .pills {
-    position: fixed; top: 18px; left: calc(50% + 434px + 12px); z-index: 61;
-    flex-direction: column; align-items: stretch; gap: 2px; padding: 4px; border-radius: 14px;
-  }
-  .hdr .pills .pill { height: 28px; padding: 0 12px; }
+  .hdr .pills { position: fixed; top: 46px; right: max(8px, calc(50% - 426px - 320px)); z-index: 61; }   /* ~16px right of the column, never cut off */
   .block { scroll-margin-top: 16px; }
 }
 
