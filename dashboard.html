@@ -126,7 +126,7 @@
         <label for="rfInput">Risikofreier Zins</label>
         <span class="inp-wrap inp-wrap--unit">
           <input type="text" id="rfInput" inputmode="decimal" autocomplete="off" spellcheck="false" value="2,0"
-                 title="Jahreszins für Sharpe, Sortino und Alpha">
+                 title="Jahreszins für die Sharpe-Ratio">
           <span class="inp-unit">%</span>
         </span>
         <span class="set-hint is-error" id="rfHint" aria-live="polite"></span>
@@ -195,12 +195,16 @@
       </div>
     </section>
 
-    <section class="block">
-      <div class="block-head">
-        <h2>Benchmark-Vergleich</h2>
-        <span class="block-sub" id="benchSub"></span>
+    <!-- user 30.09.: P&L per holding of every benchmark shown in the chart; off by default. >= 1500px: fixed left of the content
+         (button + card); narrower: a block here, in the place of the former Benchmark-Vergleich -->
+    <section class="block hb" id="hbWrap" aria-label="Benchmark-Positionen">
+      <button type="button" class="hb-btn" id="hbToggle" aria-pressed="false" aria-controls="hbBody"
+              title="G/V und Kennzahlen je Position der eingeblendeten Benchmarks ein-/ausblenden">Benchmark-Positionen</button>
+      <div class="card hb-card" id="hbBody" hidden>
+        <div class="cmp-h"><span class="cmp-t">Positionen je Benchmark</span><span class="cmp-sub" id="hbSub"></span></div>
+        <div class="tscroll"><table class="tbl tbl--cmp tbl--hb"></table></div>
+        <p class="hb-empty" id="hbEmpty" hidden>Keine Benchmark im Chart eingeblendet.</p>
       </div>
-      <div class="card card--table"><div class="tscroll"><table class="tbl tbl--bench" id="benchTable"></table></div></div>
     </section>
 
     <section class="block" aria-label="Drawdown">

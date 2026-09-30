@@ -437,9 +437,6 @@ button { -webkit-tap-highlight-color: transparent; }
 .tbl tfoot td { border-top: 1px solid #2e3236; border-bottom: 0; background: var(--panel); font-weight: 700; }
 .tbl tfoot .sticky { background: var(--panel); }
 .tbl td.dim, .tbl .dash { color: var(--muted); }
-.th-group th { padding-top: 7px; padding-bottom: 3px; border-bottom: 0; color: #7d848a; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; text-align: center; }
-.th-group .th-rel { border-left: 1px solid var(--border); }
-.tbl .bl { border-left: 1px solid var(--border); }
 .th-btn {
   display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: none;
   color: inherit; font: inherit; cursor: pointer; white-space: nowrap;
@@ -747,3 +744,33 @@ th.is-sorted { color: var(--text); }
 .tbl--cmp td.cmp-val { color: var(--text); font-weight: 600; }
 /* card "Yacht-Portfolio" (user 30.09.): name, return and show/hide only – as tall as its content, not the grid row */
 .bb-card--yacht { align-self: start; }
+
+/* card "Benchmark-Positionen" (user 30.09.): P&L per holding of every shown benchmark; off by default */
+.hb { margin-top: 30px; }
+.hb-btn {
+  height: 30px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--pill);
+  color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.hb-btn:hover { color: var(--text); }
+.hb-btn.is-on { border-color: var(--accent); color: var(--accent); }
+.hb-card { margin-top: 10px; }
+.tbl--hb td.l, .tbl--hb th.l { text-align: left; }
+.hb-grp td { border-top: 1px solid var(--border); font-weight: 600; }
+.hb-grp:first-child td { border-top: 0; }
+.hb-note td { color: var(--muted); font-size: 11px; padding-top: 0; }
+.hb-pos { display: inline-flex; align-items: baseline; gap: 6px; padding-left: 16px; min-width: 0; }
+.hb-nm { display: inline-block; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.hb-w { color: var(--muted); font-size: 10.5px; font-weight: 500; }
+.hb-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
+@media (min-width: 1500px) {
+  /* left of the 820px content column, level with the pills on the right */
+  .hb { position: fixed; top: 46px; left: 12px; width: max(0px, calc(50% - 410px - 28px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
+  .hb .tbl--cmp { font-size: 10.5px; }
+  .hb .tbl--cmp th, .hb .tbl--cmp td { padding: 6px 3px; }
+  .hb .tbl--cmp th:first-child, .hb .tbl--cmp td:first-child { padding-left: 8px; }
+  .hb .tbl--cmp th:last-child, .hb .tbl--cmp td:last-child { padding-right: 8px; }
+  .hb .hb-pos { padding-left: 10px; gap: 3px; }
+  .hb .hb-nm { max-width: 72px; }
+  .hb .hb-w { font-size: 9.5px; }
+  .hb .cmp-h { flex-wrap: wrap; gap: 0 8px; }
+}

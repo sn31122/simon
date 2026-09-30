@@ -646,6 +646,30 @@
     return series;
   }
 
+  /**
+   * benchmarkHoldings(ctx, bench|id, start, end, baseValue) -> [{ isin, weight, v0, v1, pl, ret }] | null
+   * The single holdings of a weights / quantity benchmark, bought at the range start and held – the very purchase
+   * benchmark() draws (same start value baseValue, Σ v1 = the series' last value, Σ pl = its € change). weight = share of
+   * the start value; ret = price return of the holding. A schedule benchmark (replayed depot) has no fixed holdings -> null.
+   */
+  function benchmarkHoldings(ctx, bench, start, end, baseValue) {
+    if (typeof bench === 'string') bench = ctx.benchmarks.find((b) => b.id === bench);
+    if (!bench || ctx.n < 1 || isSchedule(bench)) return null;
+    const [s, e] = normRange(ctx, start, end);
+    const hold = benchQty(ctx, bench, s);
+    if (!hold) return null;
+    let raw0 = 0;
+    hold.forEach((h) => { raw0 += h[1] * ctx.px[h[0]][s]; });
+    if (!(raw0 > 0)) return null;
+    const k = (isNum(baseValue) ? baseValue : raw0) / raw0;
+    return hold.map((h) => {
+      const p0 = ctx.px[h[0]][s], p1 = ctx.px[h[0]][e];
+      const v0 = fin(h[1] * p0 * k), v1 = fin(h[1] * p1 * k);
+      return { isin: h[0], weight: fin(h[1] * p0 / raw0), v0, v1,
+        pl: v0 === null || v1 === null ? null : fin(v1 - v0), ret: fin(div(p1, p0) === null ? null : p1 / p0 - 1) };
+    });
+  }
+
   // ------------------------------------------------------------------ metrics
   function cleanValues(values) {
     const src = Array.isArray(values) ? values : (values && Array.isArray(values.value) ? values.value : []);
@@ -699,9 +723,6 @@
     const mex = mean(ex);
     const volAnn = sd === null ? null : fin(sd * SQRT_ANN);
     const sharpe = sd !== null && sd > EPS ? fin(mex / sd * SQRT_ANN) : null;
-    let down = null;
-    if (n) { let s2 = 0; for (let i = 0; i < n; i++) { const m = Math.min(0, ex[i]); s2 += m * m; } down = Math.sqrt(s2 / n); }
-    const sortino = down !== null && down > EPS ? fin(mex / down * SQRT_ANN) : null;
 
     const d = drawdown(v);
     const dateAt = (k) => (k === null || k === undefined || ds[k] === undefined ? null : ds[k]);
@@ -715,7 +736,7 @@
     return {
       startValue, endValue, pl: startValue === null || endValue === null ? null : fin(endValue - startValue),
       totalReturn: fin(totalReturn), days, cagr, cagrReliable: days !== null && days >= 90,
-      volAnn, sharpe, sortino,
+      volAnn, sharpe,
       maxDD: d.maxDD, maxDDPeakDate: dateAt(d.peak), maxDDTroughDate: dateAt(d.trough), maxDDRecoveryDate: dateAt(d.recovery),
       currentDD: fin(d.current),
       calmar: d.maxDD < 0 && cagr !== null ? fin(cagr / Math.abs(d.maxDD)) : null,
@@ -728,53 +749,6 @@
       n, rf,                                                               // extras: number of daily returns, rf used
       riskFrom: off > 0 ? dateAt(off) : null,                              // extra: date the risk metrics start (history before it)
     };
-  }
-
-  /** relative(pSeries, bSeries, {rf}) -> portfolio vs benchmark metrics over the common index range */
-  function relative(pSeries, bSeries, opts) {
-    const out = { beta: null, alpha: null, corr: null, r2: null, trackingError: null, infoRatio: null,
-      excessReturn: null, upCapture: null, downCapture: null, n: 0 };
-    if (!pSeries || !bSeries || !Array.isArray(pSeries.value) || !Array.isArray(bSeries.value)) return out;
-    const { rfd } = rfDaily(opts);
-    const P = pSeries.value, B = bSeries.value, RP = retsOf(pSeries), RB = retsOf(bSeries);
-    let op = 0, ob = 0, len, sh = 0;                                       // align on the common index range
-    if (isNum(pSeries.start) && isNum(bSeries.start)) {
-      const s = Math.max(pSeries.start, bSeries.start);
-      const e = Math.min(pSeries.start + P.length - 1, bSeries.start + B.length - 1);
-      op = s - pSeries.start; ob = s - bSeries.start; len = e - s + 1;
-      // returns only from the daily data on (history points are a month / 2 days apart)
-      const d = Math.max(pSeries.start + (pSeries.dailyOff || 0), bSeries.start + (bSeries.dailyOff || 0));
-      sh = Math.min(Math.max(0, d - s), Math.max(0, len - 1));
-    } else len = Math.min(P.length, B.length);
-    if (!(len >= 1)) return out;
-    const rp = RP.slice(op + sh, op + len - 1), rb = RB.slice(ob + sh, ob + len - 1), n = rp.length;
-    out.n = n;
-    const trP = div(P[op + len - 1], P[op]), trB = div(B[ob + len - 1], B[ob]);
-    out.excessReturn = trP === null || trB === null ? null : fin((trP - 1) - (trB - 1));
-    if (n >= 2) {
-      const cov = sampleCov(rp, rb), varB = sampleCov(rb, rb), sdP = sampleSd(rp), sdB = sampleSd(rb);
-      if (sdB > EPS) {
-        out.beta = fin(cov / varB);
-        const mp = mean(rp.map((x) => x - rfd)), mb = mean(rb.map((x) => x - rfd));
-        out.alpha = out.beta === null ? null : fin((mp - out.beta * mb) * ANN);
-      }
-      if (sdP > EPS && sdB > EPS) {
-        const c = fin(cov / (sdP * sdB));
-        out.corr = c === null ? null : clamp(c, -1, 1);
-        out.r2 = out.corr === null ? null : out.corr * out.corr;
-      }
-      const diff = rp.map((x, i) => x - rb[i]);
-      const sdD = sampleSd(diff);
-      out.trackingError = sdD > EPS ? fin(sdD * SQRT_ANN) : 0;
-      out.infoRatio = out.trackingError > 0 ? fin(mean(diff) * ANN / out.trackingError) : null;
-    }
-    const upP = [], upB = [], dnP = [], dnB = [];
-    for (let i = 0; i < n; i++) {
-      if (rb[i] > 0) { upP.push(rp[i]); upB.push(rb[i]); } else if (rb[i] < 0) { dnP.push(rp[i]); dnB.push(rb[i]); }
-    }
-    out.upCapture = upB.length ? div(mean(upP), mean(upB)) : null;
-    out.downCapture = dnB.length ? div(mean(dnP), mean(dnB)) : null;
-    return out;
   }
 
   /** assets(ctx, {selected, start, end, scale}) -> one row per position (selected or not) */
@@ -1008,7 +982,7 @@
   const PFEngine = {
     version: '1.1.0',
     PRESETS, ANN, DEFAULT_RF,
-    prepare, presetRange, customRange, portfolio, benchmark, drawdown, stats, relative, assets, groupSummary,
+    prepare, presetRange, customRange, portfolio, benchmark, drawdown, stats, benchmarkHoldings, assets, groupSummary,
     withShares, coverageStart, notQuoted, depotNow, depotChange,
     assetsTotal, chartInterval, gridCovers, gridFrame,
     intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,

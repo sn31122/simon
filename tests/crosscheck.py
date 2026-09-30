@@ -31,7 +31,7 @@ BENCH = {
 rows = list(csv.reader(open(R/'data/prices_daily.csv', encoding='utf-8')))
 head, rows = rows[0], rows[1:]
 # history before the daily data (prices_history.csv: date,res,<ISIN>…, month-end / every 2nd trading day): prepended as
-# final rows; risk metrics (vol, Sharpe, Sortino, VaR, best/worst day, beta, correlation, tracking error …) use only the
+# final rows; risk metrics (vol, Sharpe, VaR, best/worst day …) use only the
 # returns from DAILY on, totalReturn / CAGR / drawdown every point (user, 28.09.)
 hist = []
 if (R/'data/prices_history.csv').exists():
@@ -117,27 +117,19 @@ def stats(v, ds, rf=0.02, off=0):          # off = points before the daily data 
     dd, mdd, p, t, rec = drawdown(v)
     q = quantile(r, 0.05)
     cagr = (1 + tr) ** (365 / days) - 1
-    down = math.sqrt(sum(min(0, x) ** 2 for x in ex) / len(r))
     return dict(startValue=v[0], endValue=v[-1], pl=v[-1] - v[0], totalReturn=tr, days=days, cagr=cagr,
                 volAnn=sd(r) * math.sqrt(252), sharpe=mean(ex) / sd(r) * math.sqrt(252),
-                sortino=mean(ex) / down * math.sqrt(252), maxDD=mdd, maxDDPeakDate=ds[p], maxDDTroughDate=ds[t],
+                maxDD=mdd, maxDDPeakDate=ds[p], maxDDTroughDate=ds[t],
                 maxDDRecoveryDate=ds[rec] if rec is not None else None, currentDD=dd[-1],
                 calmar=cagr / abs(mdd) if mdd < 0 else None, pctPositive=sum(x > 0 for x in r) / len(r),
                 bestDay=max(r), worstDay=min(r), var95=-q, cvar95=-mean([x for x in r if x <= q]))
 
-def relative(vp, vb, rf=0.02, off=0):
-    rp = [vp[k] / vp[k - 1] - 1 for k in range(off + 1, len(vp))]
-    rb = [vb[k] / vb[k - 1] - 1 for k in range(off + 1, len(vb))]
-    rfd = (1 + rf) ** (1 / 252) - 1
-    beta = cov(rp, rb) / cov(rb, rb)
-    corr = cov(rp, rb) / (sd(rp) * sd(rb))
-    diff = [a - b for a, b in zip(rp, rb)]
-    te = sd(diff) * math.sqrt(252)
-    up = [k for k in range(len(rb)) if rb[k] > 0]; dn = [k for k in range(len(rb)) if rb[k] < 0]
-    return dict(beta=beta, corr=corr, r2=corr ** 2, alpha=(mean([x - rfd for x in rp]) - beta * mean([x - rfd for x in rb])) * 252,
-                trackingError=te, infoRatio=mean(diff) * 252 / te, excessReturn=(vp[-1] / vp[0]) - (vb[-1] / vb[0]),
-                upCapture=mean([rp[k] for k in up]) / mean([rb[k] for k in up]),
-                downCapture=mean([rp[k] for k in dn]) / mean([rb[k] for k in dn]))
+def holdings(b, s, e, v0):
+    """single holdings of a weights benchmark (bought at s with v0, held): {isin: [v0_i, v1_i]}"""
+    kind, h = BENCH[b]
+    if kind != 'weights': return None
+    tot = sum(h.values())
+    return {i: [v0 * w / tot, v0 * w / tot * px[i][e] / px[i][s]] for i, w in h.items()}
 
 ALL = {p['isin']: float(p['shares']) for p in pos}
 SEMI = {p['isin']: float(p['shares']) for p in pos if p['group'] == 'High Players Semiconductors'}
@@ -162,7 +154,7 @@ for c in cases:
                startValueInput=c['startValue'], scale=scale, stats=stats(v, ds, off=off), bench={}, contrib_sum=None)
     for b in c['bench']:
         bv = bench_value(b, s, e, v[0])
-        res['bench'][b] = dict(defn=dict(kind=BENCH[b][0], h=BENCH[b][1]), stats=stats(bv, ds, off=off), relative=relative(v, bv, off=off))
+        res['bench'][b] = dict(defn=dict(kind=BENCH[b][0], h=BENCH[b][1]), stats=stats(bv, ds, off=off), holdings=holdings(b, s, e, v[0]))
     contrib = {i: q * (px[i][e] - px[i][s]) * scale / v[0] for i, q in c['hold'].items()}
     res['contrib_sum'] = sum(contrib.values())
     res['top_contrib'] = sorted(contrib.items(), key=lambda kv: -kv[1])[:5]
@@ -310,5 +302,4 @@ for c in out['cases']:
           f"TR {st['totalReturn']*100:+7.2f}%  CAGR {st['cagr']*100:+8.2f}%  vol {st['volAnn']*100:6.2f}%  "
           f"Sharpe {st['sharpe']:5.2f}  MDD {st['maxDD']*100:6.2f}% ({st['maxDDPeakDate']}->{st['maxDDTroughDate']})")
     for b, x in c['bench'].items():
-        print(f"    {b:<16} TR {x['stats']['totalReturn']*100:+7.2f}%  beta {x['relative']['beta']:5.2f}  corr {x['relative']['corr']:5.2f}  "
-              f"alpha {x['relative']['alpha']*100:+7.2f}%  TE {x['relative']['trackingError']*100:6.2f}%")
+        print(f"    {b:<16} TR {x['stats']['totalReturn']*100:+7.2f}%  Sharpe {x['stats']['sharpe']:5.2f}  MDD {x['stats']['maxDD']*100:6.2f}%")

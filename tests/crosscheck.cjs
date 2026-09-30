@@ -15,9 +15,8 @@ function cmp(label, a, b) {
   if (!ok) { fails++; console.log('MISMATCH', label, 'engine:', a, 'reference:', b); }
 }
 
-const STATS = ['startValue', 'endValue', 'pl', 'totalReturn', 'days', 'cagr', 'volAnn', 'sharpe', 'sortino', 'maxDD',
+const STATS = ['startValue', 'endValue', 'pl', 'totalReturn', 'days', 'cagr', 'volAnn', 'sharpe', 'maxDD',
   'maxDDPeakDate', 'maxDDTroughDate', 'maxDDRecoveryDate', 'currentDD', 'calmar', 'pctPositive', 'var95', 'cvar95'];
-const REL = ['beta', 'alpha', 'corr', 'r2', 'trackingError', 'infoRatio', 'excessReturn', 'upCapture', 'downCapture'];
 
 /** reference definition -> engine benchmark object (quantities, or a weights card bought at the range start) */
 function benchDef(id, d) { return d.kind === 'weights' ? { id, name: id, weights: d.h } : { id, name: id, holdings: d.h }; }
@@ -39,8 +38,11 @@ for (const c of ref.cases) {
   for (const [id, rb] of Object.entries(c.bench)) {
     const b = E.benchmark(ctx, benchDef(id, rb.defn), c.start, c.end, s.value[0]);
     checkStats(`${c.name} ${id} stats`, E.stats(b, { rf: 0.02 }), rb.stats);
-    const rel = E.relative(s, b, { rf: 0.02 });
-    for (const k of REL) cmp(`${c.name} ${id} relative.${k}`, rel[k], rb.relative[k]);
+    if (rb.holdings) {                                // single holdings of a weights card (Benchmark-Positionen): start / end value
+      const hs = E.benchmarkHoldings(ctx, benchDef(id, rb.defn), c.start, c.end, s.value[0]);
+      cmp(`${c.name} ${id} holdings n`, hs.length, Object.keys(rb.holdings).length);
+      hs.forEach((h) => { cmp(`${c.name} ${id} ${h.isin} v0`, h.v0, rb.holdings[h.isin][0]); cmp(`${c.name} ${id} ${h.isin} v1`, h.v1, rb.holdings[h.isin][1]); });
+    }
   }
   const rows = E.assets(ctx, { selected: c.isins, start: c.start, end: c.end, scale: s.scale });
   cmp(`${c.name} rows`, rows.length, ctx.positions.length);

@@ -218,19 +218,19 @@ async function depotBoxCheck(page) {
     await settle(page);
     const eid = await page.evaluate(() => PFApp.state.cards[PFApp.state.cards.length - 1].id);
     const eShown = await page.evaluate((id) => ({ shown: window.__shown(), legend: /Energie/.test(document.getElementById('legend').textContent),
-      lines: PFApp.charts.main.model.benches.length, table: Array.from(document.querySelectorAll('#benchTable tbody tr')).some((r) => /Energie/.test(r.textContent)),
+      lines: PFApp.charts.main.model.benches.length, table: Array.from(document.querySelectorAll('#cmpTable tbody tr')).some((r) => /Energie/.test(r.textContent)),
       rows: PFApp.state.cards.find((c) => c.id === id).rows.length }), eid);
     await page.click('#benchCards [data-card="' + eid + '"] [data-act="del"]');
     await settle(page);
     const eDel = await page.evaluate(() => ({ cards: PFApp.state.cards.length, dom: document.querySelectorAll('#benchCards .bb-card').length, shown: window.__shown() }));
-    check('cards', '"+ Benchmark" menu: Leere Karte + every preset; Energie is added shown (legend, chart line, Benchmark-Vergleich), the trash deletes it',
+    check('cards', '"+ Benchmark" menu: Leere Karte + every preset; Energie is added shown (legend, chart line, Statistik), the trash deletes it',
       menu.open && ['empty', 'my_depot', 'energie', 'old_portfolio', 'situational_awareness', 'depot_history'].every((x) => menu.items.indexOf(x) >= 0) &&
       eShown.shown === 'Mein Depot,Energie' && eShown.legend && eShown.lines === 2 && eShown.table && eShown.rows === 11 &&
       eDel.cards === 1 && eDel.dom === 2 && eDel.shown === 'Mein Depot', { menu, eShown, eDel });
     await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
     const hidden = await page.evaluate(() => ({ shown: PFApp.state.benchmarks.length, legend: document.getElementById('legend').textContent,
-      lines: PFApp.charts.main.model.benches.length, table: document.querySelectorAll('#benchTable tbody tr').length }));
+      lines: PFApp.charts.main.model.benches.length, table: document.querySelectorAll('#cmpTable tbody tr').length }));
     await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
     const reshown = await page.evaluate(() => window.__shown());
@@ -411,15 +411,15 @@ async function depotBoxCheck(page) {
     const agree = await page.evaluate((id) => {
       const el = document.querySelector('[data-card="' + id + '"]'), card = el.querySelector('.bb-ret').textContent;
       const lg = Array.from(document.querySelectorAll('#legend .lg-item')).find((n) => /Benchmark 1/.test(n.textContent));
-      const row = Array.from(document.querySelectorAll('#benchTable tbody tr')).find((r) => /Benchmark 1/.test(r.textContent));
+      const row = Array.from(document.querySelectorAll('#cmpTable tbody tr')).find((r) => /Benchmark 1/.test(r.textContent));
       const kpi = document.querySelector('#kpis .kpi .kpi-bench');
       const dd = PFApp.charts.dd.model.benches.some((b) => b.id === id);
       PFApp.sync.setHover(60); PFApp.sync.flush();
       const readout = document.getElementById('ddReadout').textContent;
       PFApp.sync.setHover(null);
-      return { card, legend: lg && lg.querySelector('b').textContent, table: row && row.children[1].textContent, kpi: kpi && kpi.textContent, dd, readout: /Benchmark 1/.test(readout) };
+      return { card, legend: lg && lg.querySelector('b').textContent, table: row && row.children[3].textContent, kpi: kpi && kpi.textContent, dd, readout: /Benchmark 1/.test(readout) };
     }, cid);
-    check('cards', 'card return = legend = Benchmark-Vergleich = Kennzahlen bench line; drawdown line + readout',
+    check('cards', 'card return = legend = Statistik = Kennzahlen bench line; drawdown line + readout',
       agree.card === agree.legend && agree.card === agree.table && agree.kpi && agree.kpi.indexOf(agree.card) >= 0 && agree.dd && agree.readout, agree);
     await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
@@ -430,9 +430,9 @@ async function depotBoxCheck(page) {
     const excl = await page.evaluate((id) => ({
       bench: PFApp.model().benches.some((b) => b.id === id), legend: /Benchmark 1/.test(document.getElementById('legend').textContent),
       lines: PFApp.charts.main.model.benches.some((b) => b.id === id), dd: PFApp.charts.dd.model.benches.some((b) => b.id === id),
-      table: /Benchmark 1/.test(document.getElementById('benchTable').textContent)
+      table: /Benchmark 1/.test(document.getElementById('cmpTable').textContent)
     }), cid);
-    check('cards', 'an invalid card is left out of chart, drawdown, legend, Benchmark-Vergleich',
+    check('cards', 'an invalid card is left out of chart, drawdown, legend, Statistik',
       !excl.bench && !excl.legend && !excl.lines && !excl.dd && !excl.table, excl);
     await selectAllAndType(page, '60');
     await settle(page);
@@ -839,8 +839,27 @@ async function depotBoxCheck(page) {
       return out;
     });
     const gone = await page.evaluate(() => !document.getElementById('monthTable') && !document.getElementById('riskBlock') && !document.getElementById('heatmap'));
-    check('lists', 'order: lists, Benchmark-Vergleich, Drawdown, Kennzahlen, Hinweise (Monatsrenditen and Risiko & Korrelation removed)',
-      order.join('|') === 'Listen|Benchmark-Vergleich|Drawdown|Kennzahlen|Hinweise' && gone, { order, gone });
+    check('lists', 'order: lists, Drawdown, Kennzahlen, Hinweise (Benchmark-Vergleich removed 30.09.) (Monatsrenditen and Risiko & Korrelation removed)',
+      order.join('|') === 'Listen|Drawdown|Kennzahlen|Hinweise' && gone, { order, gone });
+    // card "Benchmark-Positionen" (30.09.): off by default; on = one group per shown benchmark with its holdings; the holdings add up to the group line
+    const hb0 = await page.evaluate(() => ({ on: PFApp.state.hbOn, hidden: document.getElementById('hbBody').hidden, sortino: !!document.querySelector('#kpis') && /Sortino/.test(document.getElementById('kpis').textContent), vgl: !!document.getElementById('benchTable') }));
+    await page.click('#hbToggle');
+    await settle(page);
+    const hb1 = await page.evaluate(() => {
+      const rows = Array.from(document.querySelectorAll('#hbBody tbody tr')), num = (t) => parseFloat(t.replace(/\./g, '').replace(',', '.').replace('+', ''));
+      const grp = rows.filter((r) => r.classList.contains('hb-grp')), out = [];
+      grp.forEach((g) => {
+        let el = g.nextElementSibling, sumV = 0, sumPl = 0, n = 0;
+        while (el && !el.classList.contains('hb-grp')) { if (!el.classList.contains('hb-note')) { sumV += num(el.children[1].textContent); sumPl += num(el.children[2].textContent); n++; } el = el.nextElementSibling; }
+        out.push({ name: g.children[0].textContent.trim(), n, dV: Math.abs(sumV - num(g.children[1].textContent)), dPl: Math.abs(sumPl - num(g.children[2].textContent)) });
+      });
+      return { open: !document.getElementById('hbBody').hidden, groups: out, shown: window.__shown() };
+    });
+    await page.click('#hbToggle');
+    await settle(page);
+    const hb2 = await page.evaluate(() => document.getElementById('hbBody').hidden);
+    check('lists', 'Benchmark-Positionen: off by default; on = every shown benchmark with its holdings, Σ holdings = the benchmark line (rounding ≤ 5 €); Sortino and Benchmark-Vergleich are gone',
+      hb0.on === false && hb0.hidden && !hb0.sortino && !hb0.vgl && hb1.open && hb1.groups.length >= 1 && hb1.groups.every((g) => g.n >= 1 && g.dV <= 5 && g.dPl <= 5) && hb2, { hb0, hb1, hb2 });
     async function combos(pg) {
       const out = [];
       for (const [h, a] of [[true, false], [true, true], [false, true], [false, false]]) {
