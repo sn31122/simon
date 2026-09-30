@@ -49,7 +49,7 @@
 
   // ------------------------------------------------------------------ state
   var state = {
-    preset: 'YTD', custom: null, startYear: null, mode: 'value', startValue: null, rf: 0.02,
+    preset: '1T', custom: null, startYear: null, mode: 'value', startValue: null, rf: 0.02,
     fixedOn: {},                               // locked cards (benchmarks.csv "ISIN:qty") shown in the chart; none since 28.09.
     cards: [],                                 // own benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]}; not persisted
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
