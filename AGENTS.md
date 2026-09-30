@@ -45,7 +45,7 @@ Timeframes (one ISIN per call): `seven_days` = 30-min points, last point per day
 
 - Backcast with constant share counts, price return in EUR, no dividends; forward-fill gaps, flat at the first quote before it.
 - History before 2026 is prepended (`res` per date, `ctx.dailyFrom`); chart, Rendite, p.a., Max. DD use all points, risk metrics only daily returns. Long ranges start where ≥ 90 % of today's value has quotes (`coverageStart`). YTD starts at the previous year's last price.
-- Benchmark cards `{weights: {ISIN: %}}` (or `schedule` for Depot-Historie): bought at the range start, buy and hold, drawn only at 100 %, normalized to the start value. Startwert empty = all lines start at the Yacht's value; typed = all lines start there.
+- Benchmark cards `{weights: {ISIN: %}}` (or `schedule` for Depot-Historie): bought at the range start, buy and hold, normalized to the start value; a total ≠ 100 % counts as absolute amounts (110 % = 1,1 × start value, user 30.09.); new rows: first 100 %, further ones empty, never auto-filled. Startwert empty = all lines start at the Yacht's value; typed = all lines start there.
 - Top blocks: real Yacht (never what-if) and "Mein Depot" (`depotNow`, period change `depotChange`, "Seit Kauf" = G/V seit Kauf).
 - Chart interval: 1T/1W 30 min, 1M 2 h, longer daily; steps down where sessions are missing. Kennzahlen, tables, sparklines stay daily.
 
