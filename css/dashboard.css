@@ -784,9 +784,18 @@ th.is-sorted { color: var(--text); }
 .hb-nm { display: inline-block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .hb-w { flex: 0 0 auto; color: var(--muted); font-size: 10.5px; font-weight: 400; }
 .hb-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
-@media (min-width: 1600px) {
+@media (min-width: 1500px) {
   /* left of the 820px content column, level with the pills on the right; a bit narrower (user 30.09.), its right edge
-     keeps the old 28px gap to the column; from 1600px (not 1500) so the names keep room at the Statistik type size */
+     keeps the old 28px gap to the column */
   .hb { position: fixed; top: 46px; right: calc(50% + 410px + 28px); width: min(400px, calc(50% - 410px - 28px - 12px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
   .hb .cmp-h { flex-wrap: wrap; gap: 0 8px; }
+}
+@media (min-width: 1500px) and (max-width: 1719px) {
+  /* narrow side space (< 400px): smaller gap to the column and tighter number columns so the names keep room */
+  .hb { right: calc(50% + 410px + 16px); left: 8px; width: auto; }
+  .tbl--hb col.hb-c1 { width: 56px; }
+  .tbl--hb col.hb-c2 { width: 64px; }
+  .tbl--hb col.hb-c3 { width: 70px; }
+  .tbl--hb th, .tbl--hb td { padding-left: 4px; padding-right: 4px; }
+  .hb-pos { padding-left: 8px; gap: 4px; }
 }
