@@ -6,12 +6,6 @@
         "hooks": [
           { "type": "command", "command": "node", "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/save-chart.cjs"], "timeout": 30 }
         ]
-      },
-      {
-        "matcher": "Write",
-        "hooks": [
-          { "type": "command", "command": "node", "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/fetch-yfinance.cjs"], "timeout": 1800 }
-        ]
       }
     ]
   }
