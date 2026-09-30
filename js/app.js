@@ -2233,49 +2233,6 @@
     }
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(box);
     else window.addEventListener('resize', onResize);
-    bindChartGrip(box);
-  }
-
-  /**
-   * Grab point at the bottom-right corner of the main chart (user 30.09.): dragging it moves that corner with the mouse –
-   * the chart grows or shrinks symmetrically to both sides (left edge mirrors the right one) and in height downward.
-   * Panels may cover the chart; no reset, nothing remembered (reload = normal size). Only the main chart.
-   */
-  function bindChartGrip(box) {
-    var blk = box.parentNode, grip = document.createElement('div'), gx = 0, gy = 0, drag = null;
-    grip.className = 'chart-grip';
-    grip.title = 'Ziehen: Chart größer/kleiner (symmetrisch)';
-    blk.appendChild(grip);
-    function place() {
-      var b = blk.getBoundingClientRect(), r = box.getBoundingClientRect();
-      grip.style.left = (r.right - b.left) + 'px';
-      grip.style.top = (r.bottom - b.top) + 'px';
-    }
-    function apply() {
-      box.style.setProperty('--grow-x', gx + 'px');
-      box.style.setProperty('--grow-y', gy + 'px');
-      place();
-    }
-    grip.addEventListener('pointerdown', function (ev) {
-      if (ev.button !== 0) return;
-      ev.preventDefault();
-      grip.setPointerCapture(ev.pointerId);
-      drag = { x: ev.clientX, y: ev.clientY, gx: gx, gy: gy, w: blk.clientWidth };
-      document.documentElement.classList.add('is-gripping');
-    });
-    grip.addEventListener('pointermove', function (ev) {
-      if (!drag) return;
-      var maxX = Math.max(0, (document.documentElement.clientWidth - drag.w) / 2 - 8);     // stays inside the window
-      gx = Math.round(Math.max(-(drag.w - 420) / 2, Math.min(maxX, drag.gx + ev.clientX - drag.x)));
-      gy = Math.round(Math.max(-190, drag.gy + ev.clientY - drag.y));                       // at least ~300px tall
-      apply();
-    });
-    function end() { drag = null; document.documentElement.classList.remove('is-gripping'); }
-    grip.addEventListener('pointerup', end);
-    grip.addEventListener('pointercancel', end);
-    if (window.ResizeObserver) new ResizeObserver(place).observe(box);
-    window.addEventListener('resize', place);
-    place();
   }
 
   // ------------------------------------------------------------------ start
