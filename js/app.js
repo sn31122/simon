@@ -49,7 +49,7 @@
 
   // ------------------------------------------------------------------ state
   var state = {
-    preset: 'YTD', custom: null, mode: 'value', startValue: null, rf: 0.02,
+    preset: 'YTD', custom: null, startYear: null, mode: 'value', startValue: null, rf: 0.02,
     fixedOn: {},                               // locked cards (benchmarks.csv "ISIN:qty") shown in the chart; none since 28.09.
     cards: [],                                 // own benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]}; not persisted
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
@@ -222,7 +222,9 @@
   function compute() {
     var R = currentRange(), rf = state.rf, sel = state.selected, n = ctx.n;
     // history back to ~2016: before the first quote a title counts flat, so a long range starts at the coverage date
-    var cov = sel.size && E.coverageStart ? E.coverageStart(ctx, { selected: sel, share: COVER }) : 0, cover = null;
+    // MAX and a Startjahr (user 30.09.) show the whole chosen span: no coverage cut, titles without quotes count flat
+    var full = state.startYear != null || (!state.custom && state.preset === 'MAX');
+    var cov = !full && sel.size && E.coverageStart ? E.coverageStart(ctx, { selected: sel, share: COVER }) : 0, cover = null;
     if (R.start < cov && R.end - cov >= 1) { cover = { from: R.start, to: cov }; R = { start: cov, end: R.end }; }
     // Startwert (user 29.09.): empty = every line starts at the Yacht's value at the range start; a value = every line
     // (Yacht and benchmarks) starts there (buttons "Yacht" / "Mein Depot" next to the field)
@@ -267,7 +269,7 @@
       }
     }
     return {
-      R: R, cover: cover, flat: sel.size && E.notQuoted ? E.notQuoted(ctx, { selected: sel, start: R.start }) : [],
+      R: R, cover: cover, full: full, flat: sel.size && E.notQuoted ? E.notQuoted(ctx, { selected: sel, start: R.start }) : [],
       p: p, ps: ps, pdd: pdd, benches: benches, byId: byId, selB: selB,
       assets: assets, groups: groups,
       orig: orig, origStats: orig ? E.stats(orig, { rf: rf }) : null, iv: iv, intra: intra
@@ -709,6 +711,7 @@
     dfFrom.set(state.custom ? state.custom.from : ctx.dates[R.start]);    // skipped while the field is being edited
     dfTo.set(state.custom ? state.custom.to : ctx.dates[R.end]);
     $('dateRange').classList.toggle('is-custom', !!state.custom);
+    $('startYear').value = state.startYear != null ? String(state.startYear) : '';
   }
 
   function renderMode() {
@@ -1331,6 +1334,9 @@
     if (M.cover) note = 'Beginn ' + F.date(ctx.dates[R.start], 'short') + ': erst ab da haben ≥ 90 % des heutigen Werts Kurse' +
       (M.flat.length ? '; ohne Kurs, flach gerechnet: ' + M.flat.slice(0, 3).map(function (x) { return x.short + (x.first ? ' ab ' + F.date(x.first, 'short') : ''); }).join(', ') +
         (M.flat.length > 3 ? ' +' + (M.flat.length - 3) : '') : '');
+    else if (M.full && M.flat.length) note = 'ohne Kurs, flach bis zum ersten Kurs: ' +
+      M.flat.slice(0, 3).map(function (x) { return x.short + (x.first ? ' ab ' + F.date(x.first, 'short') : ''); }).join(', ') +
+      (M.flat.length > 3 ? ' +' + (M.flat.length - 3) : '');
     if (M.intra && M.intra.oneT) note = IV_LONG[M.intra.key] + ' bis ' + F.asofBerlin(M.intra.asof) + ' Uhr' +
       (M.intra.missing.length ? ', ' + M.intra.missing.length + ' Werte ohne Intraday-Kurse' : '');
     var period = 'Zeitraum ' + periodText(R) + (note ? ' (' + note + ')' : '');
@@ -1707,6 +1713,7 @@
     state.sinceBuy = p === 'SK';
     state.preset = p === 'SK' ? 'MAX' : p;
     state.custom = null;
+    state.startYear = null;
     setRangeHint('');
     update();
   }
@@ -2014,6 +2021,7 @@
     state.custom = { from: from, to: to };
     state.preset = null;
     state.sinceBuy = false;
+    state.startYear = null;
     update();
   }
 
@@ -2043,6 +2051,28 @@
     update({ keepMeasure: true });
   }
 
+  /** Startjahr menu: "–" + every year with data; the list of years is filled once. */
+  function fillStartYears() {
+    var sel = $('startYear'), y0 = +ctx.dates[0].slice(0, 4), y1 = +ctx.dates[ctx.n - 1].slice(0, 4), h = '<option value="">–</option>';
+    for (var y = y1; y >= y0; y--) h += '<option value="' + y + '">' + y + '</option>';
+    sel.innerHTML = h;
+  }
+  /** Startjahr Y: from the last close before 01.01.Y (like YTD; the first data day if there is none) to the last day. */
+  function onStartYear() {
+    var v = $('startYear').value;
+    if (!v) { setPeriod(state.preset || 'YTD'); return; }
+    var jan = v + '-01-01', k = 0;
+    for (var i = 0; i < ctx.n; i++) if (ctx.dates[i] < jan) k = i; else break;
+    var from = ctx.dates[k], to = ctx.dates[ctx.n - 1];
+    if (!E.customRange(ctx, from, to)) { $('startYear').value = state.startYear != null ? String(state.startYear) : ''; return; }
+    setRangeHint('');
+    state.custom = { from: from, to: to };
+    state.preset = null;
+    state.sinceBuy = false;
+    state.startYear = +v;
+    update();
+  }
+
   function onRf() {
     var inp = $('rfInput'), s = inp.value.trim(), v = s ? F.parseDE(s) : null;
     if (!isNum(v) || v < -20 || v > 50) {
@@ -2066,6 +2096,7 @@
     state.custom = { from: from, to: to };
     state.preset = null;
     state.sinceBuy = false;
+    state.startYear = null;
     update();
   }
 
@@ -2098,6 +2129,8 @@
       onStartValue();
     });
     $('rfInput').addEventListener('input', onRf);
+    fillStartYears();
+    $('startYear').addEventListener('change', onStartYear);
     bindBench();                                 // benchmark cards + instrument search list
     $('applyMeasure').addEventListener('click', applyMeasure);
     $('assetTable').addEventListener('change', function (ev) {

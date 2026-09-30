@@ -49,7 +49,7 @@ data); `stats` computes totalReturn, CAGR, drawdown over every point and vol, Sh
 use daily returns only. `coverageStart(ctx, {selected, share = 0.9, end})` = first
 index where the selected positions with a real quote make up ≥ share of the value at end; `notQuoted(ctx, {selected, start})`
 = selected positions without a quote at start (`{isin, short, first, share}`). The UI starts every range at
-`coverageStart(…, 0.9)` when it would begin earlier (headline note names the flat titles), YTD begins at the previous year's
+`coverageStart(…, 0.9)` when it would begin earlier (headline note names the flat titles) – except MAX and a "Startjahr" (menu in the settings row: from the last close before 01.01. of the year to the last day, as a custom range), which show the whole span with titles flat before their first quote (user 30.09.), YTD begins at the previous year's
 last price, a preset target between month-end rows takes the nearer date. With history in the range the chart x-axis is by
 calendar time (`model.xs` = day numbers; > 800 days: year labels), hover labels read "30.06.2022 (Monatsschluss)", the
 interval note says "Intervall: 1 Tag · davor jeder 2. Handelstag, Monatsschluss bis Aug. 2025 (ab 02.01.2026 täglich)" and the
