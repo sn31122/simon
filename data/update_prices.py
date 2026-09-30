@@ -28,7 +28,28 @@
 #         python update_prices.py --add-column ISIN[,ISIN]  (legacy) adds empty price columns before a plain run
 import csv, datetime, math, pathlib, re, subprocess, sys
 
+# Historical Yahoo closes have their own request directories and transaction.
+# Dispatch before the legacy Scalable planner can clear incoming/ or load data.
+if '--finish-yfinance' in sys.argv:
+    import json
+    from yfinance_history import ROOT, finalize
+    try:
+        run_id = sys.argv[sys.argv.index('--finish-yfinance') + 1]
+        print(json.dumps(finalize(ROOT, run_id, '--allow-partial' in sys.argv), ensure_ascii=False))
+        sys.exit(0)
+    except Exception as exc:
+        print(json.dumps({'status': 'error', 'error': str(exc)}, ensure_ascii=False))
+        sys.exit(1)
+
 D = pathlib.Path(__file__).resolve().parent
+# Coordinate legacy CSV writes with the Yahoo history transaction.
+if (D/'yfinance_sources.csv').exists() and not any(x in sys.argv for x in
+        ('--plan', '--plan-add', '--plan-history', '--check', '--dry-run')):
+    import atexit
+    from yfinance_history import lock as history_lock
+    _history_guard = history_lock(D/'yfinance'/'merge.lock')
+    _history_guard.__enter__()
+    atexit.register(_history_guard.__exit__, None, None, None)
 INC = D / 'incoming'
 INC2H, INC3M = INC / '2h', INC / '3m'
 STORE_30M, STORE_2H = D / 'intraday.csv', D / 'intraday_2h.csv'
@@ -186,7 +207,9 @@ def tests_status_report(alerts, step=''):
     hist = ''
     if HIST.exists():
         hr = [r for r in csv.reader(open(HIST, encoding='utf-8')) if r][1:]
-        if hr: hist = f'history (prices_history.csv): {len(hr)} rows {hr[0][0]} … {hr[-1][0]} (month-end + every 2nd trading day); '
+        if hr:
+            resolution = 'daily Yahoo closes plus sparse Scalable fallback' if any(r[1] == 'd' for r in hr) else 'month-end + every 2nd trading day'
+            hist = f'history (prices_history.csv): {len(hr)} rows {hr[0][0]} … {hr[-1][0]} ({resolution}); '
     status = (f'<!-- data-status:start (written by update_prices.py --finish) -->\n'
               f'- Data status (update {now_berlin:%d.%m.%Y %H:%M} Berlin): {len(rr)} trading days {rr[0][0]} … {last[0]}; '
               f'last row {last[0]} = {last[1]}{asof}; {hist}30-min (intraday.csv): {span(idays)}; 2-h (intraday_2h.csv): {span(hdays)}; '
@@ -336,6 +359,9 @@ def add_history(new):
     with open(HIST, 'w', encoding='utf-8', newline='') as f:
         w = csv.writer(f); w.writerow(['date', 'res'] + head[3:])
         for d in sorted(table): w.writerow([d, table[d]['res']] + [table[d].get(i, '') for i in head[3:]])
+    if (D/'yfinance_sources.csv').exists():
+        from yfinance_history import restore_overlay
+        restore_overlay(D.parent)
     return f'prices_history.csv: {n} history points of {len(new)} new ISIN(s) merged ({len(table)} rows)'
 
 
@@ -518,6 +544,9 @@ if '--finish-history' in sys.argv:
         for d in sorted(hist):
             res, v = hist[d]
             w.writerow([d, res] + ['%.10g' % v[i] if i in v else '' for i in head[3:]])
+    if (D/'yfinance_sources.csv').exists():
+        from yfinance_history import restore_overlay
+        restore_overlay(D.parent)
     nm, n2 = sum(1 for v in hist.values() if v[0] == 'm'), sum(1 for v in hist.values() if v[0] == '2d')
     firsts = sorted((min(d for d, v in hist.items() if i in v[1]), i) for i in head[3:] if any(i in v[1] for v in hist.values()))
     print(f'prices_history.csv: {len(hist)} rows {min(hist)} .. {max(hist)} ({nm} month-end + {n2} every-2nd-day rows) for '

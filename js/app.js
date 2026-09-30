@@ -667,9 +667,9 @@
     if (!iv) { el.textContent = ''; return; }
     var why = iv.stepped && iv.skipped.length ? 'keine ' + (iv.skipped.length > 1 ? '30-Min- oder 2-Std-Kurse' : IV_KURSE[iv.skipped[0]]) + ' für diesen Zeitraum' : '';
     if (iv.key === 'day' && !M.intra && M.R.start < (ctx.dailyFrom || 0)) {        // history in the range: coarser before 2026
-      var hasM = false, has2 = false, lastM = null;
-      for (var k = M.R.start; k < ctx.dailyFrom; k++) { if (ctx.res[k] === 'm') { hasM = true; lastM = ctx.dates[k]; } else has2 = true; }
-      why = 'davor ' + [has2 ? 'jeder 2. Handelstag' : '', hasM ? 'Monatsschluss' + (has2 && lastM ? ' bis ' + F.date(lastM, 'monthYear') : '') : '']
+      var hasM = false, has2 = false, hasD = false, lastM = null;
+      for (var k = M.R.start; k < ctx.dailyFrom; k++) { if (ctx.res[k] === 'm') { hasM = true; lastM = ctx.dates[k]; } else if (ctx.res[k] === '2d') has2 = true; else hasD = true; }
+      why = 'davor ' + [hasD ? 'tägliche Yahoo-Kurse mit Scalable-Fallback' : '', has2 ? 'jeder 2. Handelstag' : '', hasM ? 'Monatsschluss' + (has2 && lastM ? ' bis ' + F.date(lastM, 'monthYear') : '') : '']
         .filter(Boolean).join(', ') + ' (ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') + ' täglich)';
     }
     el.innerHTML = 'Intervall: <b>' + esc(IV_SHORT[iv.key]) + '</b>' + (why ? '<span class="chart-iv-why"> · ' + esc(why) + '</span>' : '');

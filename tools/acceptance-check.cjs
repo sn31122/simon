@@ -188,7 +188,7 @@ async function depotBoxCheck(page) {
     const data = await page.evaluate(() => {
       const D = window.PORTFOLIO_DATA, ins = D.instruments.map((i) => i.isin), n = D.dates.length, last = D.dates[n - 1];
       const g = (k) => D.grids && D.grids[k] ? D.grids[k].dates[D.grids[k].dates.length - 1] : null;
-      const hist = (D.res || []).filter((r) => r !== 'd').length;
+      const hist = D.dates.indexOf(D.meta.daily_from);  // includes daily Yahoo history before the complete Scalable grid
       return {
         instruments: ins.length, prices: Object.keys(D.prices).length, dates: n, last, lastStatus: D.status[n - 1],
         intradayOnlyLast: D.status.slice(0, -1).every((x) => x === 'final'), m30: g('m30'), h2: g('h2'), hist, dailyFrom: D.meta.daily_from,

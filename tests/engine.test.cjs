@@ -698,6 +698,26 @@ test('sweep: degenerate synthetic data (flat prices, never-quoted instrument, ze
 });
 
 // ---------- history before the daily data (res 'm' / '2d', user 28.09.)
+test('mixed Yahoo daily history respects the explicit complete daily-grid boundary', () => {
+  const dates = ['2025-12-29', '2025-12-30', '2025-12-31', '2026-01-02', '2026-01-05', '2026-01-06'];
+  const d = dataOf(dates, { prices: { A: [100, 50, 100, 100, 110, 99] },
+    positions: [{ isin: 'A', shares: 1, cost_basis: 1 }] });
+  d.res = ['d', 'm', 'd', 'd', 'd', 'd'];
+  d.meta.daily_from = '2026-01-02';
+  const c = E.prepare(d), st = E.stats(E.portfolio(c, { start: 0, end: 5 }));
+  assert.strictEqual(c.dailyFrom, 3);
+  assert.strictEqual(st.n, 2);
+  assert.strictEqual(st.riskFrom, '2026-01-02');
+  approx(st.maxDD, -.5);  // the full historical drawdown still counts
+  approx(st.volAnn, sdRef([.1, -.1]) * S252);
+});
+
+test('unknown explicit daily boundary falls back to resolution markers', () => {
+  const d = dataOf(['2025-12-31', '2026-01-02']);
+  d.res = ['m', 'd']; d.meta.daily_from = 'not-a-date';
+  assert.strictEqual(E.prepare(d).dailyFrom, 1);
+});
+
 test('history rows: totalReturn/CAGR/maxDD use every point, risk metrics only the daily part', () => {
   const dates = ['2025-10-31', '2025-11-28', '2025-12-29', '2026-01-02', '2026-01-05', '2026-01-06', '2026-01-07'];
   const A = [100, 50, 80, 100, 110, 99, 108.9], B = [10, 12, 11, 10, 10.5, 10.5, 11];

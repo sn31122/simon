@@ -1,0 +1,2 @@
+# Version verified in this test copy on 2026-09-30.
+yfinance==1.7.0

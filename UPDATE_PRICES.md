@@ -1,5 +1,7 @@
 # Price update runbook (price-fetcher uses Claude Sonnet 5.5)
 
+**Current user override:** bulk data work uses GPT-6 Luna high; see `AGENTS.md`. Historical daily Yahoo Close imports follow `UPDATE_HISTORY.md` and commit with `python data/update_prices.py --finish-yfinance RUN_ID`. The Yahoo request directory is separate from `data/incoming/`, so a Scalable plan does not delete it. Subsequent broker history refreshes preserve the Yahoo ledger overlay.
+
 Project folder: `<repository-root>`. Run every command from there (`python`; use `python3` where `python` is missing).
 One update fetches, for every ISIN, `get_security_chart(..., "seven_days")` (30-minute points of ~6 sessions) and
 `get_security_chart(..., "one_month")` (2-hour points of ~1 month); after a break of more than 5 weekdays also
