@@ -280,7 +280,6 @@ test('stats: hand-computed metrics (rf = 0)', () => {
   assert.strictEqual(st.cagrReliable, true);
   approx(st.volAnn, Math.sqrt(0.00043 * 252));
   approx(st.sharpe, 0.006 / Math.sqrt(0.00043) * S252);
-  approx(st.sortino, 0.006 / 0.01 * S252);                 // downside: sqrt((0.01^2 + 0.02^2) / 5) = 0.01
   approx(st.maxDD, -0.02);
   assert.strictEqual(st.maxDDPeakDate, '2025-09-01'); assert.strictEqual(st.maxDDTroughDate, '2025-12-01');
   assert.strictEqual(st.maxDDRecoveryDate, null);
@@ -299,9 +298,8 @@ test('stats: hand-computed metrics (rf = 0)', () => {
 test('stats: risk-free rate (daily compounding), default 2 %', () => {
   const st = E.stats(mkSeries(T_DATES, T_V), { rf: 0.02 });
   approx(st.sharpe, (0.006 - RFD) / Math.sqrt(0.00043) * S252);
-  approx(st.sortino, (0.006 - RFD) / Math.sqrt(((0.01 + RFD) ** 2 + (0.02 + RFD) ** 2) / 5) * S252);
   const def = E.stats(mkSeries(T_DATES, T_V));
-  assert.strictEqual(def.sharpe, st.sharpe); assert.strictEqual(def.sortino, st.sortino);
+  assert.strictEqual(def.sharpe, st.sharpe);
   approx(E.stats(mkSeries(T_DATES, T_V), { rf: 0.05 }).volAnn, st.volAnn, 1e-15, 'vol independent of rf');
 });
 test('stats: VaR/CVaR linear interpolation', () => {
@@ -324,7 +322,7 @@ test('stats: CAGR day count, reliability threshold, short series', () => {
   assert.strictEqual(E.stats(mkSeries(['2026-01-01', '2026-03-31'], [100, 101])).cagrReliable, false, '89 days');
   st = E.stats(mkSeries(['2026-01-01'], [100]));
   assert.strictEqual(st.days, 0); assert.strictEqual(st.cagr, null); assert.strictEqual(st.totalReturn, 0);
-  assert.strictEqual(st.volAnn, null); assert.strictEqual(st.sortino, null); assert.strictEqual(st.pctPositive, null);
+  assert.strictEqual(st.volAnn, null); assert.strictEqual(st.pctPositive, null);
   assert.deepStrictEqual(st.bestDay, { ret: null, date: null }); assert.deepStrictEqual(st.worstDay, { ret: null, date: null });
   assert.strictEqual(st.var95, null); assert.strictEqual(st.cvar95EUR, null); assert.strictEqual(st.calmar, null);
   assert.strictEqual(E.stats(null), null);
@@ -332,47 +330,25 @@ test('stats: CAGR day count, reliability threshold, short series', () => {
 test('stats: flat series -> zero vol, undefined ratios are null (not NaN), no -0', () => {
   const flat = mkSeries(calendar('2026-01-01', '2026-01-04'), [100, 100, 100, 100]);
   let st = E.stats(flat, { rf: 0 });
-  assert.strictEqual(st.volAnn, 0); assert.strictEqual(st.sharpe, null); assert.strictEqual(st.sortino, null);
+  assert.strictEqual(st.volAnn, 0); assert.strictEqual(st.sharpe, null);
   assert.strictEqual(st.calmar, null); assert.strictEqual(st.maxDD, 0); assert.strictEqual(st.pctPositive, 0);
   assert.ok(Object.is(st.var95, 0) && Object.is(st.cvar95, 0), 'var95/cvar95 are +0');
-  st = E.stats(flat, { rf: 0.02 });
-  approx(st.sortino, -S252, 1e-9, 'all excess returns = -rf_d');
 });
 
-// ======================================================================= relative
-const RP = [0.02, -0.01, 0.01, 0], RB = [0.01, -0.02, 0.03, -0.01];
-const R_DATES = calendar('2026-01-05', '2026-01-09');
-test('relative: hand-computed tiny series', () => {
-  const p = mkSeries(R_DATES, fromReturns(RP)), b = mkSeries(R_DATES, fromReturns(RB));
-  let rel = E.relative(p, b, { rf: 0 });
-  const beta = 0.00065 / 0.001475, corr = 0.00065 / Math.sqrt(0.0005 * 0.001475);
-  approx(rel.beta, beta); approx(rel.corr, corr); approx(rel.r2, corr * corr);
-  approx(rel.alpha, (0.005 - beta * 0.0025) * 252);
-  approx(rel.trackingError, 0.015 * S252);
-  approx(rel.infoRatio, 0.0025 * 252 / (0.015 * S252));
-  approx(rel.excessReturn, 0.019898 - 0.00929906);
-  approx(rel.upCapture, 0.75); approx(rel.downCapture, 1 / 3);
-  rel = E.relative(p, b, { rf: 0.02 });
-  approx(rel.alpha, ((0.005 - RFD) - beta * (0.0025 - RFD)) * 252);
-  approx(rel.beta, beta);
-});
-test('relative: identical, flat benchmark, missing series, misaligned ranges', () => {
-  const p = mkSeries(R_DATES, fromReturns(RP));
-  let rel = E.relative(p, p);
-  approx(rel.beta, 1); approx(rel.corr, 1); approx(rel.r2, 1); approx(rel.alpha, 0, 1e-12);
-  assert.strictEqual(rel.trackingError, 0); assert.strictEqual(rel.infoRatio, null);
-  approx(rel.excessReturn, 0); approx(rel.upCapture, 1); approx(rel.downCapture, 1);
-  rel = E.relative(p, mkSeries(R_DATES, [100, 100, 100, 100, 100]));
-  assert.strictEqual(rel.beta, null); assert.strictEqual(rel.corr, null); assert.strictEqual(rel.alpha, null);
-  assert.strictEqual(rel.upCapture, null); assert.strictEqual(rel.downCapture, null);
-  approx(rel.trackingError, sdRef(RP) * S252);
-  const nul = E.relative(null, p);
-  for (const k of ['beta', 'alpha', 'corr', 'r2', 'trackingError', 'infoRatio', 'excessReturn', 'upCapture', 'downCapture']) assert.strictEqual(nul[k], null, k);
-  const pFull = E.portfolio(S, { selected: ['A', 'B', 'C'], start: 0, end: 3 });
-  const pSub = E.portfolio(S, { selected: ['A', 'B', 'C'], start: 1, end: 3 });
-  const bSub = E.benchmark(S, 'bx', 1, 3, pSub.value[0]);
-  const a = E.relative(pFull, bSub), c = E.relative(pSub, bSub);
-  approx(a.beta, c.beta, 1e-12); approx(a.excessReturn, c.excessReturn, 1e-12);
+// ======================================================================= benchmarkHoldings
+test('benchmarkHoldings: the single holdings add up to the drawn benchmark (weights, buy at the range start, hold)', () => {
+  const bm = { id: 'bh', name: 'bh', weights: { A: 60, C: 40 } };
+  for (const [a, b] of [[0, 3], [1, 3], [0, 2]]) {
+    const s = E.benchmark(S, bm, a, b, 5000), h = E.benchmarkHoldings(S, bm, a, b, 5000);
+    assert.strictEqual(h.length, 2);
+    approx(h.reduce((t, x) => t + x.v0, 0), 5000, 1e-9, 'Σ v0 = start value');
+    approx(h.reduce((t, x) => t + x.v1, 0), s.value[s.value.length - 1], 1e-9, 'Σ v1 = last value of the line');
+    approx(h.reduce((t, x) => t + x.pl, 0), s.value[s.value.length - 1] - 5000, 1e-9, 'Σ pl');
+    approx(h[0].weight, 0.6, 1e-12); approx(h[1].weight, 0.4, 1e-12);
+    h.forEach((x) => approx(x.ret, x.v1 / x.v0 - 1, 1e-12, 'ret = v1 / v0 - 1'));
+  }
+  assert.strictEqual(E.benchmarkHoldings(S, { id: 'n', name: 'n', weights: { ZZZ: 100 } }, 0, 3, 100), null, 'no valid holding');
+  assert.strictEqual(E.benchmarkHoldings(S, { id: 's', name: 's', schedule: { steps: [{ date: '2026-01-05', holdings: { A: 1 } }] } }, 0, 3, 100), null, 'schedule: no fixed holdings');
 });
 
 // ======================================================================= assets / groupSummary
@@ -491,8 +467,6 @@ test('start value 0 (all selected shares 0) behaves like an empty selection: nul
   assert.ok(g.every((x) => x.ret === null && x.contrib === null && x.w1 === null), 'groupSummary');
   const t = E.assetsTotal(Z, rows);
   assert.deepStrictEqual([t.ret, t.contrib, t.w1], [null, null, null], 'assetsTotal');
-  const nul = E.relative(s, E.benchmark(Z, 'b1', 0, 3, 100));
-  assert.ok(Object.keys(nul).every((k) => k === 'n' || nul[k] === null), 'relative');
   assertClean({ s, rows, g, t }, 'zero selection');
   const part = E.withShares(S, { A: 0 });                                     // partly zero: still a real portfolio
   const pr = E.assets(part, { selected: ['A', 'C'], start: 0, end: 3, scale: 1 });
@@ -576,7 +550,7 @@ test('UMD: classic script sets window.PFEngine without module', () => {
   const foreignSet = new Set(['A', 'B']);                                   // Set from another realm (e.g. an iframe)
   const ws = W.portfolio(W.prepare(S_DATA), { selected: foreignSet, start: 0, end: 3 });
   assert.ok(ws && ws.raw.length === 4 && Math.abs(ws.raw[0] - 40) < 1e-12, 'cross-realm Set selection');
-  for (const k of ['prepare', 'presetRange', 'customRange', 'portfolio', 'benchmark', 'drawdown', 'stats', 'relative', 'assets', 'groupSummary',
+  for (const k of ['prepare', 'presetRange', 'customRange', 'portfolio', 'benchmark', 'drawdown', 'stats', 'benchmarkHoldings', 'assets', 'groupSummary',
     'withShares', 'depotChange', 'chartInterval', 'gridCovers', 'gridFrame', 'intraday', 'intradayBenchmark',
     'intradayAsset', 'intradayWindow', 'equalValueWindow', 'benchmarkValueNow', 'benchmarkRealPl'])
     assert.strictEqual(typeof E[k], 'function', k);
@@ -620,14 +594,14 @@ test('real data: sum of contributions = portfolio totalReturn (all presets, sele
 // first preset of benchmarks.csv ("Mein Depot", a weighting card since 28.09.)
 const PRESET0 = { id: 'p0', name: 'p0', weights: D.card_presets[0].weights };
 test('real data: %-metrics invariant to startValue scaling, EUR metrics scale', () => {
-  const PCT = ['totalReturn', 'days', 'cagr', 'volAnn', 'sharpe', 'sortino', 'maxDD', 'currentDD', 'calmar', 'pctPositive', 'var95', 'cvar95'];
+  const PCT = ['totalReturn', 'days', 'cagr', 'volAnn', 'sharpe', 'maxDD', 'currentDD', 'calmar', 'pctPositive', 'var95', 'cvar95'];
   const EUR = ['startValue', 'endValue', 'pl', 'var95EUR', 'cvar95EUR'];
   for (const p of ['1M', '6M', 'MAX']) {
     const r = E.presetRange(ctx, p);
     const base = E.portfolio(ctx, { selected: ALL, start: r.start, end: r.end });
     const st0 = E.stats(base);
     const b0 = E.benchmark(ctx, PRESET0, r.start, r.end, base.value[0]);
-    const rel0 = E.relative(base, b0), rows0 = E.assets(ctx, { selected: ALL, start: r.start, end: r.end, scale: base.scale });
+    const rows0 = E.assets(ctx, { selected: ALL, start: r.start, end: r.end, scale: base.scale });
     for (const sv of [12345.67, 5e6]) {
       const s = E.portfolio(ctx, { selected: ALL, start: r.start, end: r.end, startValue: sv });
       const k = sv / base.value[0];
@@ -638,8 +612,6 @@ test('real data: %-metrics invariant to startValue scaling, EUR metrics scale', 
       approx(st.bestDay.ret, st0.bestDay.ret, 1e-9); approx(st.worstDay.ret, st0.worstDay.ret, 1e-9);
       for (const key of ['maxDDPeakDate', 'maxDDTroughDate', 'maxDDRecoveryDate']) assert.strictEqual(st[key], st0[key], key);
       const b = E.benchmark(ctx, PRESET0, r.start, r.end, s.value[0]);
-      const rel = E.relative(s, b);
-      for (const key of Object.keys(rel0)) if (rel0[key] !== null) approx(rel[key], rel0[key], 1e-9, `${p} relative.${key}`);
       approx(E.stats(b).totalReturn, E.stats(b0).totalReturn, 1e-12);
       const rows = E.assets(ctx, { selected: ALL, start: r.start, end: r.end, scale: s.scale });
       rows.forEach((row, i) => {
@@ -671,9 +643,9 @@ function sweep(c, label, selections, ranges) {
       b: [] };
     for (const bm of c.benchmarks) {
       const b = E.benchmark(c, bm, r.start, r.end, s ? s.value[0] : 1000);
-      out.b.push({ b, st: E.stats(b), rel: E.relative(s, b), dd: E.drawdown(b.value) });
+      out.b.push({ b, st: E.stats(b), dd: E.drawdown(b.value) });
     }
-    if (out.st) for (const k of ['startValue', 'endValue', 'pl', 'totalReturn', 'days', 'cagr', 'cagrReliable', 'volAnn', 'sharpe', 'sortino',
+    if (out.st) for (const k of ['startValue', 'endValue', 'pl', 'totalReturn', 'days', 'cagr', 'cagrReliable', 'volAnn', 'sharpe',
       'maxDD', 'maxDDPeakDate', 'maxDDTroughDate', 'maxDDRecoveryDate', 'currentDD', 'calmar', 'bestDay', 'worstDay', 'pctPositive',
       'var95', 'cvar95', 'var95EUR', 'cvar95EUR']) assert.ok(k in out.st && out.st[k] !== undefined, `${where} stats.${k} missing`);
     assertClean(out, where);
@@ -726,9 +698,6 @@ test('history rows: totalReturn/CAGR/maxDD use every point, risk metrics only th
   approx(st.worstDay.ret, -0.1, 1e-12); assert.strictEqual(st.worstDay.date, '2026-01-06');
   assert.strictEqual(st.riskFrom, '2026-01-02');
   const b = E.benchmark(c, { id: 'b', name: 'b', weights: { B: 100 } }, 0, 6, s.value[0]);
-  const rel = E.relative(s, b, { rf: 0 });
-  assert.strictEqual(rel.n, 3, 'relative: daily returns only');
-  approx(rel.excessReturn, 0.089 - 0.1, 1e-12, 'excess return over all points');
   const s2 = E.portfolio(c, { start: 3, end: 6 });
   assert.strictEqual(s2.dailyOff, 0);
   approx(E.stats(s2, { rf: 0 }).volAnn, st.volAnn, 1e-12, 'same daily part');

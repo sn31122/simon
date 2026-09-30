@@ -44,8 +44,8 @@ Real data (29.09.2026): 32 Yacht positions, 106 tracked price series (32 Yacht i
 the month's latest point; an instrument's missing month is forward-filled), `2d` = every 2nd trading day from `one_year`
 (29.09.–29.12.2025). `build_data.py` prepends the rows (status final) and writes `data.res` per date (`'m' | '2d' | 'd'`),
 `meta.daily_from`. Engine: `ctx.res`, `ctx.dailyFrom` (first daily index); series carry `dailyOff` (points before the daily
-data); `stats` computes totalReturn, CAGR, drawdown over every point and vol, Sharpe, Sortino, VaR/CVaR, best/worst day,
-% positive days only over the daily returns (`riskFrom` = their first date, `n` = their count); `relative` and `assets().vol`
+data); `stats` computes totalReturn, CAGR, drawdown over every point and vol, Sharpe, VaR/CVaR, best/worst day,
+% positive days only over the daily returns (`riskFrom` = their first date, `n` = their count); `assets().vol`
 use daily returns only. `coverageStart(ctx, {selected, share = 0.9, end})` = first
 index where the selected positions with a real quote make up ≥ share of the value at end; `notQuoted(ctx, {selected, start})`
 = selected positions without a quote at start (`{isin, short, first, share}`). The UI starts every range at
@@ -53,7 +53,7 @@ index where the selected positions with a real quote make up ≥ share of the va
 last price, a preset target between month-end rows takes the nearer date. With history in the range the chart x-axis is by
 calendar time (`model.xs` = day numbers; > 800 days: year labels), hover labels read "30.06.2022 (Monatsschluss)", the
 interval note says "Intervall: 1 Tag · davor jeder 2. Handelstag, Monatsschluss bis Aug. 2025 (ab 02.01.2026 täglich)" and the
-Kennzahlen / Benchmark-Vergleich / Risiko subtitles say the risk metrics start at 02.01.2026.
+Kennzahlen / Statistik subtitles say the risk metrics start at 02.01.2026.
 
 ## Engine API (`js/engine.js`, global `PFEngine`)
 
@@ -83,15 +83,11 @@ Pure functions, no DOM. Index arguments are indices into `data.dates`. Series ob
   `startValue, endValue, pl, totalReturn = end/start - 1, days` (calendar days first->last date),
   `cagr = (1+TR)^(365/days) - 1` (null if days = 0), `cagrReliable = days >= 90`,
   `volAnn = sd(r)·√252` (sample sd, n-1; null if n < 2), `sharpe = mean(r - rf_d)/sd(r)·√252`,
-  `sortino = mean(r - rf_d) / sqrt(Σ min(0, r - rf_d)² / n) · √252`,
   `maxDD, maxDDPeakDate, maxDDTroughDate, maxDDRecoveryDate (null = not recovered), currentDD` (from drawdown(value)),
   `calmar = cagr/|maxDD|` (null if maxDD = 0), `bestDay: {ret, date}, worstDay: {ret, date}, pctPositive = #(r>0)/n`,
   `var95 = -q05(r)` (historical 1-day, quantile with linear interpolation like numpy default: h=(n-1)·p), `cvar95 = -mean(r | r <= q05)`,
   `var95EUR = var95·endValue, cvar95EUR = cvar95·endValue`.
-- `relative(pSeries, bSeries, {rf}) -> { beta, alpha, corr, r2, trackingError, infoRatio, excessReturn, upCapture, downCapture }` (portfolio vs benchmark, same index range):
-  beta = cov(rp,rb)/var(rb); corr = cov/(sd_p·sd_b); r2 = corr²; alpha = (mean(rp-rf_d) - beta·mean(rb-rf_d))·252;
-  trackingError = sd(rp-rb)·√252; infoRatio = mean(rp-rb)·252/trackingError; excessReturn = TR_p - TR_b;
-  upCapture = mean(rp | rb>0)/mean(rb | rb>0); downCapture = mean(rp | rb<0)/mean(rb | rb<0).
+- `benchmarkHoldings(ctx, bench|id, start, end, baseValue) -> [{ isin, weight, v0, v1, pl, ret }] | null` (user 30.09.): the single holdings of a weights / quantity benchmark bought at the range start with `baseValue` and held – the very purchase `benchmark()` draws: Σ v0 = baseValue, Σ v1 = the line's last value, Σ pl = its € change; weight = share of the start value, ret = price return. A schedule benchmark (Depot-Historie) → null. (Sortino and `relative` – beta, alpha, correlation, tracking error, info ratio, capture, excess return – were removed 30.09.)
 - `assets(ctx, {selected, start, end, scale}) -> [ ... ]` : one row for EVERY position (selected or not):
   `{ isin, name, short, group, selected, shares, sharesScaled = shares·scale, p0 = px[start], p1 = px[end], v0, v1 (·scale), ret = p1/p0 - 1, pl = v1 - v0,
      contrib = pl / V0 (V0 = scaled start value of the selected set; null if not selected), w0 = v0/V0, w1 = v1/V1 (null if not selected),
@@ -125,7 +121,7 @@ benchmark colors: Mein Depot always #f2f3f4 (white); benchmark cards take the fi
 Look: flat dark page, no heavy boxes around the main chart; cards/tables below use --card with 1px --border, radius 10px.
 
 ### Layout (top to bottom, 820px content column like the app at 1920×1080 = max-width 868px incl. 24px padding, 16px side padding on mobile)
-Order (user, 27.09.): sticky header bar with pills → overview block → range bar → headline → main chart → settings row with the benchmark cards → **lists** (toggles "Portfolio" / "Einzelwerte") → Benchmark-Vergleich → Drawdown → Kennzahlen → Hinweise (Monatsrenditen and Risiko & Korrelation removed, user 29.09.).
+Order (user, 27.09.): sticky header bar with pills → overview block → range bar → headline → main chart → settings row with the benchmark cards → **lists** (toggles "Portfolio" / "Einzelwerte") → Drawdown → Kennzahlen → Hinweise (Monatsrenditen and Risiko & Korrelation removed, user 29.09.).
 1. **Sticky header bar** (like the app's bar that the page scrolls under): full window width, --bg background, `position: sticky; top: 0` (`.topbar` outside `.page`); title (meta.title) + meta line left (one line with ellipsis on phones), right: the **period pills** `1T 1W 1M 3M 6M YTD 1J Seit Kauf` (3M/6M added 27.09.). The what-if banner lives inside this bar.
    **One period for everything** (user, 25.09.): pills and chart tabs (2) are the same switch – state `preset` / `custom` / `sinceBuy`. Every pill has its tab (1T … 1J); the MAX tab leaves no pill active; "Seit Kauf" shows the chart at MAX (MAX tab active) and the value block / list vs. Einstand; a custom Von/Bis range leaves no pill and no tab active (markers fade out, .3s, like unselected ones). Default YTD.
 1b. **Overview block** (app Überblick): big value "553.343⁹⁹ €" (54px, decimals + € stacked at 22px) = value of the selection at the end of the period, below "+9.159,74 € Heute ⓘ" – change over the selected period (labels Heute / Woche / Monat / 3 Monate / 6 Monate / seit 02.01. / 1 Jahr / seit 02.01.2026 (MAX) / seit Kauf / custom "10.08.–18.09.2026"), € only; % and explanation in the ⓘ tooltip. No sparkline (removed on user request 25.09.).
@@ -158,7 +154,7 @@ Order (user, 27.09.): sticky header bar with pills → overview block → range 
    - **Validity**: a card counts only with a total of 100 % (± 0,01) and at least one instrument with > 0 %; rows with 0 % are ignored. Invalid cards are left out of every chart, table and metric; their return shows "–".
    - **Semantics** (user, 27.09.): `{ id, name, weights: { ISIN: % } }` is bought on the first day of the selected period (1T: at the previous close) and held – buy and hold, no rebalancing. Measurement sub-windows and hover % read the period series (`benchWin`: value[b] / value[a] − 1), never a re-buy.
    - Changes apply immediately (keeping the focus and caret of the field being typed in; only structural edits rebuild a card). Nothing is saved: a reload starts with Mein Depot only.
-   - Consumers: chart lines, legend, hover rows, drawdown lines + readout, Kennzahlen bench line (first shown benchmark in card order), Benchmark-Vergleich, 1T lines.
+   - Consumers: chart lines, legend, hover rows, drawdown lines + readout, Kennzahlen bench line (first shown benchmark in card order), Statistik, Benchmark-Positionen, 1T lines.
 6. **Lists** (user, 27.09.): two independent toggle pills "Portfolio" (on by default) and "Einzelwerte" (off by default), not persisted. One on: that block alone (Portfolio in the 820px column; Einzelwerte = the wide card, centred, sticking out of the column at its natural width). Both on: side by side – Portfolio left (480px, shrinking to 400px, without its sparkline column), Einzelwerte right at its natural width, together centred and at most window − 32px wide (fits at 1903/1920px); stacked (Portfolio above) when that does not fit (e.g. 1400px, phones). Both off: a muted hint. A hidden list is not rendered and is rebuilt when switched on.
 6a. **Portfolio-Liste** (overview list like the app's holdings screen, one flat list, no groups): period = the shared period (1) incl. custom ranges and 3M/6M/MAX.
    - Header: "Portfolio" + "⋮" sort menu and the total value in grey below (like the app); the big value / period change moved to the overview block (1b). Sort menu ("SORTIEREN NACH": Name (A-Z), Name (Z-A), Niedrigste Rendite, Höchste Rendite, Kleinste Position, Größte Position (default); Rendite = period return).
@@ -166,9 +162,9 @@ Order (user, 27.09.): sticky header bar with pills → overview block → range 
    - Data: `presetRange` + `portfolio(startValue null)` + `assets(scale 1)`; "Seit Kauf" = `glSinceBuy`/`glSinceBuyPct` (header: Σ glSinceBuy / Σ costBasis). Real EUR (no Startwert scaling); unselected rows dimmed and excluded from totals.
 6b. **Einzelwerte** table (engine.assets): checkbox per row (= position filter for the whole dashboard), Name (short bold + full name small; badge "ab 12.06." if listedAfterStart), Stück, Kurs Start, Kurs Ende, Wert Ende, Gewicht, Rendite, G/V €, Beitrag (%-points with a small inline bar, teal/red), Vol. p.a., Max. DD, Sparkline (inline SVG 80×22 of px over the range), G/V seit Kauf (€ and %; header tooltip: "gegenüber Einstand, letzter Kurs, unabhängig vom Zeitraum"). Sortable by clicking headers (default: Beitrag desc). Buttons "Alle" / "Keine". Unselected rows stay visible, dimmed (opacity .45), still show their own return. Totals row for the selection. Scrolls inside its card on narrow screens (sticky name column).
 6c. **Was-wäre-wenn**: the Stück cells are always inputs (fmt.parseDE, >= 0, 0 = verkauft; or a € target value like "10.000 €" converted at the latest price; Enter / blur applies, Esc reverts); changed rows highlighted with per-row reset. Once something is changed: slim sticky banner at the top "Was-wäre-wenn aktiv · 3 Positionen geändert · Wert heute 512.300,00 € (Original 553.343,99 €) · Zurücksetzen"; the main chart additionally draws the original portfolio as a dashed grey line "Original"; every section (list, KPIs, tables, drawdown) is computed on `PFEngine.withShares(ctx, overrides)`. Not persisted.
-7. **Benchmark-Vergleich** table: rows Portfolio + each shown valid benchmark (card order). Columns: Rendite, p.a., Vol. p.a., Sharpe, Sortino, Max. DD, then portfolio-vs-this-benchmark: Beta, Korrelation, Alpha p.a., Tracking Error, Info-Ratio, Up-/Down-Capture, Mehrrendite (portfolio row shows "–" there). No shown benchmark: a hint row pointing to the cards.
+7. **Benchmark-Positionen** (user 30.09.; replaces the removed table "Benchmark-Vergleich"): a button + card, off by default. ≥ 1500px fixed at the left of the content column (level with the period pills on the right); narrower: a block between lists and Drawdown. On: one group per benchmark shown in the chart (name, end value, G/V €, return of the line as in Statistik), below it every holding sorted by end value: name + start weight, Wert (€, end), G/V €, Rendite – bought at the range start with the chart's start value, held (`benchmarkHoldings`; Σ holdings = the line). Follows range, Startwert and the shown cards; Depot-Historie: totals only ("nicht nach Positionen aufgeschlüsselt"); the Yacht is not listed (its positions are in Einzelwerte).
 8. **Drawdown chart** (SVG ~150px, same x-scale and padR as the main chart, synced hover line / measurement): red area (--neg, gradient .45 -> .05) from 0 down; shown benchmarks' drawdowns as thin lines; y labels in % (0 %, −10 %, …); marker + label at max drawdown ("Max. −23,41 % am 12.03.2026"); read-out in the header. Shade the measured region too.
-9. **Kennzahlen** (card grid, 2–4 columns responsive): Gesamtrendite (EUR + %), Rendite p.a. (greyed + "wenig aussagekräftig < 3 Monate" if !cagrReliable), Volatilität p.a., Sharpe, Sortino, Max. Drawdown (+ peak→trough dates, recovery date or "nicht erholt"), Calmar, VaR 95 % (1 Tag, % and €), CVaR 95 %, Bester Tag / Schlechtester Tag (with date), Positive Tage, Aktueller Drawdown. Each card: sub-line with the FIRST shown benchmark's value. Card `title` attribute = short formula.
+9. **Kennzahlen** (card grid, 2–4 columns responsive): Gesamtrendite (EUR + %), Rendite p.a. (greyed + "wenig aussagekräftig < 3 Monate" if !cagrReliable), Volatilität p.a., Sharpe, Max. Drawdown (+ peak→trough dates, recovery date or "nicht erholt"), Calmar, VaR 95 % (1 Tag, % and €), CVaR 95 %, Bester Tag / Schlechtester Tag (with date), Positive Tage, Aktueller Drawdown. Each card: sub-line with the FIRST shown benchmark's value. Card `title` attribute = short formula.
 10. **Hinweise** footer: meta.notes, data source, generated_at, "Keine Anlageberatung".
 
 The v1 **Gruppen** table (group checkboxes) is no longer on the page; `groupSummary` stays in the engine (tested) and is still computed.

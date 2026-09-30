@@ -52,6 +52,7 @@
     cards: [],                                 // own benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]}; not persisted
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
     selected: new Set(ALL), sort: { key: 'contrib', dir: -1 }, measure: null, hover: null,
+    hbOn: false,                               // card "Benchmark-Positionen" (P&L per holding of every shown benchmark), off by default
     yachtOn: true,                             // card "Yacht-Portfolio" (user 30.09.): its line in the chart, legend, measurement and Statistik
     sinceBuy: false, holdSort: 'value-desc',   // sinceBuy: pill "Seit Kauf" (chart shows MAX)
     showHold: true, showAssets: false,         // list section toggles "Portfolio" / "Einzelwerte" (independent; not persisted)
@@ -238,7 +239,6 @@
     var selB = benches.filter(function (x) { return x.show && x.s; });
     state.benchmarks = selB.map(function (x) { return x.id; });
     selB.forEach(function (x) {
-      x.rel = p && x.s ? E.relative(p, x.s, { rf: rf }) : null;
       x.dd = x.s ? E.drawdown(x.s.value) : null;
     });
     var assets = E.assets(ctx, { selected: sel, start: R.start, end: R.end, scale: p && isNum(p.scale) ? p.scale : 1 }) || [];
@@ -1388,7 +1388,7 @@
 
   /** " · Risiko ab 02.01.2026 (Tageskurse)" when the range reaches into the history (risk metrics use daily data only). */
   function riskNote(M) {
-    return M && M.R && M.R.start < (ctx.dailyFrom || 0) ? ' · Vol., Sharpe, Beta usw. ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') + ' (Tageskurse)' : '';
+    return M && M.R && M.R.start < (ctx.dailyFrom || 0) ? ' · Vol., Sharpe usw. ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') + ' (Tageskurse)' : '';
   }
   function renderKpis(M) {
     var s = M.ps, x0 = M.selB[0] || null, b = x0 ? x0.st : null;
@@ -1425,10 +1425,6 @@
       card({
         label: 'Sharpe-Ratio', title: 'Ø(r − rf_d) / σ(r) · √252 mit rf_d = (1 + rf)^(1/252) − 1',
         value: ratio(get(s, 'sharpe')), extra: 'rf ' + pctU(state.rf, 1) + ' p.a.', bench: bench(ratio(get(b, 'sharpe')))
-      }),
-      card({
-        label: 'Sortino-Ratio', title: 'Ø(r − rf_d) / √(Σ min(0, r − rf_d)² / n) · √252',
-        value: ratio(get(s, 'sortino')), extra: 'nur Abwärtsschwankung', bench: bench(ratio(get(b, 'sortino')))
       }),
       card({
         label: 'Max. Drawdown', title: 'größter Rückgang vom laufenden Hoch: min(V_t / max(V_0 … V_t) − 1)',
@@ -1468,48 +1464,44 @@
     $('kpis').innerHTML = cards.join('');
   }
 
-  // ------------------------------------------------------------------ benchmark table
-  var BENCH_COLS = [
-    ['Rendite', 'Gesamtrendite im Zeitraum'], ['p.a.', 'annualisierte Rendite (CAGR)'], ['Vol. p.a.', 'annualisierte Volatilität'],
-    ['Sharpe', 'Sharpe-Ratio'], ['Sortino', 'Sortino-Ratio'], ['Max. DD', 'maximaler Drawdown'],
-    ['Beta', 'cov(rP, rB) / var(rB)'], ['Korrelation', 'Korrelation der Tagesrenditen (R² im Tooltip der Zelle)'],
-    ['Alpha p.a.', '(Ø(rP − rf_d) − β · Ø(rB − rf_d)) · 252'], ['Tracking Error', 'σ(rP − rB) · √252'],
-    ['Info-Ratio', 'Ø(rP − rB) · 252 / Tracking Error'], ['Up-/Down-Capture', 'Ø rP / Ø rB an Tagen mit rB > 0 bzw. rB < 0'],
-    ['Mehrrendite', 'Gesamtrendite Portfolio − Gesamtrendite Benchmark (Prozentpunkte)']
-  ];
-  function statCells(st) {
-    var weak = st && !st.cagrReliable;
-    return '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td>' +
-      '<td' + (weak ? ' class="dim" title="wenig aussagekräftig &lt; 3 Monate"' : '') + '>' +
-      (weak ? pct(get(st, 'cagr')) : colored(get(st, 'cagr'), pct(get(st, 'cagr')))) + '</td>' +
-      '<td>' + pctU(get(st, 'volAnn')) + '</td><td>' + ratio(get(st, 'sharpe')) + '</td><td>' + ratio(get(st, 'sortino')) + '</td>' +
-      '<td>' + colored(get(st, 'maxDD'), pctU(get(st, 'maxDD'))) + '</td>';
-  }
-  function relCells(rel) {
-    if (!rel) return '<td class="bl dash">–</td>' + new Array(7).join('<td class="dash">–</td>');
-    return '<td class="bl">' + ratio(get(rel, 'beta')) + '</td>' +
-      '<td title="R² ' + esc(ratio(get(rel, 'r2'))) + '">' + ratio(get(rel, 'corr')) + '</td>' +
-      '<td>' + colored(get(rel, 'alpha'), pct(get(rel, 'alpha'))) + '</td>' +
-      '<td>' + pctU(get(rel, 'trackingError')) + '</td>' +
-      '<td>' + ratio(get(rel, 'infoRatio')) + '</td>' +
-      '<td>' + pctU(get(rel, 'upCapture'), 0) + ' / ' + pctU(get(rel, 'downCapture'), 0) + '</td>' +
-      '<td>' + colored(get(rel, 'excessReturn'), pct(get(rel, 'excessReturn'))) + '</td>';
-  }
-  function renderBenchTable(M) {
-    $('benchSub').textContent = 'Zeitraum ' + periodText(M.R) + ' · rf ' + pctU(state.rf, 1) + riskNote(M);
-    var head = '<thead><tr class="th-group"><th class="sticky"></th><th colspan="6">im Zeitraum</th>' +
-      '<th colspan="7" class="th-rel">Portfolio ggü. Benchmark</th></tr><tr><th class="l sticky">&nbsp;</th>' +
-      BENCH_COLS.map(function (c, k) {
-        return '<th' + (k === 6 ? ' class="bl"' : '') + ' title="' + esc(c[1]) + '">' + esc(c[0]) + '</th>';
-      }).join('') + '</tr></thead>';
-    var body = '<tr><td class="l sticky"><span class="row-name"><i style="background:var(--accent)"></i>Portfolio</span></td>' +
-      (M.ps ? statCells(M.ps) : new Array(7).join('<td class="dash">–</td>')) + relCells(null) + '</tr>';
+  // ------------------------------------------------------------------ holdings of the benchmarks (user 30.09.)
+  /**
+   * Card "Benchmark-Positionen" (off by default): for every benchmark shown in the chart the P&L of each holding – Wert (end),
+   * G/V €, Rendite (+ start weight) – as the benchmark is drawn: bought at the range start with the chart's start value,
+   * then held (E.benchmarkHoldings, Σ = the line). A replayed depot (Depot-Historie) has no fixed holdings: totals only.
+   */
+  function renderHoldBreak(M) {
+    var on = state.hbOn, box = $('hbBody'), btn = $('hbToggle');
+    btn.setAttribute('aria-pressed', String(on));
+    btn.classList.toggle('is-on', on);
+    $('hbWrap').classList.toggle('is-open', on);
+    box.hidden = !on;
+    if (!on) return;
+    var base = M.p && isNum(M.p.startValue) && M.p.startValue > 0 ? M.p.startValue : 1;
+    var head = '<thead><tr><th class="l"></th><th>Wert €</th><th>G/V €</th><th>Rendite</th></tr></thead>', body = '';
     M.selB.forEach(function (x) {
-      body += '<tr><td class="l sticky" title="' + esc(x.b.description || '') + '"><span class="row-name"><i style="background:' + x.color +
-        '"></i>' + esc(x.name) + '</span></td>' + statCells(x.st) + relCells(x.rel) + '</tr>';
+      var st = x.st, end = x.s && x.s.value.length ? x.s.value[x.s.value.length - 1] : null;
+      var pl = end !== null && isNum(x.s.value[0]) ? end - x.s.value[0] : null;
+      body += '<tr class="hb-grp" style="--gc:' + x.color + '"><td class="l"><span class="row-name"><i style="background:' + x.color + '"></i><span class="hb-nm">' + esc(x.name) + '</span></span></td>' +
+        '<td class="cmp-val">' + (isNum(end) ? F.num(end, 0) : '–') + '</td><td>' + colored(pl, F.num(pl, 0, true)) + '</td>' +
+        '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td></tr>';
+      var hs = x.b.schedule ? null : E.benchmarkHoldings(ctx, x.b, M.R.start, M.R.end, base);
+      if (!hs) {
+        body += '<tr class="hb-note" style="--gc:' + x.color + '"><td colspan="4">' + (x.b.schedule ? 'Echte Transaktionen – nicht nach Positionen aufgeschlüsselt' : 'keine Positionen') + '</td></tr>';
+        return;
+      }
+      hs.sort(function (a, b) { return (b.v1 || 0) - (a.v1 || 0); }).forEach(function (h) {
+        var i = INSTR_BY[h.isin], nm = i ? i.short : h.isin;
+        body += '<tr class="hb-pos-row" style="--gc:' + x.color + '" title="' + esc((i ? i.name + ' · ' : '') + h.isin) + '"><td class="l"><span class="hb-pos"><span class="hb-nm">' + esc(nm) + '</span>' +
+          '<span class="hb-w">' + esc(fmtShare(Math.round((h.weight || 0) * 1000) / 10)) + ' %</span></span>' +
+          '<span class="hb-bar" style="width:' + Math.round(Math.min(1, h.weight || 0) * 100) + '%"></span></td>' +
+          '<td>' + (isNum(h.v1) ? F.num(h.v1, 0) : '–') + '</td><td>' + colored(h.pl, F.num(h.pl, 0, true)) + '</td>' +
+          '<td>' + colored(h.ret, pct(h.ret)) + '</td></tr>';
+      });
     });
-    if (!M.selB.length) body += '<tr><td class="l sticky dash" colspan="14">Keine Benchmark im Chart – oben unter „Benchmarks“ eine Karte einblenden oder mit „+ Benchmark“ anlegen (Summe 100 %).</td></tr>';
-    $('benchTable').innerHTML = head + '<tbody>' + body + '</tbody>';
+    $('hbSub').textContent = periodText(M.R);
+    box.querySelector('table').innerHTML = M.selB.length ? head + '<tbody>' + body + '</tbody>' : '';
+    $('hbEmpty').hidden = !!M.selB.length;
   }
 
   /**
@@ -1995,7 +1987,7 @@
     renderInterval(cur);
     renderHoldings();
     renderKpis(cur);
-    renderBenchTable(cur);
+    renderHoldBreak(cur);
     renderCmpPanel(cur);
     renderAssets(cur);
     renderMeasureBar();
@@ -2103,6 +2095,7 @@
       update({ keepMeasure: true });
     });
     $('startValue').addEventListener('input', onStartValue);
+    $('hbToggle').addEventListener('click', function () { state.hbOn = !state.hbOn; if (cur) renderHoldBreak(cur); });
     $('startReset').addEventListener('click', function () { $('startValue').value = ''; onStartValue(); $('startValue').focus(); });
     $('svYacht').addEventListener('click', function () { $('startValue').value = ''; onStartValue(); });
     $('svDepot').addEventListener('click', function () {
