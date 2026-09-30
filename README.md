@@ -16,6 +16,8 @@ Open the cloud preview for `/dashboard.html`. Locally: http://localhost:8770/das
 
 ## Verify
 
+Historical daily Close ingestion: [UPDATE_HISTORY.md](UPDATE_HISTORY.md). It imports pre-2026 EUR history through an agent request hook, preserves the current Scalable workflow, and commits only after rebuild and numerical validation.
+
 ```sh
 node --check js/app.js
 node --check js/charts.js
@@ -32,6 +34,7 @@ Python 3 and Node.js required; no pip/npm packages for these checks. Browser acc
 1. `CLAUDE.md`, `AGENTS.md`, `HANDOFF.md`: instructions and current state.
 2. `SPEC.md`: data contract, engine formulas and UI behaviour.
 3. `UPDATE_PRICES.md`: data workflow (hook, skill, scripts).
+   `UPDATE_HISTORY.md`: historical daily Close setup, agent batches, source/currency policy, validation and recovery.
 4. `docs/VERIFICATION.md`, `docs/verification/`: browser acceptance tool and the evidence of 27.09.2026.
 5. `docs/references/`: the user's reference images of 27.09.2026; `docs/history/windows-test-helpers/`: the old Windows (Edge/CDP) test helpers, kept for local work.
 

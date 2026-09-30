@@ -40,6 +40,8 @@ Load order in `dashboard.html`: `data/portfolio-data.js`, `js/engine.js`, `js/ch
 Real data (29.09.2026): 32 Yacht positions, 106 tracked price series (32 Yacht instruments plus 74 others), and 7 real Scalable depot positions (read 30.09.2026). Presets: `my_depot` (card at load); `energie`, `old_portfolio`, `situational_awareness` and `depot_history` (menu). SpaceX (US84615Q1031) has quotes only from 2026-06-12. See `HANDOFF.md` for the latest daily and sub-daily coverage.
 
 ## History before the daily data (user 28.09.2026)
+
+**Historical Close extension (30.09.2026):** `UPDATE_HISTORY.md` adds daily Yahoo Close observations before the first Scalable daily date. `prices_history.csv` also accepts `res=d`. Imported cells use the authoritative EUR/source ledger `yfinance_sources.csv`; unmapped instruments retain Scalable fallback. `meta.daily_from` explicitly marks the complete Scalable daily grid (2026-01-02), and the engine respects that boundary even when earlier mixed history contains daily rows. Risk metrics therefore do not count sparse fallback returns as daily. Source and FX reconstruction appear in the footer. Recent daily data, intraday grids, holdings and benchmark semantics are preserved.
 `data/prices_history.csv` (`date,res,<ISIN>…`): `m` = month-end close from `max` (~2016 … Aug 2025, one row per month dated on
 the month's latest point; an instrument's missing month is forward-filled), `2d` = every 2nd trading day from `one_year`
 (29.09.–29.12.2025). `build_data.py` prepends the rows (status final) and writes `data.res` per date (`'m' | '2d' | 'd'`),

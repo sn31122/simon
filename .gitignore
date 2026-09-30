@@ -13,3 +13,8 @@ Thumbs.db
 # temporary fetch files of the quote update (written by .claude/hooks/save-chart.cjs, deleted by update_prices.py --finish)
 data/incoming/
 .claude/worktrees/
+
+# Reproducible history plans, fetch receipts, cache and transaction backups.
+data/yfinance/
+.venv-yfinance/
+.yfinance-probe/
