@@ -214,6 +214,7 @@ button { -webkit-tap-highlight-color: transparent; }
   color: var(--neg); font-size: 13px; font-weight: 700; line-height: 24px; text-align: right; white-space: nowrap;
 }
 .bb-total.is-ok { border-color: var(--accent); color: var(--accent); }
+.bb-total.is-abs { border-color: var(--border); color: var(--text); }   /* ≠ 100 %: absolute amounts (user 30.09.), not an error */
 .bb-add {
   display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 96px; padding: 12px;
   border: 1px dashed #353a40; border-radius: var(--radius); background: none;
@@ -754,33 +755,33 @@ th.is-sorted { color: var(--text); }
 .hb-btn::before { content: "▤"; margin-right: 8px; color: var(--accent); font-size: 13px; }
 .hb-btn:hover { border-color: var(--accent); }
 .hb-btn.is-on { border-color: var(--accent); background: rgba(40, 235, 207, .12); color: var(--accent); }
-.hb-card { margin-top: 10px; }
-.tbl--hb td.l, .tbl--hb th.l { text-align: left; }
-.hb-card { border-color: #33383d; box-shadow: 0 6px 22px rgba(0, 0, 0, .35); }
-/* group = benchmark colour: tinted header row with a solid bar at its left, holdings hang below it on a thin line of that colour,
-   a hairline under each holding shows its start weight */
-.hb-grp td { padding-top: 9px; padding-bottom: 9px; border-top: 1px solid var(--border); font-weight: 700; color: var(--text);
-  background: color-mix(in srgb, var(--gc) 14%, var(--card)); }
+.hb-card { margin-top: 10px; border-color: #33383d; box-shadow: 0 6px 22px rgba(0, 0, 0, .35); }
+/* user 30.09.: type as in "Statistik" (.tbl--cmp); each benchmark in its own tight box, framed and headed in its colour;
+   fixed columns so the boxes line up under the one label row */
+.hb-list { padding: 0 6px 6px; }
+.tbl--hb { table-layout: fixed; }
+.tbl--hb col.hb-c1 { width: 62px; }
+.tbl--hb col.hb-c2 { width: 72px; }
+.tbl--hb col.hb-c3 { width: 80px; }
+.tbl--hb td.l, .tbl--hb th.l { text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.tbl--hb th, .tbl--hb td { padding: 4px 6px; }
+.tbl--hb th:first-child, .tbl--hb td:first-child { padding-left: 8px; }
+.tbl--hb th:last-child, .tbl--hb td:last-child { padding-right: 8px; }
+.hb-cols th { border-bottom: 0; padding-bottom: 3px; }
+.hb-box { margin-top: 5px; border: 1px solid color-mix(in srgb, var(--gc) 38%, var(--border)); border-radius: 7px; overflow: hidden;
+  background: var(--card); }
+.hb-box:first-of-type { margin-top: 0; }
+.hb-box .tbl td { border-bottom: 0; }
+.hb-grp td { padding-top: 6px; padding-bottom: 6px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--gc) 16%, var(--card)); }
 .hb-grp td:first-child { box-shadow: inset 3px 0 0 var(--gc); }
-.hb-grp:first-child td { border-top: 0; }
-.hb-pos-row td { position: relative; }
-.hb-pos-row td:first-child { box-shadow: inset 1px 0 0 color-mix(in srgb, var(--gc) 55%, transparent); }
-.hb-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: color-mix(in srgb, var(--gc) 60%, transparent); max-width: 100%; pointer-events: none; }
-.hb-note td { box-shadow: none; }
-.hb-note td { color: var(--muted); font-size: 11px; padding-top: 0; }
-.hb-pos { display: inline-flex; align-items: baseline; gap: 6px; padding-left: 16px; min-width: 0; }
-.hb-nm { display: inline-block; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
-.hb-w { color: var(--muted); font-size: 10.5px; font-weight: 500; }
+.hb-note td { color: var(--muted); font-size: 11px; }
+.hb-pos { display: inline-flex; align-items: baseline; gap: 5px; padding-left: 14px; min-width: 0; max-width: 100%; }
+.hb-nm { display: inline-block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.hb-w { flex: 0 0 auto; color: var(--muted); font-size: 10.5px; font-weight: 500; }
 .hb-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
-@media (min-width: 1500px) {
-  /* left of the 820px content column, level with the pills on the right */
-  .hb { position: fixed; top: 46px; left: 12px; width: max(0px, calc(50% - 410px - 28px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
-  .hb .tbl--cmp { font-size: 10.5px; }
-  .hb .tbl--cmp th, .hb .tbl--cmp td { padding: 6px 3px; }
-  .hb .tbl--cmp th:first-child, .hb .tbl--cmp td:first-child { padding-left: 8px; }
-  .hb .tbl--cmp th:last-child, .hb .tbl--cmp td:last-child { padding-right: 8px; }
-  .hb .hb-pos { padding-left: 10px; gap: 3px; }
-  .hb .hb-nm { max-width: 72px; }
-  .hb .hb-w { font-size: 9.5px; }
+@media (min-width: 1600px) {
+  /* left of the 820px content column, level with the pills on the right; a bit narrower (user 30.09.), its right edge
+     keeps the old 28px gap to the column; from 1600px (not 1500) so the names keep room at the Statistik type size */
+  .hb { position: fixed; top: 46px; right: calc(50% + 410px + 28px); width: min(380px, calc(50% - 410px - 28px - 12px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
   .hb .cmp-h { flex-wrap: wrap; gap: 0 8px; }
 }

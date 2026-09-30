@@ -351,6 +351,24 @@ test('benchmarkHoldings: the single holdings add up to the drawn benchmark (weig
   assert.strictEqual(E.benchmarkHoldings(S, { id: 's', name: 's', schedule: { steps: [{ date: '2026-01-05', holdings: { A: 1 } }] } }, 0, 3, 100), null, 'schedule: no fixed holdings');
 });
 
+test('absolute amounts (user 30.09.): a card not totalling 100 % starts at Σ w / 100 × the start value, returns unchanged', () => {
+  const rel = { id: 'r', name: 'r', weights: { A: 60, C: 40 } };
+  for (const f of [1.96, 0.5, 1]) {
+    const abs = { id: 'x', name: 'x', absolute: true, weights: { A: 60 * f, C: 40 * f } };
+    const r = E.benchmark(S, rel, 0, 3, 5000), x = E.benchmark(S, abs, 0, 3, 5000);
+    approx(x.value[0], 5000 * f, 1e-9, 'starts at ' + f + ' × start value');
+    x.value.forEach((v, k) => approx(v, r.value[k] * f, 1e-9, 'line = ' + f + ' × the normalized line'));
+    const h = E.benchmarkHoldings(S, abs, 0, 3, 5000);
+    approx(h[0].weight, 0.6 * f, 1e-12, 'weight as typed'); approx(h[1].weight, 0.4 * f, 1e-12);
+    approx(h.reduce((t, y) => t + y.v0, 0), 5000 * f, 1e-9, 'Σ v0');
+    approx(h.reduce((t, y) => t + y.v1, 0), x.value[x.value.length - 1], 1e-9, 'Σ v1 = last value');
+  }
+  // an unpriced row keeps its amount out (not re-spread over the others)
+  const x = E.benchmark(S, { id: 'x', absolute: true, weights: { A: 80, ZZZ: 50 } }, 0, 3, 100);
+  approx(x.value[0], 80, 1e-9, 'only the priced 80 %');
+  assert.strictEqual(E.benchmark(S, { id: 'z', absolute: true, weights: { A: 0 } }, 0, 3, 100), null, '0 % -> no line');
+});
+
 // ======================================================================= assets / groupSummary
 function rowsAC(start, end) {
   const s = E.portfolio(S, { selected: ['A', 'C'], start, end, startValue: 80 });
@@ -890,6 +908,14 @@ test('benchmark with weights: bought at the range start, then held (buy and hold
   // a holdings benchmark is unchanged: fixed quantities, independent of the start
   const h = E.benchmark(S, 'b1', 1, 3, 1);
   approxArr(h.raw, [21, 23.1, 23], 1e-12, 'holdings raw');
+});
+
+test('intradayBenchmark, absolute amounts: 200 % = twice the normalized line', () => {
+  const ctx = E.prepare(I_DATA());
+  const ib = E.intradayBenchmark(ctx, { id: 'w', absolute: true, weights: { A: 120, B: 80 } }, 49);
+  const ir = E.intradayBenchmark(ctx, { id: 'w', weights: { A: 60, B: 40 } }, 49);
+  for (let k = 0; k < 5; k++) approx(ib.value[k], 2 * ir.value[k], 1e-12, 'intraday slot ' + k);
+  approx(ib.base, 98, 1e-12, 'intraday base');
 });
 
 test('intradayBenchmark with weights: bought at the previous close (1T start)', () => {
