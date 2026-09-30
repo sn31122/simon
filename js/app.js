@@ -49,7 +49,7 @@
 
   // ------------------------------------------------------------------ state
   var state = {
-    preset: 'YTD', custom: null, mode: 'value', startValue: null, rf: 0.02,
+    preset: 'YTD', custom: null, startYear: null, mode: 'value', startValue: null, rf: 0.02,
     fixedOn: {},                               // locked cards (benchmarks.csv "ISIN:qty") shown in the chart; none since 28.09.
     cards: [],                                 // own benchmark cards {id, name, defName, color, show, rows: [{id, isin, q, pct}]}; not persisted
     benchmarks: [],                            // derived in compute(): ids of the benchmarks drawn (shown + valid), in card order
@@ -222,7 +222,9 @@
   function compute() {
     var R = currentRange(), rf = state.rf, sel = state.selected, n = ctx.n;
     // history back to ~2016: before the first quote a title counts flat, so a long range starts at the coverage date
-    var cov = sel.size && E.coverageStart ? E.coverageStart(ctx, { selected: sel, share: COVER }) : 0, cover = null;
+    // MAX and a Startjahr (user 30.09.) show the whole chosen span: no coverage cut, titles without quotes count flat
+    var full = state.startYear != null || (!state.custom && state.preset === 'MAX');
+    var cov = !full && sel.size && E.coverageStart ? E.coverageStart(ctx, { selected: sel, share: COVER }) : 0, cover = null;
     if (R.start < cov && R.end - cov >= 1) { cover = { from: R.start, to: cov }; R = { start: cov, end: R.end }; }
     // Startwert (user 29.09.): empty = every line starts at the Yacht's value at the range start; a value = every line
     // (Yacht and benchmarks) starts there (buttons "Yacht" / "Mein Depot" next to the field)
@@ -267,7 +269,7 @@
       }
     }
     return {
-      R: R, cover: cover, flat: sel.size && E.notQuoted ? E.notQuoted(ctx, { selected: sel, start: R.start }) : [],
+      R: R, cover: cover, full: full, flat: sel.size && E.notQuoted ? E.notQuoted(ctx, { selected: sel, start: R.start }) : [],
       p: p, ps: ps, pdd: pdd, benches: benches, byId: byId, selB: selB,
       assets: assets, groups: groups,
       orig: orig, origStats: orig ? E.stats(orig, { rf: rf }) : null, iv: iv, intra: intra
@@ -709,6 +711,7 @@
     dfFrom.set(state.custom ? state.custom.from : ctx.dates[R.start]);    // skipped while the field is being edited
     dfTo.set(state.custom ? state.custom.to : ctx.dates[R.end]);
     $('dateRange').classList.toggle('is-custom', !!state.custom);
+    $('startYear').value = state.startYear != null ? String(state.startYear) : '';
   }
 
   function renderMode() {
@@ -1331,6 +1334,9 @@
     if (M.cover) note = 'Beginn ' + F.date(ctx.dates[R.start], 'short') + ': erst ab da haben ≥ 90 % des heutigen Werts Kurse' +
       (M.flat.length ? '; ohne Kurs, flach gerechnet: ' + M.flat.slice(0, 3).map(function (x) { return x.short + (x.first ? ' ab ' + F.date(x.first, 'short') : ''); }).join(', ') +
         (M.flat.length > 3 ? ' +' + (M.flat.length - 3) : '') : '');
+    else if (M.full && M.flat.length) note = 'ohne Kurs, flach bis zum ersten Kurs: ' +
+      M.flat.slice(0, 3).map(function (x) { return x.short + (x.first ? ' ab ' + F.date(x.first, 'short') : ''); }).join(', ') +
+      (M.flat.length > 3 ? ' +' + (M.flat.length - 3) : '');
     if (M.intra && M.intra.oneT) note = IV_LONG[M.intra.key] + ' bis ' + F.asofBerlin(M.intra.asof) + ' Uhr' +
       (M.intra.missing.length ? ', ' + M.intra.missing.length + ' Werte ohne Intraday-Kurse' : '');
     var period = 'Zeitraum ' + periodText(R) + (note ? ' (' + note + ')' : '');
@@ -1470,21 +1476,23 @@
     if (!on) return;
     var base = M.p && isNum(M.p.startValue) && M.p.startValue > 0 ? M.p.startValue : 1;
     // user 30.09.: every benchmark in its own tight box (same columns, same type size as "Statistik"); column labels once on top
-    var COLG = '<colgroup><col><col class="hb-c1"><col class="hb-c2"><col class="hb-c3"></colgroup>', html = '';
+    var COLG = '<colgroup><col><col class="hb-c0"><col class="hb-c1"><col class="hb-c2"><col class="hb-c3"></colgroup>', html = '';
     M.selB.forEach(function (x) {
       var st = x.st, end = x.s && x.s.value.length ? x.s.value[x.s.value.length - 1] : null;
-      var pl = end !== null && isNum(x.s.value[0]) ? end - x.s.value[0] : null;
+      var v0 = x.s && isNum(x.s.value[0]) ? x.s.value[0] : null, pl = end !== null && v0 !== null ? end - v0 : null;
       var body = '<tr class="hb-grp"><td class="l"><span class="row-name"><i style="background:' + x.color + '"></i><span class="hb-nm">' + esc(x.name) + '</span></span></td>' +
+        '<td>' + (isNum(v0) ? F.num(v0, 0) : '–') + '</td>' +
         '<td class="cmp-val">' + (isNum(end) ? F.num(end, 0) : '–') + '</td><td>' + colored(pl, F.num(pl, 0, true)) + '</td>' +
         '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td></tr>';
       var hs = x.b.schedule ? null : E.benchmarkHoldings(ctx, x.b, M.R.start, M.R.end, base);
       if (!hs) {
-        body += '<tr class="hb-note"><td class="l" colspan="4">' + (x.b.schedule ? 'Echte Transaktionen – nicht nach Positionen aufgeschlüsselt' : 'keine Positionen') + '</td></tr>';
+        body += '<tr class="hb-note"><td class="l" colspan="5">' + (x.b.schedule ? 'Echte Transaktionen – nicht nach Positionen aufgeschlüsselt' : 'keine Positionen') + '</td></tr>';
       } else {
         hs.sort(function (a, b) { return (b.v1 || 0) - (a.v1 || 0); }).forEach(function (h) {
           var i = INSTR_BY[h.isin], nm = i ? i.short : h.isin;
           body += '<tr class="hb-pos-row" title="' + esc((i ? i.name + ' · ' : '') + h.isin) + '"><td class="l"><span class="hb-pos"><span class="hb-nm">' + esc(nm) + '</span>' +
             '<span class="hb-w">' + esc(fmtShare(Math.round((h.weight || 0) * 1000) / 10)) + ' %</span></span></td>' +
+            '<td>' + (isNum(h.v0) ? F.num(h.v0, 0) : '–') + '</td>' +
             '<td>' + (isNum(h.v1) ? F.num(h.v1, 0) : '–') + '</td><td>' + colored(h.pl, F.num(h.pl, 0, true)) + '</td>' +
             '<td>' + colored(h.ret, pct(h.ret)) + '</td></tr>';
         });
@@ -1493,7 +1501,7 @@
     });
     $('hbSub').textContent = periodText(M.R);
     $('hbList').innerHTML = M.selB.length ? '<table class="tbl tbl--cmp tbl--hb hb-cols" aria-hidden="true">' + COLG +
-      '<thead><tr><th class="l"></th><th>Wert €</th><th>G/V €</th><th>Rendite</th></tr></thead></table>' + html : '';
+      '<thead><tr><th class="l"></th><th title="Wert am Anfang des Zeitraums">Start €</th><th title="Wert am Ende des Zeitraums">Ende €</th><th>G/V €</th><th>Rendite</th></tr></thead></table>' + html : '';
     $('hbEmpty').hidden = !!M.selB.length;
   }
 
@@ -1504,8 +1512,8 @@
   function renderCmpPanel(M) {
     $('cmpSub').textContent = periodText(M.R);
     $('cmpSub').title = riskNote(M).replace(/^ · /, '');
-    // user 29.09.: "Statistik" – end value, then the return; p.a., Vol. p.a., Sharpe, Max. DD (no Sortino)
-    var COLS = [['Wert', 'Wert am Ende des Zeitraums (wie im Chart: Startwert)'], ['G/V €', 'Gewinn/Verlust in € im Zeitraum (Endwert − Startwert, wie im Chart)'],
+    // user 29.09.: "Statistik" – start and end value (30.09.), then the return; p.a., Vol. p.a., Sharpe, Max. DD (no Sortino)
+    var COLS = [['Start', 'Wert am Anfang des Zeitraums (wie im Chart: Startwert)'], ['Ende', 'Wert am Ende des Zeitraums (wie im Chart: Startwert)'], ['G/V €', 'Gewinn/Verlust in € im Zeitraum (Endwert − Startwert, wie im Chart)'],
       ['Rendite', 'Gesamtrendite im Zeitraum'],
       ['p.a.', 'annualisierte Rendite (CAGR)'], ['Vol. p.a.', 'annualisierte Volatilität'], ['Sharpe', 'Sharpe-Ratio'], ['Max. DD', 'maximaler Drawdown']];
     var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + COLS.map(function (c) {
@@ -1514,14 +1522,15 @@
     function row(name, color, title, st, s) {
       var end = s && s.value && s.value.length ? s.value[s.value.length - 1] : null, weak = st && !st.cagrReliable;
       var gv = isNum(end) && isNum(s.value[0]) ? end - s.value[0] : null;
-      var cells = st ? '<td class="cmp-val">' + (isNum(end) ? eur(end, { dec: 0 }) : '–') + '</td>' +
+      var cells = st ? '<td>' + (s && isNum(s.value[0]) ? eur(s.value[0], { dec: 0 }) : '–') + '</td>' +
+        '<td class="cmp-val">' + (isNum(end) ? eur(end, { dec: 0 }) : '–') + '</td>' +
         '<td>' + colored(gv, eurS(gv, 0)) + '</td>' +
         '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td>' +
         '<td' + (weak ? ' class="dim" title="wenig aussagekräftig &lt; 3 Monate"' : '') + '>' +
         (weak ? pct(get(st, 'cagr')) : colored(get(st, 'cagr'), pct(get(st, 'cagr')))) + '</td>' +
         '<td>' + pctU(get(st, 'volAnn')) + '</td><td>' + ratio(get(st, 'sharpe')) + '</td>' +
         '<td>' + colored(get(st, 'maxDD'), pctU(get(st, 'maxDD'))) + '</td>'
-        : new Array(8).join('<td class="dash">–</td>');
+        : new Array(9).join('<td class="dash">–</td>');
       return '<tr><td class="l sticky"' + (title ? ' title="' + esc(title) + '"' : '') + '><span class="row-name"><i style="background:' + color +
         '"></i><span class="cmp-nm">' + esc(name) + '</span></span></td>' + cells + '</tr>';
     }
@@ -1707,6 +1716,7 @@
     state.sinceBuy = p === 'SK';
     state.preset = p === 'SK' ? 'MAX' : p;
     state.custom = null;
+    state.startYear = null;
     setRangeHint('');
     update();
   }
@@ -2014,6 +2024,7 @@
     state.custom = { from: from, to: to };
     state.preset = null;
     state.sinceBuy = false;
+    state.startYear = null;
     update();
   }
 
@@ -2043,6 +2054,28 @@
     update({ keepMeasure: true });
   }
 
+  /** Startjahr menu: "–" + every year with data; the list of years is filled once. */
+  function fillStartYears() {
+    var sel = $('startYear'), y0 = +ctx.dates[0].slice(0, 4), y1 = +ctx.dates[ctx.n - 1].slice(0, 4), h = '<option value="">–</option>';
+    for (var y = y1; y >= y0; y--) h += '<option value="' + y + '">' + y + '</option>';
+    sel.innerHTML = h;
+  }
+  /** Startjahr Y: from the last close before 01.01.Y (like YTD; the first data day if there is none) to the last day. */
+  function onStartYear() {
+    var v = $('startYear').value;
+    if (!v) { setPeriod(state.preset || 'YTD'); return; }
+    var jan = v + '-01-01', k = 0;
+    for (var i = 0; i < ctx.n; i++) if (ctx.dates[i] < jan) k = i; else break;
+    var from = ctx.dates[k], to = ctx.dates[ctx.n - 1];
+    if (!E.customRange(ctx, from, to)) { $('startYear').value = state.startYear != null ? String(state.startYear) : ''; return; }
+    setRangeHint('');
+    state.custom = { from: from, to: to };
+    state.preset = null;
+    state.sinceBuy = false;
+    state.startYear = +v;
+    update();
+  }
+
   function onRf() {
     var inp = $('rfInput'), s = inp.value.trim(), v = s ? F.parseDE(s) : null;
     if (!isNum(v) || v < -20 || v > 50) {
@@ -2066,6 +2099,7 @@
     state.custom = { from: from, to: to };
     state.preset = null;
     state.sinceBuy = false;
+    state.startYear = null;
     update();
   }
 
@@ -2098,6 +2132,8 @@
       onStartValue();
     });
     $('rfInput').addEventListener('input', onRf);
+    fillStartYears();
+    $('startYear').addEventListener('change', onStartYear);
     bindBench();                                 // benchmark cards + instrument search list
     $('applyMeasure').addEventListener('click', applyMeasure);
     $('assetTable').addEventListener('change', function (ev) {

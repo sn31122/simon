@@ -157,6 +157,12 @@ button { -webkit-tap-highlight-color: transparent; }
 
 /* benchmark builder (cards like testfolio.io, renderBenchCards() in app.js): locked "Mein Depot" + own cards + "+ Benchmark" tile */
 .set-bench { flex: 1 1 100%; min-width: 0; margin-top: 8px; }
+.set-field--rf { margin-left: auto; }             /* Risikofreier Zins at the right end of the row (user 30.09.) */
+.year-sel {
+  height: 30px; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--field);
+  color: inherit; font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.year-sel:focus { outline: none; border-color: var(--accent); }
 .bb-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 12px; margin-bottom: 8px; }
 .bb-note { color: #6f757b; font-size: 11.5px; }
 .bb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
@@ -761,6 +767,7 @@ th.is-sorted { color: var(--text); }
    fixed columns so the boxes line up under the one label row */
 .hb-list { padding: 0 6px 6px; }
 .tbl--hb { table-layout: fixed; }
+.tbl--hb col.hb-c0 { width: 62px; }
 .tbl--hb col.hb-c1 { width: 62px; }
 .tbl--hb col.hb-c2 { width: 72px; }
 .tbl--hb col.hb-c3 { width: 80px; }
@@ -788,15 +795,17 @@ th.is-sorted { color: var(--text); }
 @media (min-width: 1500px) {
   /* left of the 820px content column, level with the pills on the right; a bit narrower (user 30.09.), its right edge
      keeps the old 28px gap to the column */
-  .hb { position: fixed; top: 46px; right: calc(50% + 410px + 28px); width: min(400px, calc(50% - 410px - 28px - 12px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
+  .hb { position: fixed; top: 46px; right: calc(50% + 410px + 28px); width: min(470px, calc(50% - 410px - 28px - 12px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
   .hb .cmp-h { flex-wrap: wrap; gap: 0 8px; }
 }
 @media (min-width: 1500px) and (max-width: 1719px) {
-  /* narrow side space (< 400px): smaller gap to the column and tighter number columns so the names keep room */
+  /* narrow side space (< 410px): smaller gap to the column and tighter number columns so the names keep room */
   .hb { right: calc(50% + 410px + 16px); left: 8px; width: auto; }
-  .tbl--hb col.hb-c1 { width: 56px; }
+  .tbl--hb col.hb-c0 { width: 52px; }
+  .tbl--hb col.hb-c1 { width: 52px; }
   .tbl--hb col.hb-c2 { width: 64px; }
-  .tbl--hb col.hb-c3 { width: 70px; }
-  .tbl--hb th, .tbl--hb td { padding-left: 4px; padding-right: 4px; }
+  .tbl--hb col.hb-c3 { width: 66px; }
+  .tbl--hb th, .tbl--hb td { padding-left: 3px; padding-right: 3px; font-size: 11px; }
   .hb-pos { padding-left: 8px; gap: 4px; }
+  .hb-w { display: none; }                         /* start weight hidden here (5 columns, user 30.09.): names keep room */
 }

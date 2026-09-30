@@ -122,7 +122,11 @@
           <button type="button" class="sv-btn" id="svDepot" aria-pressed="false" title="Alle Linien starten beim aktuellen Wert deines Scalable-Depots">Mein Depot</button>
         </span>
       </div>
-      <div class="set-field">
+      <div class="set-field set-field--year">
+        <label for="startYear">Startjahr</label>
+        <select id="startYear" class="year-sel" title="Zeitraum ab Jahresbeginn (Schlusskurs des Vorjahres) bis heute"></select>
+      </div>
+      <div class="set-field set-field--rf">
         <label for="rfInput">Risikofreier Zins</label>
         <span class="inp-wrap inp-wrap--unit">
           <input type="text" id="rfInput" inputmode="decimal" autocomplete="off" spellcheck="false" value="2,0"
