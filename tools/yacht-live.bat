@@ -1,13 +1,13 @@
 @echo off
 rem Yacht-Dashboard live (neu 30.09.2026): holt github.com/sn31122/simon (Branch main) in einen eigenen Ordner, oeffnet
-rem dashboard.html und prueft alle 60 Sekunden auf neue Commits. Die Datei kann in einem beliebigen Ordner liegen.
+rem dashboard.html und prueft alle 10 Sekunden auf neue Commits. Die Datei kann in einem beliebigen Ordner liegen.
 rem Der Ordner %DIR% ist nur eine Kopie von main: lokale Aenderungen darin werden bei jedem Abgleich verworfen.
 setlocal EnableDelayedExpansion
 title Yacht-Dashboard live
 set "REPO=https://github.com/sn31122/simon.git"
 set "DIR=%USERPROFILE%\yacht-live-main"
 set "BRANCH=main"
-set "WAIT=60"
+set "WAIT=10"
 rem 1 = bei neuer Version das Dashboard automatisch neu oeffnen (neuer Tab), 0 = nur Hinweis im Fenster
 set "REOPEN=1"
 
