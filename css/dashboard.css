@@ -283,7 +283,14 @@ button { -webkit-tap-highlight-color: transparent; }
 .pc { position: relative; user-select: none; -webkit-user-select: none; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
 /* app: ~820x490 incl. tooltip band and x labels; --band-extra (MainChart) = extra band for a hover box with up to
    3 benchmarks when it is taller than the measure boxes, so the plot keeps its height */
-.pc-main { height: calc(490px + var(--band-extra, 0px)); }
+.pc-main { height: calc(490px + var(--grow-y, 0px) + var(--band-extra, 0px)); margin: 0 calc(-1 * var(--grow-x, 0px)); }
+/* grab point at the chart's bottom-right corner (user 30.09.): drag = chart grows symmetrically sideways and downward */
+.chart-grip {
+  position: absolute; z-index: 5; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid var(--accent); border-radius: 50%;
+  background: var(--bg); cursor: nwse-resize; touch-action: none; opacity: .55; transition: opacity .15s;
+}
+.chart-grip:hover, .is-gripping .chart-grip { opacity: 1; background: var(--accent); }
+.is-gripping, .is-gripping * { cursor: nwse-resize !important; user-select: none !important; }
 .pc-dd { height: 150px; }
 .pc:not(.is-empty) .pc-svg { cursor: crosshair; }
 .pc-svg { position: absolute; left: 0; top: 0; display: block; overflow: visible; }
@@ -651,7 +658,7 @@ th.is-sorted { color: var(--text); }
   .tabs { width: 100%; gap: 0; }
   .tab { flex: 1 1 0; min-width: 0; height: 40px; padding: 0 2px; }
   .ov { margin-top: 24px; }
-  .pc-main { height: calc(360px + var(--band-extra, 0px)); }
+  .pc-main { height: calc(360px + var(--grow-y, 0px) + var(--band-extra, 0px)); }
   .settings { gap: 10px 16px; }
   .bb-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
   .bb-ico { width: 32px; height: 32px; }
