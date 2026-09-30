@@ -1482,18 +1482,19 @@
     M.selB.forEach(function (x) {
       var st = x.st, end = x.s && x.s.value.length ? x.s.value[x.s.value.length - 1] : null;
       var pl = end !== null && isNum(x.s.value[0]) ? end - x.s.value[0] : null;
-      body += '<tr class="hb-grp"><td class="l"><span class="row-name"><i style="background:' + x.color + '"></i><span class="hb-nm">' + esc(x.name) + '</span></span></td>' +
+      body += '<tr class="hb-grp" style="--gc:' + x.color + '"><td class="l"><span class="row-name"><i style="background:' + x.color + '"></i><span class="hb-nm">' + esc(x.name) + '</span></span></td>' +
         '<td class="cmp-val">' + (isNum(end) ? F.num(end, 0) : '–') + '</td><td>' + colored(pl, F.num(pl, 0, true)) + '</td>' +
         '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td></tr>';
       var hs = x.b.schedule ? null : E.benchmarkHoldings(ctx, x.b, M.R.start, M.R.end, base);
       if (!hs) {
-        body += '<tr class="hb-note"><td colspan="4">' + (x.b.schedule ? 'Echte Transaktionen – nicht nach Positionen aufgeschlüsselt' : 'keine Positionen') + '</td></tr>';
+        body += '<tr class="hb-note" style="--gc:' + x.color + '"><td colspan="4">' + (x.b.schedule ? 'Echte Transaktionen – nicht nach Positionen aufgeschlüsselt' : 'keine Positionen') + '</td></tr>';
         return;
       }
       hs.sort(function (a, b) { return (b.v1 || 0) - (a.v1 || 0); }).forEach(function (h) {
         var i = INSTR_BY[h.isin], nm = i ? i.short : h.isin;
-        body += '<tr title="' + esc((i ? i.name + ' · ' : '') + h.isin) + '"><td class="l"><span class="hb-pos"><span class="hb-nm">' + esc(nm) + '</span>' +
-          '<span class="hb-w">' + esc(fmtShare(Math.round((h.weight || 0) * 1000) / 10)) + ' %</span></span></td>' +
+        body += '<tr class="hb-pos-row" style="--gc:' + x.color + '" title="' + esc((i ? i.name + ' · ' : '') + h.isin) + '"><td class="l"><span class="hb-pos"><span class="hb-nm">' + esc(nm) + '</span>' +
+          '<span class="hb-w">' + esc(fmtShare(Math.round((h.weight || 0) * 1000) / 10)) + ' %</span></span>' +
+          '<span class="hb-bar" style="width:' + Math.round(Math.min(1, h.weight || 0) * 100) + '%"></span></td>' +
           '<td>' + (isNum(h.v1) ? F.num(h.v1, 0) : '–') + '</td><td>' + colored(h.pl, F.num(h.pl, 0, true)) + '</td>' +
           '<td>' + colored(h.ret, pct(h.ret)) + '</td></tr>';
       });
