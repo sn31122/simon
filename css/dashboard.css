@@ -764,7 +764,7 @@ th.is-sorted { color: var(--text); }
 .tbl--hb col.hb-c2 { width: 72px; }
 .tbl--hb col.hb-c3 { width: 80px; }
 .tbl--hb td.l, .tbl--hb th.l { text-align: left; overflow: hidden; text-overflow: ellipsis; }
-.tbl--hb th, .tbl--hb td { padding: 4px 6px; }
+.tbl--hb th, .tbl--hb td { padding: 7px 6px; line-height: 1.25; }
 .tbl--hb th:first-child, .tbl--hb td:first-child { padding-left: 8px; }
 .tbl--hb th:last-child, .tbl--hb td:last-child { padding-right: 8px; }
 .hb-cols th { border-bottom: 0; padding-bottom: 3px; }
@@ -772,16 +772,30 @@ th.is-sorted { color: var(--text); }
   background: var(--card); }
 .hb-box:first-of-type { margin-top: 0; }
 .hb-box .tbl td { border-bottom: 0; }
-.hb-grp td { padding-top: 6px; padding-bottom: 6px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--gc) 16%, var(--card)); }
+/* user 30.09.: light line between the holdings (and under the header row) for readability */
+.hb-pos-row td, .hb-note td { border-top: 1px solid rgba(255, 255, 255, .075); }
+.hb-box .tbl tbody tr.hb-pos-row:hover td { background: var(--hover-row); }
+.hb-grp td { padding-top: 8px; padding-bottom: 8px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--gc) 16%, var(--card)); }
 .hb-grp td:first-child { box-shadow: inset 3px 0 0 var(--gc); }
+.hb-box .tbl tbody tr.hb-grp:hover td { background: color-mix(in srgb, var(--gc) 16%, var(--card)); }
 .hb-note td { color: var(--muted); font-size: 11px; }
-.hb-pos { display: inline-flex; align-items: baseline; gap: 5px; padding-left: 14px; min-width: 0; max-width: 100%; }
+.hb-pos { display: inline-flex; align-items: baseline; gap: 6px; padding-left: 11px; min-width: 0; max-width: 100%; }
+.hb-pos-row .hb-nm { color: var(--text); font-weight: 500; }
 .hb-nm { display: inline-block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
-.hb-w { flex: 0 0 auto; color: var(--muted); font-size: 10.5px; font-weight: 500; }
+.hb-w { flex: 0 0 auto; color: var(--muted); font-size: 10.5px; font-weight: 400; }
 .hb-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
-@media (min-width: 1600px) {
+@media (min-width: 1500px) {
   /* left of the 820px content column, level with the pills on the right; a bit narrower (user 30.09.), its right edge
-     keeps the old 28px gap to the column; from 1600px (not 1500) so the names keep room at the Statistik type size */
-  .hb { position: fixed; top: 46px; right: calc(50% + 410px + 28px); width: min(380px, calc(50% - 410px - 28px - 12px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
+     keeps the old 28px gap to the column */
+  .hb { position: fixed; top: 46px; right: calc(50% + 410px + 28px); width: min(400px, calc(50% - 410px - 28px - 12px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
   .hb .cmp-h { flex-wrap: wrap; gap: 0 8px; }
+}
+@media (min-width: 1500px) and (max-width: 1719px) {
+  /* narrow side space (< 400px): smaller gap to the column and tighter number columns so the names keep room */
+  .hb { right: calc(50% + 410px + 16px); left: 8px; width: auto; }
+  .tbl--hb col.hb-c1 { width: 56px; }
+  .tbl--hb col.hb-c2 { width: 64px; }
+  .tbl--hb col.hb-c3 { width: 70px; }
+  .tbl--hb th, .tbl--hb td { padding-left: 4px; padding-right: 4px; }
+  .hb-pos { padding-left: 8px; gap: 4px; }
 }
