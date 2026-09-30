@@ -319,20 +319,25 @@ async function depotBoxCheck(page) {
       await settle(page);
       return page.evaluate((id) => {
         const el = document.querySelector('[data-card="' + id + '"]');
-        return { valid: PFApp.model().benches.some((b) => b.id === id), total: el.querySelector('.bb-total').textContent, hint: el.querySelector('.bb-hint').textContent,
-          ret: el.querySelector('.bb-ret').textContent };
+        const b = PFApp.model().benches.find((x) => x.id === id), p = PFApp.model().p;
+        return { valid: !!b, total: el.querySelector('.bb-total').textContent, hint: el.querySelector('.bb-hint').textContent,
+          ret: el.querySelector('.bb-ret').textContent, v0: b && b.s ? b.s.value[0] / p.startValue : null };
       }, cid);
     }
     const P = {};
     for (const t of ['99,98', '99,99', '100', '100,01', '100,02', '1.000', '-5', 'abc', '', '0', '100.0']) P[t || '(leer)'] = await pctState(t);
-    check('cards', 'total within 100 % ± 0,01 is valid (99,99 / 100 / 100,01), outside is not (99,98 / 100,02)',
-      !P['99,98'].valid && P['99,99'].valid && P['100'].valid && P['100,01'].valid && !P['100,02'].valid,
-      { '99,98': P['99,98'], '100,02': P['100,02'] });
+    // user 30.09.: a total ≠ 100 % is drawn as absolute amounts – starts at total % of the start value, same return
+    const near = (a, b) => a !== null && Math.abs(a - b) < 1e-9;
+    check('cards', 'total ≠ 100 % is valid as absolute amounts (99,98 / 100,02 / 1.000 % start at that share of the start value, same return, hint "Absolut"); 99,99–100,01 = 100 %',
+      ['99,98', '99,99', '100', '100,01', '100,02', '1.000'].every((t) => P[t].valid && P[t].ret === P['100'].ret) &&
+      near(P['99,98'].v0, 0.9998) && near(P['100,02'].v0, 1.0002) && near(P['1.000'].v0, 10) && near(P['100'].v0, 1) && near(P['100,01'].v0, 1) &&
+      /Absolut: 99,98 %/.test(P['99,98'].hint) && /Absolut: 100,02 %/.test(P['100,02'].hint) && !/Absolut/.test(P['100,01'].hint),
+      { '99,98': P['99,98'], '100,01': P['100,01'], '100,02': P['100,02'], '1.000': P['1.000'] });
     check('cards', 'German input: "1.000" = 1000 %, "-5"/"abc" invalid ("Ungültige Prozentzahl"), empty/0 = 0 %, "100.0" = 100 %',
-      !P['1.000'].valid && /1\.000 %/.test(P['1.000'].total) && !P['-5'].valid && /Ungültige/.test(P['-5'].hint) && !P['abc'].valid &&
-      !P['(leer)'].valid && /^0 %$/.test(P['(leer)'].total) && /Noch 100 % verteilen/.test(P['(leer)'].hint) && !P['0'].valid && P['100.0'].valid,
+      P['1.000'].valid && /1\.000 %/.test(P['1.000'].total) && !P['-5'].valid && /Ungültige/.test(P['-5'].hint) && !P['abc'].valid &&
+      !P['(leer)'].valid && /^0 %$/.test(P['(leer)'].total) && /Instrument wählen/.test(P['(leer)'].hint) && !P['0'].valid && P['100.0'].valid,
       { '1.000': P['1.000'].total, '-5': P['-5'].hint, leer: P['(leer)'], '100.0': P['100.0'].valid });
-    check('cards', 'invalid card shows "–" as return', P['100,02'].ret === '–' && P['100'].ret !== '–', { invalid: P['100,02'].ret, valid: P['100'].ret });
+    check('cards', 'invalid card shows "–" as return', P['-5'].ret === '–' && P['100'].ret !== '–', { invalid: P['-5'].ret, valid: P['100'].ret });
     // a % without instrument -> invalid; instrument with 0 % ignored
     await pctState('60');
     await page.click('#benchCards [data-card="' + cid + '"] [data-act="addrow"]');
@@ -425,7 +430,7 @@ async function depotBoxCheck(page) {
     await settle(page);
     // invalid card excluded everywhere
     await page.locator(pctSel).first().click();
-    await selectAllAndType(page, '61');
+    await selectAllAndType(page, 'abc');
     await settle(page);
     const excl = await page.evaluate((id) => ({
       bench: PFApp.model().benches.some((b) => b.id === id), legend: /Benchmark 1/.test(document.getElementById('legend').textContent),

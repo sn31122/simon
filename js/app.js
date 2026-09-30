@@ -33,10 +33,12 @@
 
   // ------------------------------------------------------------------ constants
   // benchmark cards get the first free colour in this order (creation order; a deleted card's colour is reused).
-  // Chosen by OKLab distance (ΔE × 100): the first five differ by ≥ 14 from each other and from --accent #28ebcf,
-  // --neg #e78e78 (the portfolio line below its start value) and the white "Mein Depot"; all twelve by ≥ 9.
-  var BENCH_COLORS = ['#6ea8ff', '#ffb300', '#ba68c8', '#aeea00', '#ec407a', '#81d4fa',
-    '#4caf50', '#a1887f', '#fff176', '#7986cb', '#e040fb', '#ff80ab'];
+  // First four chosen by the user (30.09.); the rest = the old palette's colours furthest (OKLab ΔE × 100, greedy) from
+  // those four, --accent #28ebcf, --neg #e78e78 (the portfolio line below its start value), the white "Mein Depot" and
+  // each other: 19,6 / 17,9 / 13,3 / 12,9 / 11,9 / 11,6 / 11,3 / 10,3. Dropped (< 10 from a user colour): #ec407a,
+  // #ff80ab, #7986cb, #e040fb. Note: #FF4D3D is only 9,5 from --neg.
+  var BENCH_COLORS = ['#3b82f6', '#ff7a00', '#ff4d3d', '#b84dff', '#4caf50', '#aeea00',
+    '#fff176', '#ffb300', '#a1887f', '#6ea8ff', '#81d4fa', '#ba68c8'];
   var DEPOT_ID = 'my_depot', DEPOT_COLOR = '#f2f3f4';          // "Mein Depot" (preset of the real depot, an editable card) is white
   var CONTEXT_DAYS = 21;                       // holdings list, period 1T: grey history shown before the last day
   var ALL = ctx.positions.map(function (p) { return p.isin; });
@@ -741,8 +743,9 @@
    * Locked cards = data/benchmarks.csv rows with quantities ("ISIN:qty", can only be shown / hidden; none since 28.09.,
    * when "Mein Depot" became a weighting preset). Presets with percentages start as own cards.
    * Own cards = instruments with prices (D.instruments) + percentages. The engine buys them on the first day of the
-   * selected period (1T: at the previous close) and holds them, no rebalancing. A card is drawn / used anywhere only
-   * with a total of 100 % (± 0,01) and at least one instrument. Nothing is persisted.
+   * selected period (1T: at the previous close) and holds them, no rebalancing. A card is drawn / used anywhere once its
+   * fields are valid and it has at least one instrument; a total other than 100 % counts as absolute amounts (user 30.09.:
+   * each % of the start value is invested, 196 % starts at 1,96 × the start value, 50 % at half of it). Nothing is persisted.
    * Rendering: a card's DOM is rebuilt only when its rows change (add / remove / clear); typing only patches the
    * derived parts (return, total, hint), so the field being edited keeps its focus and caret.
    */
@@ -860,10 +863,8 @@
       if (v > 0 && r.isin) { weights[r.isin] = (weights[r.isin] || 0) + v; nIns++; } else if (v > 0) orphan = true;
     });
     var ok100 = !bad && Math.abs(total - 100) <= 0.01 + 1e-9;
-    var hint = bad ? 'Ungültige Prozentzahl (z. B. 12,5)' :
-      !ok100 ? (total < 100 ? 'Noch ' + fmtShare(100 - total) + ' % verteilen' : fmtShare(total - 100) + ' % zu viel') :
-      orphan ? 'Instrument fehlt' : !nIns ? 'Instrument wählen' : '';
-    return { total: total, weights: weights, ok100: ok100, valid: !hint, hint: hint };
+    var hint = bad ? 'Ungültige Prozentzahl (z. B. 12,5)' : orphan ? 'Instrument fehlt' : !nIns ? 'Instrument wählen' : '';
+    return { total: total, weights: weights, ok100: ok100, absolute: !ok100, valid: !hint, hint: hint };
   }
   /** What compute() hands the engine: the locked benchmarks + every valid card as {id, name, weights}; invalid cards are left out everywhere. */
   function benchDefs() {
@@ -880,7 +881,8 @@
       var desc = c.rows.filter(function (r) { return r.isin && rowVal(r) > 0; }).map(function (r) {
         return fmtShare(rowVal(r)) + ' % ' + INSTR_BY[r.isin].short;
       }).join(' · ') + ' – am ersten Tag des Zeitraums gekauft, dann gehalten';
-      out.push({ b: { id: c.id, name: cardName(c), weights: info.weights, description: desc }, id: c.id, name: cardName(c), color: c.color, show: c.show });
+      if (info.absolute) desc += ' (absolut: ' + fmtShare(info.total) + ' % des Startwerts)';
+      out.push({ b: { id: c.id, name: cardName(c), weights: info.weights, absolute: info.absolute, description: desc }, id: c.id, name: cardName(c), color: c.color, show: c.show });
     });
     return out;
   }
@@ -1029,14 +1031,17 @@
     var rb = el.querySelector('.bb-ret');
     rb.className = 'bb-ret ' + sgn(r);
     rb.textContent = pct(r);
-    rb.title = x || (o.y && isNum(r)) ? 'Rendite im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') : 'wird erst bei 100 % berechnet';
+    rb.title = x || (o.y && isNum(r)) ? 'Rendite im Zeitraum ' + periodText(M.R) + (shown ? '' : ' (im Chart ausgeblendet)') : 'wird berechnet, sobald die Karte gültig ist';
     if (!c || c.schedule) return;
     var info = cardInfo(c), tot = el.querySelector('.bb-total'), hint = el.querySelector('.bb-hint');
     el.classList.toggle('is-invalid', !info.valid);
     tot.textContent = fmtShare(info.total) + ' %';
-    tot.className = 'bb-total ' + (info.ok100 ? 'is-ok' : 'is-bad');
+    tot.className = 'bb-total ' + (info.ok100 ? 'is-ok' : 'is-abs');
+    tot.title = info.ok100 ? '' : 'Summe ≠ 100 %: jede Zeile ist dieser Anteil des Startwerts – die Linie beginnt bei ' + fmtShare(info.total) + ' % des Startwerts';
     hint.className = 'bb-hint' + (info.valid ? '' : ' is-bad');
-    hint.textContent = info.valid ? 'Kauf am ' + F.date(ctx.dates[M.R.start], 'short') + ', dann gehalten' : info.hint;
+    var buy = 'Kauf am ' + F.date(ctx.dates[M.R.start], 'short') + ', dann gehalten';
+    hint.textContent = !info.valid ? info.hint : info.ok100 ? buy : 'Absolut: ' + fmtShare(info.total) + ' % des Startwerts';
+    hint.title = info.valid && !info.ok100 ? buy : '';
     c.rows.forEach(function (rw) {
       var p = el.querySelector('[data-row="' + rw.id + '"] .bb-pct');
       if (!p) return;
@@ -1478,29 +1483,31 @@
     box.hidden = !on;
     if (!on) return;
     var base = M.p && isNum(M.p.startValue) && M.p.startValue > 0 ? M.p.startValue : 1;
-    var head = '<thead><tr><th class="l"></th><th>Wert €</th><th>G/V €</th><th>Rendite</th></tr></thead>', body = '';
+    // user 30.09.: every benchmark in its own tight box (same columns, same type size as "Statistik"); column labels once on top
+    var COLG = '<colgroup><col><col class="hb-c1"><col class="hb-c2"><col class="hb-c3"></colgroup>', html = '';
     M.selB.forEach(function (x) {
       var st = x.st, end = x.s && x.s.value.length ? x.s.value[x.s.value.length - 1] : null;
       var pl = end !== null && isNum(x.s.value[0]) ? end - x.s.value[0] : null;
-      body += '<tr class="hb-grp" style="--gc:' + x.color + '"><td class="l"><span class="row-name"><i style="background:' + x.color + '"></i><span class="hb-nm">' + esc(x.name) + '</span></span></td>' +
+      var body = '<tr class="hb-grp"><td class="l"><span class="row-name"><i style="background:' + x.color + '"></i><span class="hb-nm">' + esc(x.name) + '</span></span></td>' +
         '<td class="cmp-val">' + (isNum(end) ? F.num(end, 0) : '–') + '</td><td>' + colored(pl, F.num(pl, 0, true)) + '</td>' +
         '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td></tr>';
       var hs = x.b.schedule ? null : E.benchmarkHoldings(ctx, x.b, M.R.start, M.R.end, base);
       if (!hs) {
-        body += '<tr class="hb-note" style="--gc:' + x.color + '"><td colspan="4">' + (x.b.schedule ? 'Echte Transaktionen – nicht nach Positionen aufgeschlüsselt' : 'keine Positionen') + '</td></tr>';
-        return;
+        body += '<tr class="hb-note"><td class="l" colspan="4">' + (x.b.schedule ? 'Echte Transaktionen – nicht nach Positionen aufgeschlüsselt' : 'keine Positionen') + '</td></tr>';
+      } else {
+        hs.sort(function (a, b) { return (b.v1 || 0) - (a.v1 || 0); }).forEach(function (h) {
+          var i = INSTR_BY[h.isin], nm = i ? i.short : h.isin;
+          body += '<tr class="hb-pos-row" title="' + esc((i ? i.name + ' · ' : '') + h.isin) + '"><td class="l"><span class="hb-pos"><span class="hb-nm">' + esc(nm) + '</span>' +
+            '<span class="hb-w">' + esc(fmtShare(Math.round((h.weight || 0) * 1000) / 10)) + ' %</span></span></td>' +
+            '<td>' + (isNum(h.v1) ? F.num(h.v1, 0) : '–') + '</td><td>' + colored(h.pl, F.num(h.pl, 0, true)) + '</td>' +
+            '<td>' + colored(h.ret, pct(h.ret)) + '</td></tr>';
+        });
       }
-      hs.sort(function (a, b) { return (b.v1 || 0) - (a.v1 || 0); }).forEach(function (h) {
-        var i = INSTR_BY[h.isin], nm = i ? i.short : h.isin;
-        body += '<tr class="hb-pos-row" style="--gc:' + x.color + '" title="' + esc((i ? i.name + ' · ' : '') + h.isin) + '"><td class="l"><span class="hb-pos"><span class="hb-nm">' + esc(nm) + '</span>' +
-          '<span class="hb-w">' + esc(fmtShare(Math.round((h.weight || 0) * 1000) / 10)) + ' %</span></span>' +
-          '<span class="hb-bar" style="width:' + Math.round(Math.min(1, h.weight || 0) * 100) + '%"></span></td>' +
-          '<td>' + (isNum(h.v1) ? F.num(h.v1, 0) : '–') + '</td><td>' + colored(h.pl, F.num(h.pl, 0, true)) + '</td>' +
-          '<td>' + colored(h.ret, pct(h.ret)) + '</td></tr>';
-      });
+      html += '<div class="hb-box" style="--gc:' + x.color + '"><table class="tbl tbl--cmp tbl--hb">' + COLG + '<tbody>' + body + '</tbody></table></div>';
     });
     $('hbSub').textContent = periodText(M.R);
-    box.querySelector('table').innerHTML = M.selB.length ? head + '<tbody>' + body + '</tbody>' : '';
+    $('hbList').innerHTML = M.selB.length ? '<table class="tbl tbl--cmp tbl--hb hb-cols" aria-hidden="true">' + COLG +
+      '<thead><tr><th class="l"></th><th>Wert €</th><th>G/V €</th><th>Rendite</th></tr></thead></table>' + html : '';
     $('hbEmpty').hidden = !!M.selB.length;
   }
 

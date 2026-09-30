@@ -304,6 +304,8 @@
    *   { holdings: {ISIN: qty} }            fixed quantities (e.g. the real depot "Mein Depot") – `at` is not used;
    *   { weights: {ISIN: % or fraction} }   custom allocation (benchmark cards): normalized by the sum of the valid weights
    *                                         and bought at `at` (q = w / Σw / px[at]), then held – buy and hold, no rebalancing.
+   *   { weights: {ISIN: %}, absolute: true }  absolute amounts (user 30.09.): each % is that share of the start value, not
+   *                                         normalized – 80 % + 16 % + 100 % = 1,96 × the start value (q = w / 100 / px[at]).
    * Only ISINs with prices count; weights must be > 0 and the price at `at` > 0. -> null when a weights benchmark has
    * nothing valid left (a holdings benchmark keeps its old behaviour: a flat series).
    */
@@ -311,8 +313,8 @@
     if (bench && bench.weights) {
       const w = Object.keys(bench.weights).map((i) => [i, Number(bench.weights[i])])
         .filter((h) => ctx.px[h[0]] && isNum(h[1]) && h[1] > 0 && ctx.px[h[0]][at] > 0);
-      const tot = sum(w.map((h) => h[1]));
-      return tot > 0 ? w.map((h) => [h[0], h[1] / tot / ctx.px[h[0]][at]]) : null;
+      const tot = bench.absolute ? 100 : sum(w.map((h) => h[1]));
+      return w.length && tot > 0 ? w.map((h) => [h[0], h[1] / tot / ctx.px[h[0]][at]]) : null;
     }
     return Object.keys((bench && bench.holdings) || {}).map((i) => [i, Number(bench.holdings[i])])
       .filter((h) => ctx.px[h[0]] && isNum(h[1]));
@@ -355,6 +357,11 @@
     for (let k = s; k <= e; k++) out[k - s] = schedValue(ctx, bench, Math.max(k, Math.min(k0, ctx.n - 1)));
     return out;
   }
+  /** Start value of a benchmark line: baseValue (omitted = its raw start r0); an absolute-amounts card starts at baseValue × r0 (= Σ w / 100). */
+  function benchBase(bench, baseValue, r0) {
+    if (!isNum(baseValue)) return r0;
+    return bench && bench.weights && bench.absolute ? baseValue * r0 : baseValue;
+  }
   function isSchedule(bench) { return !!(bench && bench.schedule && Array.isArray(bench.schedule.steps) && bench.schedule.steps.length); }
 
   function intradayBenchmark(ctx, bench, baseValue, frame) {
@@ -378,7 +385,7 @@
     let r0 = 0;
     q.forEach((h) => { r0 += h[1] * ctx.px[h[0]][F.start]; });
     if (!(r0 > 0)) return null;
-    const base = isNum(baseValue) ? baseValue : r0;
+    const base = benchBase(bench, baseValue, r0);
     const value = frameRaw(ctx, F, q).map((t) => (t === null ? null : base * (t / r0)));
     return Object.assign(frameInfo(F), { id: bench.id, name: bench.name, value, pl: minusBase(value, base), base,
       ret: relBase(value, base), missing: q.filter((h) => !frameSeen(F, h[0])).map((h) => h[0]) });
@@ -637,7 +644,7 @@
         raw[k] = t;
       }
     }
-    const base = isNum(baseValue) ? baseValue : raw[0];
+    const base = benchBase(bench, baseValue, raw[0]);
     const ok = raw[0] > 0;
     const value = raw.map((x) => (ok ? base * (x / raw[0]) : base));
     const series = makeSeries(ctx, s, e, raw, ok ? base / raw[0] : 1, value, base);
@@ -650,7 +657,8 @@
    * benchmarkHoldings(ctx, bench|id, start, end, baseValue) -> [{ isin, weight, v0, v1, pl, ret }] | null
    * The single holdings of a weights / quantity benchmark, bought at the range start and held – the very purchase
    * benchmark() draws (same start value baseValue, Σ v1 = the series' last value, Σ pl = its € change). weight = share of
-   * the start value; ret = price return of the holding. A schedule benchmark (replayed depot) has no fixed holdings -> null.
+   * the start value (absolute-amounts card: the typed % / 100, so Σ weight = its multiple of baseValue); ret = price return
+   * of the holding. A schedule benchmark (replayed depot) has no fixed holdings -> null.
    */
   function benchmarkHoldings(ctx, bench, start, end, baseValue) {
     if (typeof bench === 'string') bench = ctx.benchmarks.find((b) => b.id === bench);
@@ -661,11 +669,11 @@
     let raw0 = 0;
     hold.forEach((h) => { raw0 += h[1] * ctx.px[h[0]][s]; });
     if (!(raw0 > 0)) return null;
-    const k = (isNum(baseValue) ? baseValue : raw0) / raw0;
+    const k = benchBase(bench, baseValue, raw0) / raw0, abs = !!bench.absolute;
     return hold.map((h) => {
       const p0 = ctx.px[h[0]][s], p1 = ctx.px[h[0]][e];
       const v0 = fin(h[1] * p0 * k), v1 = fin(h[1] * p1 * k);
-      return { isin: h[0], weight: fin(h[1] * p0 / raw0), v0, v1,
+      return { isin: h[0], weight: fin(abs ? h[1] * p0 : h[1] * p0 / raw0), v0, v1,
         pl: v0 === null || v1 === null ? null : fin(v1 - v0), ret: fin(div(p1, p0) === null ? null : p1 / p0 - 1) };
     });
   }

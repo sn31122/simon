@@ -136,7 +136,7 @@
       <div class="set-bench">
         <div class="bb-head">
           <span class="set-label" id="benchLabel">Benchmarks</span>
-          <span class="bb-note">Anteile werden am ersten Tag des Zeitraums gekauft und gehalten (kein Rebalancing) · nur Karten mit 100 % zählen · nicht gespeichert</span>
+          <span class="bb-note">Anteile werden am ersten Tag des Zeitraums gekauft und gehalten (kein Rebalancing) · Summe ≠ 100 % = absolute Beträge (Anteil des Startwerts) · nicht gespeichert</span>
         </div>
         <div class="bb-grid" id="benchCards" role="group" aria-labelledby="benchLabel"></div>
       </div>
@@ -195,14 +195,14 @@
       </div>
     </section>
 
-    <!-- user 30.09.: P&L per holding of every benchmark shown in the chart; off by default. >= 1500px: fixed left of the content
+    <!-- user 30.09.: P&L per holding of every benchmark shown in the chart; off by default. >= 1600px: fixed left of the content
          (button + card); narrower: a block here, in the place of the former Benchmark-Vergleich -->
     <section class="block hb" id="hbWrap" aria-label="Benchmark-Positionen">
       <button type="button" class="hb-btn" id="hbToggle" aria-pressed="false" aria-controls="hbBody"
               title="G/V und Kennzahlen je Position der eingeblendeten Benchmarks ein-/ausblenden">Benchmark-Positionen</button>
       <div class="card hb-card" id="hbBody" hidden>
         <div class="cmp-h"><span class="cmp-t">Positionen je Benchmark</span><span class="cmp-sub" id="hbSub"></span></div>
-        <div class="tscroll"><table class="tbl tbl--cmp tbl--hb"></table></div>
+        <div class="hb-list" id="hbList"></div>
         <p class="hb-empty" id="hbEmpty" hidden>Keine Benchmark im Chart eingeblendet.</p>
       </div>
     </section>
