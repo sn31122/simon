@@ -27,8 +27,7 @@ with open(D/'prices_daily.csv', encoding='utf-8') as f:
 isins = head[3:]
 errors, warns = [], []
 # history before the daily data (update_prices.py --finish-history): prices_history.csv, date,res,<ISIN>… with res "m"
-# (month-end close), "2d" (every 2nd trading day), or "d" (Yahoo daily close).
-# The complete Scalable daily grid remains the risk-metric boundary for mixed history.
+# (month-end close) or "2d" (every 2nd trading day); prepended as final rows, res marks the resolution of every date
 hrows, hres = [], []
 if (D/'prices_history.csv').exists():
     with open(D/'prices_history.csv', encoding='utf-8') as f:
@@ -37,7 +36,7 @@ if (D/'prices_history.csv').exists():
         pos_h = {i: k for k, i in enumerate(hh)}
         for r in rd:
             if not r: continue
-            if r[1] not in ('m', '2d', 'd'): errors.append(f'prices_history.csv {r[0]}: bad res {r[1]!r}')
+            if r[1] not in ('m', '2d'): errors.append(f'prices_history.csv {r[0]}: bad res {r[1]!r}')
             hres.append(r[1])
             hrows.append([r[0], 'final', ''] + [r[pos_h[i]] if i in pos_h and pos_h[i] < len(r) else '' for i in isins])
             if r[0] >= rows[0][0]: errors.append(f'prices_history.csv {r[0]}: not before the daily data ({rows[0][0]})')
@@ -262,24 +261,9 @@ positions = [{'isin': p['isin'], 'name': p['name'], 'short': p['short'], 'group'
               'ref_date': p['ref_date'], 'ref_price': float(p['ref_price']), 'gv_ref': float(p['gv_ref']),
               'cost_basis': float(p['cost_basis']), 'note': p['note'], 'first_date': first_date(p['isin']),
               'logo': logo_for(p)} for p in pos]
-source = 'Scalable MCP get_security_chart year_to_date (Tagesschluss, Mid, EUR)'
-history_source = None
-if (D/'yfinance_status.json').exists():
-    history_source = json.loads((D/'yfinance_status.json').read_text(encoding='utf-8'))
-    source += '; Historie: Yahoo Finance/yfinance Close, Scalable-Fallback'
-    NOTES[1] = ('Tagesschlusskurse in EUR: Scalable ab ' + dates[n_hist] + '; davor tägliche Yahoo-Schlusskurse für '
-                + str(history_source['instruments']) + ' Titel, sonst gröbere Scalable-Historie. '
-                'Risikokennzahlen nutzen weiterhin die vollständige Tageskursperiode ab ' + dates[n_hist] + '.')
-    if history_source['currency_policy'] == 'fx':
-        NOTES.append('Yahoo-Kurse in Fremdwährung sind mit täglichen Yahoo-FX-Schlusskursen in EUR rekonstruiert '
-                     '(höchstens 4 Kalendertage alter FX-Kurs). Handelsplatz und Schlusszeit unterscheiden sich von Scalable. '
-                     'Quelle und FX-Datum stehen in yfinance_sources.csv. Keine Dividendenanpassung.')
-    else:
-        NOTES.append('Yahoo-Historie verwendet nur native EUR-Notierungen. Handelsplatz und Schlusszeit können von '
-                     'Scalable abweichen. Keine Dividendenanpassung. Quelle: yfinance_sources.csv.')
 data = {
     'meta': {'title': 'Yacht-Portfolio', 'currency': 'EUR',
-             'source': source, 'history_source': history_source,
+             'source': 'Scalable MCP get_security_chart year_to_date (Tagesschluss, Mid, EUR)',
              'generated_at': datetime.datetime.now().astimezone().isoformat(timespec='seconds'),
              'first_date': dates[0], 'last_date': dates[-1], 'last_status': status[-1], 'daily_from': dates[n_hist],
              'last_asof_utc': rows[-1][2], 'positions_ref_date': pos[0]['ref_date'], 'notes': NOTES},

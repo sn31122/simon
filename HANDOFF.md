@@ -4,7 +4,7 @@ Repo `sn31122/simon`, branch `main`; the user works only in Claude Code cloud se
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 30.09.2026 03:58 Berlin): 190 trading days 2026-01-02 … 2026-09-29; last row 2026-09-29 = final; history (prices_history.csv): 2391 rows 2016-09-30 … 2025-12-31 (daily Yahoo closes plus sparse Scalable fallback); 30-min (intraday.csv): 8 sessions 2026-09-18 … 2026-09-29; 2-h (intraday_2h.csv): 26 sessions 2026-08-25 … 2026-09-29; engine tests: 60 passed, 0 failed; crosscheck: 3273/3273 checks passed.
+- Data status (update 30.09.2026 03:58 Berlin): 190 trading days 2026-01-02 … 2026-09-29; last row 2026-09-29 = final; history (prices_history.csv): 171 rows 2016-09-30 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 8 sessions 2026-09-18 … 2026-09-29; 2-h (intraday_2h.csv): 26 sessions 2026-08-25 … 2026-09-29; engine tests: 56 passed, 0 failed; crosscheck: 3273/3273 checks passed.
 <!-- data-status:end -->
 (Block rewritten by `--finish` / `--finish-add`; do not edit by hand.)
 
@@ -30,9 +30,3 @@ Repo `sn31122/simon`, branch `main`; the user works only in Claude Code cloud se
 - Windows live view: `tools/yacht-live.bat` (new 30.09.: own clone `%USERPROFILE%\yacht-live-main`, fetch + hard reset to `origin/main` every 60 s, reopens the page on a new version; the old version's `pull --ff-only` failed silently).
 - Going local: install Claude Code + Node + Python, `git clone https://github.com/sn31122/simon`, start `claude` (or `claude --teleport <session-id>`); the Scalable connector must be available; push local commits.
 - Claude Sonnet 5.5 requires Claude Code v2.1.284 or later; update older local installations before running a price fetch.
-
-
-<!-- yfinance-status:start -->
-- Yahoo history: 95 instruments, 180882 daily closes 2016-09-30 … 2025-12-31. Policy fx; 2026 Scalable daily/intraday data retained. Risk metrics still start at 2026-01-02 because remaining instruments have sparse history. Checks: engine tests: 60 passed, 0 failed; crosscheck: 3273/3273 checks passed. Run 20260930T060907Z-da4141450d17.
-<!-- yfinance-status:end -->
-- Yahoo history verification (30.09.2026): four GPT-6 Luna high agents saved 95 instruments / 180882 closes, including daily-FX EUR reconstruction. 22 pipeline tests; engine tests: 60 passed, 0 failed; crosscheck: 3273/3273 checks passed; Edge acceptance 95/95 (`artifacts/yfinance-fx-acceptance/results.json`). The original cached stock timestamps are retained; USD and CAD FX were fetched once per run. Eleven disabled mappings retain Scalable fallback. All 2026 daily, intraday, holdings and benchmark files are unchanged. Risk metrics retain the complete 2026 daily boundary. The configured PostToolUse/CLI hook routes passed; loading settings in a running Claude session was not checked.

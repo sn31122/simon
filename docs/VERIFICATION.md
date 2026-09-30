@@ -2,8 +2,6 @@
 
 ## Numerical tests (after every data or math change)
 
-For Yahoo history changes also run `python tests/yfinance_history_test.py` (standard library, offline fixtures). It verifies source/FX units, date/identity/scale checks, checksums, stale-plan refusal, locking, repeat-run behavior, rollback and preservation of Yahoo overlays during broker history refreshes. Native EUR and foreign-currency branches are tested separately. The request hook also needs a real event/CLI smoke check; see `UPDATE_HISTORY.md`.
-
 ```sh
 node --check js/app.js && node --check js/charts.js && node --check js/engine.js
 node tests/engine.test.cjs

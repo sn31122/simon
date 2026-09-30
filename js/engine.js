@@ -102,10 +102,7 @@
     // resolution per date (user 28.09.): 'm' month-end / '2d' every 2nd trading day (history before the daily data), 'd'
     // daily; dailyFrom = first daily index – risk metrics (volatility, Sharpe, VaR, beta, correlation …) start there
     const res = dates.map((_, k) => (Array.isArray(data.res) && data.res[k]) || 'd');
-    // Mixed historical coverage can contain daily Yahoo observations alongside
-    // sparse fallback series. Respect the builder's complete daily-grid boundary.
-    const explicitDaily = typeof (data.meta || {}).daily_from === 'string' ? dates.indexOf(data.meta.daily_from) : -1;
-    const dailyFrom = explicitDaily >= 0 ? explicitDaily : Math.max(0, res.indexOf('d') < 0 ? n : res.indexOf('d'));
+    const dailyFrom = Math.max(0, res.indexOf('d') < 0 ? n : res.indexOf('d'));
     const positions = Array.isArray(data.positions) ? data.positions : [];
     const benchmarks = Array.isArray(data.benchmarks) ? data.benchmarks : [];
     const groups = (Array.isArray(data.groups) ? data.groups : []).slice();
