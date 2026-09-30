@@ -228,6 +228,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .bb-add[aria-expanded="true"] { border-color: var(--accent); color: var(--text); }
 .bb-menu {
   position: absolute; z-index: 30; top: calc(50% + 22px); left: 8px; right: 8px; min-width: 230px; padding: 4px 0;
+  overflow-y: auto; overscroll-behavior: contain;
   border: 1px solid var(--tooltip-border); border-radius: 8px; background: #1c1f21; box-shadow: 0 12px 32px rgba(0, 0, 0, .55);
 }
 .bb-menu.is-up { top: auto; bottom: calc(50% + 22px); }
