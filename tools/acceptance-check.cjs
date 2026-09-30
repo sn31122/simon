@@ -422,7 +422,7 @@ async function depotBoxCheck(page) {
       PFApp.sync.setHover(60); PFApp.sync.flush();
       const readout = document.getElementById('ddReadout').textContent;
       PFApp.sync.setHover(null);
-      return { card, legend: lg && lg.querySelector('b').textContent, table: row && row.children[3].textContent, kpi: kpi && kpi.textContent, dd, readout: /Benchmark 1/.test(readout) };
+      return { card, legend: lg && lg.querySelector('b').textContent, table: row && row.children[4].textContent, kpi: kpi && kpi.textContent, dd, readout: /Benchmark 1/.test(readout) };
     }, cid);
     check('cards', 'card return = legend = Statistik = Kennzahlen bench line; drawdown line + readout',
       agree.card === agree.legend && agree.card === agree.table && agree.kpi && agree.kpi.indexOf(agree.card) >= 0 && agree.dd && agree.readout, agree);

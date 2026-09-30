@@ -1476,21 +1476,23 @@
     if (!on) return;
     var base = M.p && isNum(M.p.startValue) && M.p.startValue > 0 ? M.p.startValue : 1;
     // user 30.09.: every benchmark in its own tight box (same columns, same type size as "Statistik"); column labels once on top
-    var COLG = '<colgroup><col><col class="hb-c1"><col class="hb-c2"><col class="hb-c3"></colgroup>', html = '';
+    var COLG = '<colgroup><col><col class="hb-c0"><col class="hb-c1"><col class="hb-c2"><col class="hb-c3"></colgroup>', html = '';
     M.selB.forEach(function (x) {
       var st = x.st, end = x.s && x.s.value.length ? x.s.value[x.s.value.length - 1] : null;
-      var pl = end !== null && isNum(x.s.value[0]) ? end - x.s.value[0] : null;
+      var v0 = x.s && isNum(x.s.value[0]) ? x.s.value[0] : null, pl = end !== null && v0 !== null ? end - v0 : null;
       var body = '<tr class="hb-grp"><td class="l"><span class="row-name"><i style="background:' + x.color + '"></i><span class="hb-nm">' + esc(x.name) + '</span></span></td>' +
+        '<td>' + (isNum(v0) ? F.num(v0, 0) : '–') + '</td>' +
         '<td class="cmp-val">' + (isNum(end) ? F.num(end, 0) : '–') + '</td><td>' + colored(pl, F.num(pl, 0, true)) + '</td>' +
         '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td></tr>';
       var hs = x.b.schedule ? null : E.benchmarkHoldings(ctx, x.b, M.R.start, M.R.end, base);
       if (!hs) {
-        body += '<tr class="hb-note"><td class="l" colspan="4">' + (x.b.schedule ? 'Echte Transaktionen – nicht nach Positionen aufgeschlüsselt' : 'keine Positionen') + '</td></tr>';
+        body += '<tr class="hb-note"><td class="l" colspan="5">' + (x.b.schedule ? 'Echte Transaktionen – nicht nach Positionen aufgeschlüsselt' : 'keine Positionen') + '</td></tr>';
       } else {
         hs.sort(function (a, b) { return (b.v1 || 0) - (a.v1 || 0); }).forEach(function (h) {
           var i = INSTR_BY[h.isin], nm = i ? i.short : h.isin;
           body += '<tr class="hb-pos-row" title="' + esc((i ? i.name + ' · ' : '') + h.isin) + '"><td class="l"><span class="hb-pos"><span class="hb-nm">' + esc(nm) + '</span>' +
             '<span class="hb-w">' + esc(fmtShare(Math.round((h.weight || 0) * 1000) / 10)) + ' %</span></span></td>' +
+            '<td>' + (isNum(h.v0) ? F.num(h.v0, 0) : '–') + '</td>' +
             '<td>' + (isNum(h.v1) ? F.num(h.v1, 0) : '–') + '</td><td>' + colored(h.pl, F.num(h.pl, 0, true)) + '</td>' +
             '<td>' + colored(h.ret, pct(h.ret)) + '</td></tr>';
         });
@@ -1499,7 +1501,7 @@
     });
     $('hbSub').textContent = periodText(M.R);
     $('hbList').innerHTML = M.selB.length ? '<table class="tbl tbl--cmp tbl--hb hb-cols" aria-hidden="true">' + COLG +
-      '<thead><tr><th class="l"></th><th>Wert €</th><th>G/V €</th><th>Rendite</th></tr></thead></table>' + html : '';
+      '<thead><tr><th class="l"></th><th title="Wert am Anfang des Zeitraums">Start €</th><th title="Wert am Ende des Zeitraums">Ende €</th><th>G/V €</th><th>Rendite</th></tr></thead></table>' + html : '';
     $('hbEmpty').hidden = !!M.selB.length;
   }
 
@@ -1510,8 +1512,8 @@
   function renderCmpPanel(M) {
     $('cmpSub').textContent = periodText(M.R);
     $('cmpSub').title = riskNote(M).replace(/^ · /, '');
-    // user 29.09.: "Statistik" – end value, then the return; p.a., Vol. p.a., Sharpe, Max. DD (no Sortino)
-    var COLS = [['Wert', 'Wert am Ende des Zeitraums (wie im Chart: Startwert)'], ['G/V €', 'Gewinn/Verlust in € im Zeitraum (Endwert − Startwert, wie im Chart)'],
+    // user 29.09.: "Statistik" – start and end value (30.09.), then the return; p.a., Vol. p.a., Sharpe, Max. DD (no Sortino)
+    var COLS = [['Start', 'Wert am Anfang des Zeitraums (wie im Chart: Startwert)'], ['Ende', 'Wert am Ende des Zeitraums (wie im Chart: Startwert)'], ['G/V €', 'Gewinn/Verlust in € im Zeitraum (Endwert − Startwert, wie im Chart)'],
       ['Rendite', 'Gesamtrendite im Zeitraum'],
       ['p.a.', 'annualisierte Rendite (CAGR)'], ['Vol. p.a.', 'annualisierte Volatilität'], ['Sharpe', 'Sharpe-Ratio'], ['Max. DD', 'maximaler Drawdown']];
     var head = '<thead><tr><th class="l sticky">&nbsp;</th>' + COLS.map(function (c) {
@@ -1520,14 +1522,15 @@
     function row(name, color, title, st, s) {
       var end = s && s.value && s.value.length ? s.value[s.value.length - 1] : null, weak = st && !st.cagrReliable;
       var gv = isNum(end) && isNum(s.value[0]) ? end - s.value[0] : null;
-      var cells = st ? '<td class="cmp-val">' + (isNum(end) ? eur(end, { dec: 0 }) : '–') + '</td>' +
+      var cells = st ? '<td>' + (s && isNum(s.value[0]) ? eur(s.value[0], { dec: 0 }) : '–') + '</td>' +
+        '<td class="cmp-val">' + (isNum(end) ? eur(end, { dec: 0 }) : '–') + '</td>' +
         '<td>' + colored(gv, eurS(gv, 0)) + '</td>' +
         '<td>' + colored(get(st, 'totalReturn'), pct(get(st, 'totalReturn'))) + '</td>' +
         '<td' + (weak ? ' class="dim" title="wenig aussagekräftig &lt; 3 Monate"' : '') + '>' +
         (weak ? pct(get(st, 'cagr')) : colored(get(st, 'cagr'), pct(get(st, 'cagr')))) + '</td>' +
         '<td>' + pctU(get(st, 'volAnn')) + '</td><td>' + ratio(get(st, 'sharpe')) + '</td>' +
         '<td>' + colored(get(st, 'maxDD'), pctU(get(st, 'maxDD'))) + '</td>'
-        : new Array(8).join('<td class="dash">–</td>');
+        : new Array(9).join('<td class="dash">–</td>');
       return '<tr><td class="l sticky"' + (title ? ' title="' + esc(title) + '"' : '') + '><span class="row-name"><i style="background:' + color +
         '"></i><span class="cmp-nm">' + esc(name) + '</span></span></td>' + cells + '</tr>';
     }

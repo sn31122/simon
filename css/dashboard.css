@@ -767,6 +767,7 @@ th.is-sorted { color: var(--text); }
    fixed columns so the boxes line up under the one label row */
 .hb-list { padding: 0 6px 6px; }
 .tbl--hb { table-layout: fixed; }
+.tbl--hb col.hb-c0 { width: 62px; }
 .tbl--hb col.hb-c1 { width: 62px; }
 .tbl--hb col.hb-c2 { width: 72px; }
 .tbl--hb col.hb-c3 { width: 80px; }
@@ -794,15 +795,17 @@ th.is-sorted { color: var(--text); }
 @media (min-width: 1500px) {
   /* left of the 820px content column, level with the pills on the right; a bit narrower (user 30.09.), its right edge
      keeps the old 28px gap to the column */
-  .hb { position: fixed; top: 46px; right: calc(50% + 410px + 28px); width: min(400px, calc(50% - 410px - 28px - 12px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
+  .hb { position: fixed; top: 46px; right: calc(50% + 410px + 28px); width: min(470px, calc(50% - 410px - 28px - 12px)); margin: 0; z-index: 61; max-height: calc(100vh - 60px); overflow-y: auto; }
   .hb .cmp-h { flex-wrap: wrap; gap: 0 8px; }
 }
 @media (min-width: 1500px) and (max-width: 1719px) {
-  /* narrow side space (< 400px): smaller gap to the column and tighter number columns so the names keep room */
+  /* narrow side space (< 410px): smaller gap to the column and tighter number columns so the names keep room */
   .hb { right: calc(50% + 410px + 16px); left: 8px; width: auto; }
-  .tbl--hb col.hb-c1 { width: 56px; }
+  .tbl--hb col.hb-c0 { width: 52px; }
+  .tbl--hb col.hb-c1 { width: 52px; }
   .tbl--hb col.hb-c2 { width: 64px; }
-  .tbl--hb col.hb-c3 { width: 70px; }
-  .tbl--hb th, .tbl--hb td { padding-left: 4px; padding-right: 4px; }
+  .tbl--hb col.hb-c3 { width: 66px; }
+  .tbl--hb th, .tbl--hb td { padding-left: 3px; padding-right: 3px; font-size: 11px; }
   .hb-pos { padding-left: 8px; gap: 4px; }
+  .hb-w { display: none; }                         /* start weight hidden here (5 columns, user 30.09.): names keep room */
 }
