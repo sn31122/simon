@@ -961,10 +961,15 @@
     m.hidden = !open;
     b.setAttribute('aria-expanded', String(open));
     if (open) {                                                      // opens upward when there is more room above
-      var r = b.getBoundingClientRect();
-      m.classList.toggle('is-up', window.innerHeight - r.bottom < m.offsetHeight + 8 && r.top > window.innerHeight - r.bottom);
+      // user 30.09.: the page stays where it is – the menu opens to the side with more room and scrolls inside if it is taller
+      var r = b.getBoundingClientRect(), mid = r.top + r.height / 2, vh = window.innerHeight;
+      m.style.maxHeight = 'none';
+      var need = m.offsetHeight, below = vh - (mid + 22) - 8, above = mid - 22 - 8;
+      var up = below < need && above > below;
+      m.classList.toggle('is-up', up);
+      m.style.maxHeight = Math.max(120, Math.min(need, up ? above : below)) + 'px';
       var first = m.querySelector('.bb-mi');
-      if (first) first.focus();
+      if (first) first.focus({ preventScroll: true });          // user 30.09.: the page never jumps on "+ Benchmark"
     }
   }
   function addPresetCard(id) {
@@ -1051,7 +1056,7 @@
     var el = $('benchCards').querySelector('[data-card="' + id + '"]'), t = el && el.querySelector(sel);
     if (!t) return;
     noOpen = !open;                     // an empty instrument field opens its list on focus – only when asked for
-    t.focus();
+    t.focus({ preventScroll: true });   // user 30.09.: keep the page where it is (no jump to the new card / row)
     noOpen = false;
     if (select && t.select) t.select();
   }
@@ -1074,7 +1079,7 @@
     state.cards.splice(k, 1);
     benchChanged();
     var nx = state.cards[k] || state.cards[k - 1], add = $('benchCards').querySelector('.bb-add');
-    if (nx) focusCard(nx.id, '[data-act="del"]'); else if (add) add.focus();
+    if (nx) focusCard(nx.id, '[data-act="del"]'); else if (add) add.focus({ preventScroll: true });
   }
   function addRow(c) {
     var r = newRow(null, '');
@@ -1261,10 +1266,10 @@
       var t = ev.target, f = t.getAttribute('data-f'), o;
       if (menuOpen() && t.closest('.bb-addw')) {                  // menu: Esc closes, ↑/↓ move between the entries
         var its = Array.prototype.slice.call($('bbMenu').querySelectorAll('.bb-mi')), k = its.indexOf(t);
-        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); setMenu(false); box.querySelector('.bb-add').focus(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); setMenu(false); box.querySelector('.bb-add').focus({ preventScroll: true }); }
         else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
           ev.preventDefault();
-          its[(k + (ev.key === 'ArrowDown' ? 1 : its.length - 1)) % its.length].focus();
+          its[(k + (ev.key === 'ArrowDown' ? 1 : its.length - 1)) % its.length].focus({ preventScroll: true });
         }
         return;
       }
