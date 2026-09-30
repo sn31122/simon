@@ -48,6 +48,10 @@ async function open(browser, width, height, touch) {
   await page.waitForFunction(() => window.PFApp && document.querySelector('#benchCards .bb-card'));
   if (page.fallbackFont) await fontsReady(page);
   await page.waitForTimeout(100);
+  // user 30.09.: the page opens on 1T; the checks below were written for YTD, so every page switches to it after load
+  page.startPreset = await page.evaluate(() => PFApp.state.preset);
+  await page.click('#rangeTabs [data-preset="YTD"]');
+  await page.waitForTimeout(100);
   return page;
 }
 const overflow = (page) => page.evaluate(() => ({ w: innerWidth, sw: document.documentElement.scrollWidth }));
@@ -179,6 +183,7 @@ async function depotBoxCheck(page) {
   try {
     // ================================================================= data + start (1903)
     let page = await open(browser, 1903, 1000);
+    check('general', 'the page opens on 1T (user 30.09.)', page.startPreset === '1T', page.startPreset);
     pages.push(page);
     const data = await page.evaluate(() => {
       const D = window.PORTFOLIO_DATA, ins = D.instruments.map((i) => i.isin), n = D.dates.length, last = D.dates[n - 1];
