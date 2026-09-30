@@ -805,22 +805,14 @@
   function cardById(id) { for (var k = 0; k < state.cards.length; k++) if (state.cards[k].id === id) return state.cards[k]; return null; }
   function rowById(c, id) { for (var k = 0; k < c.rows.length; k++) if (c.rows[k].id === id) return c.rows[k]; return null; }
   /** exact: the preset's weight behind a rounded field (null once the field is typed in, or for a typed row). */
-  function newRow(isin, pctText, exact, auto) {
+  function newRow(isin, pctText, exact) {
     var i = isin ? INSTR_BY[isin] : null;
-    return { id: 'r' + (++rowSeq), isin: i ? i.isin : null, q: i ? i.short : '', pct: pctText || '', exact: isNum(exact) ? exact : null, auto: !!auto };
+    return { id: 'r' + (++rowSeq), isin: i ? i.isin : null, q: i ? i.short : '', pct: pctText || '', exact: isNum(exact) ? exact : null };
   }
   /**
-   * Auto split (user 30.09.): rows added empty ("auto") share what the typed rows leave of 100 % equally – one row 100 %,
-   * two 50 %, three 33,333 % (the field shows whole %, the exact share counts) –; typing a share makes that row fixed.
+   * New rows (user 30.09., replaces the auto split): the first row of an empty card starts at 100 %, every further row
+   * starts empty (0 %); nothing is ever filled in or rebalanced automatically – any total counts (≠ 100 % = absolute amounts).
    */
-  function autoSplit(c) {
-    if (!c || c.schedule) return;
-    var auto = c.rows.filter(function (r) { return r.auto; }), fixed = 0;
-    if (!auto.length) return;
-    c.rows.forEach(function (r) { if (!r.auto) { var v = rowVal(r); if (isNum(v)) fixed += v; } });
-    var each = Math.max(0, 100 - fixed) / auto.length;
-    auto.forEach(function (r) { r.exact = each; r.pct = fmtShare(Math.round(each)); });
-  }
   /** The row's percentage: the exact preset weight while the field is untouched, else the typed value (null = invalid). */
   function rowVal(r) { return r.exact !== null && r.exact !== undefined ? r.exact : pctVal(r.pct); }
   function nextColor() {
@@ -1064,15 +1056,14 @@
     if (select && t.select) t.select();
   }
   function addCard() {
-    var name = nextName(), c = { id: 'bm' + (++cardSeq), name: name, defName: name, color: nextColor(), show: true, rows: [newRow(null, '', null, true)] };
-    autoSplit(c);
+    var name = nextName(), c = { id: 'bm' + (++cardSeq), name: name, defName: name, color: nextColor(), show: true, rows: [newRow(null, '100')] };
     state.cards.push(c);
     benchChanged();
     focusCard(c.id, '.bb-ins', true);
   }
   function dupCard(c) {
     var d = { id: 'bm' + (++cardSeq), name: (cardName(c) + ' (Kopie)').slice(0, 40), defName: nextName(), color: nextColor(), show: true,
-      rows: c.rows.map(function (r) { return newRow(r.isin, r.pct, r.exact, r.auto); }) };
+      rows: c.rows.map(function (r) { return newRow(r.isin, r.pct, r.exact); }) };
     state.cards.splice(state.cards.indexOf(c) + 1, 0, d);
     benchChanged();
     focusCard(d.id, '.bb-name', false, true);
@@ -1086,24 +1077,21 @@
     if (nx) focusCard(nx.id, '[data-act="del"]'); else if (add) add.focus();
   }
   function addRow(c) {
-    var r = newRow(null, '', null, true);
+    var r = newRow(null, '');
     c.rows.push(r);
-    autoSplit(c);
     benchChanged();
     focusCard(c.id, '[data-row="' + r.id + '"] .bb-ins', true);
   }
   function clearRows(c) {
     if (drop && drop.cardId === c.id) closeDrop();
-    c.rows = [newRow(null, '', null, true)];
-    autoSplit(c);
+    c.rows = [newRow(null, '100')];
     benchChanged();
     focusCard(c.id, '.bb-ins', true);
   }
   function delRow(c, r) {
     var k = c.rows.indexOf(r), only = c.rows.length === 1;
     if (drop && drop.rowId === r.id) closeDrop();
-    if (only) c.rows = [newRow(null, '', null, true)]; else c.rows.splice(k, 1);
-    autoSplit(c);
+    if (only) c.rows = [newRow(null, '100')]; else c.rows.splice(k, 1);
     benchChanged();
     var nx = c.rows[Math.min(k, c.rows.length - 1)];
     focusCard(c.id, '[data-row="' + nx.id + '"] ' + (only ? '.bb-ins' : '.bb-x'), false);
@@ -1264,14 +1252,7 @@
       if (f === 'ins' && o.r) { o.r.q = t.value; openDrop(t); return; }
       was = cardInfo(o.c).valid;
       if (f === 'name') o.c.name = t.value;
-      else if (f === 'pct' && o.r) {                               // typed: the field's value counts, the auto rows share the rest
-        o.r.pct = t.value; o.r.exact = null; o.r.auto = false; t.removeAttribute('title');
-        autoSplit(o.c);
-        o.c.rows.forEach(function (rw) {
-          var f2 = rw.auto && t.closest('[data-card]').querySelector('[data-row="' + rw.id + '"] .bb-pct');
-          if (f2) f2.value = rw.pct;
-        });
-      }
+      else if (f === 'pct' && o.r) { o.r.pct = t.value; o.r.exact = null; t.removeAttribute('title'); }   // typed: exactly this value counts
       else return;
       if (was || cardInfo(o.c).valid) benchChanged();              // an invalid card stays out of everything: only its footer changes
       else patchCard(t.closest('[data-card]'), { id: o.c.id, c: o.c }, cur);

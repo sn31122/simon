@@ -478,8 +478,8 @@ async function depotBoxCheck(page) {
       three.valid && new Set(three.colors).size === three.colors.length && three.colors.every((c) => palette.indexOf(c.toLowerCase()) < 0), three);
     await page.click('#benchCards [data-card="' + cid3 + '"] [data-act="clear"]');
     await settle(page);
-    const cleared = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, empty: !c.rows[0].isin && c.rows[0].pct === '100' && c.rows[0].auto, focus: a.classList.contains('bb-ins') && !!a.closest('[data-card="' + id + '"]') }; }, cid3);
-    check('cards', 'clear leaves one empty row (auto 100 %, 30.09.) and focuses its instrument field', cleared.rows === 1 && cleared.empty && cleared.focus, cleared);
+    const cleared = await page.evaluate((id) => { const c = PFApp.state.cards.find((x) => x.id === id); const a = document.activeElement; return { rows: c.rows.length, empty: !c.rows[0].isin && c.rows[0].pct === '100', focus: a.classList.contains('bb-ins') && !!a.closest('[data-card="' + id + '"]') }; }, cid3);
+    check('cards', 'clear leaves one empty row (100 % typed in, 30.09.) and focuses its instrument field', cleared.rows === 1 && cleared.empty && cleared.focus, cleared);
     await page.keyboard.press('Escape');
     const dupId = await page.evaluate(() => window.__own(1).id);
     await page.click('#benchCards [data-card="' + dupId + '"] [data-act="delrow"]');
