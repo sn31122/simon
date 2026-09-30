@@ -683,6 +683,7 @@
   function renderHeader() {
     var title = META.title || 'Portfolio';
     document.title = title;
+    if (!$('metaLine')) return;                         // title bar removed (user 30.09.): only the window title
     $('title').textContent = title;
     var last = ctx.dates[ctx.n - 1];
     var parts = [ctx.positions.length + ' Positionen'];
