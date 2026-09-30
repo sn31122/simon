@@ -28,5 +28,6 @@ Repo `sn31122/simon`, branch `main`; the user works only in Claude Code cloud se
 ## Access
 - Look at the page: ask for screenshots, or download the ZIP and open `dashboard.html`.
 - Windows live view: `tools/yacht-live.bat` (new 30.09.: own clone `%USERPROFILE%\yacht-live-main`, fetch + hard reset to `origin/main` every 60 s, reopens the page on a new version; the old version's `pull --ff-only` failed silently). Mac live view: `tools/yacht-live.command` (30.09., same logic, clone `~/yacht-live-main`, double-click in Finder).
+- Mac local setup: `LOCAL_MAC.md` (user steps + checklist for a local session: tools, GitHub login, tests, Scalable connector, hook, Desktop launcher, trial update).
 - Going local: install Claude Code + Node + Python, `git clone https://github.com/sn31122/simon`, start `claude` (or `claude --teleport <session-id>`); the Scalable connector must be available; push local commits.
 - Claude Sonnet 5.5 requires Claude Code v2.1.284 or later; update older local installations before running a price fetch.
