@@ -12,8 +12,9 @@
 # /historische-kurse/<slug>?from=<20 years back>&to=2025-12-31&exchange=XETRA holds every day in one HTML table (close = "Schluss").
 # Days Xetra lacks are filled from Frankfurt (FSE), then gettex (BMN), then Tradegate (TGT); data/history_sources.csv
 # records slug, days per exchange and coverage. One request per second; nothing else is fetched.
-# Checks before an ISIN is written: the page names the ISIN; the closes agree with the Scalable history archived in
-# data/source/prices_history_scalable_2026-10-02.csv (median deviation <= 1.5 %, else the ISIN is refused and reported).
+# Checks before an ISIN is written: the page names the ISIN; one-/two-day bad prints are dropped (SPIKE); the closes agree
+# with the Scalable history archived in data/source/prices_history_scalable_2026-10-02.csv (signed median deviation <= 1 %
+# and <= 5 % of the dates more than 10 % apart, else the ISIN is refused and reported).
 # Merge (idempotent): every date of prices_history_daily.csv becomes a row of prices_history.csv with res "dh" (daily
 # history) and that ISIN's close; other cells (ETFs still monthly / every 2nd day from Scalable) stay as they are.
 import csv, datetime, html, pathlib, re, statistics, subprocess, sys, time, urllib.error, urllib.request
@@ -30,7 +31,9 @@ _lim = datetime.date.today().replace(year=datetime.date.today().year - 20) + dat
 FROM, TO = max('1995-01-01', _lim.isoformat()), '2025-12-31'
 EXCHANGES = ['XETRA', 'FSE', 'BMN', 'TGT']                        # Xetra first (user), then fill missing days
 UA = {'User-Agent': 'Mozilla/5.0 (personal portfolio dashboard; one-time history import)'}
-MAX_MEDIAN_DEV = 1.5                                               # % vs. the Scalable history on common dates
+MAX_BIAS = 1.0          # % systematic offset vs. the Scalable history (median of signed deviations): wrong adjustment
+MAX_FAR = 5.0           # % of common dates more than 10 % apart (single big days differ: Xetra closes 17:30, gettex 22:00)
+SPIKE = 0.25            # a close > 25 % above/below BOTH neighbours that reverts = bad print, dropped
 args = sys.argv[1:]
 dry = '--dry-run' in args
 
@@ -61,13 +64,16 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def get(url, follow=True):
-    time.sleep(1.0)
     op = urllib.request.build_opener() if follow else urllib.request.build_opener(NoRedirect)
-    try:
-        r = op.open(urllib.request.Request(url, headers=UA), timeout=90)
-        return r.status, r.read().decode('utf-8', 'replace'), r.headers.get('Location')
-    except urllib.error.HTTPError as e:
-        return e.code, '', e.headers.get('Location')
+    for attempt in range(3):                               # network hiccups (SSL EOF, timeouts): two retries
+        time.sleep(1.0 + 4 * attempt)
+        try:
+            r = op.open(urllib.request.Request(url, headers=UA), timeout=90)
+            return r.status, r.read().decode('utf-8', 'replace'), r.headers.get('Location')
+        except urllib.error.HTTPError as e:
+            return e.code, '', e.headers.get('Location')
+        except (urllib.error.URLError, OSError) as e:
+            if attempt == 2: raise
 
 
 def slug_for(isin, cache):
@@ -92,16 +98,29 @@ def history(slug, isin, ex):
     return out
 
 
+def despike(closes):
+    """drops closes that sit > SPIKE above or below both neighbours (repeated, so a two-day bad print goes too)"""
+    c = dict(closes)
+    while True:
+        ds = sorted(c)
+        bad = [ds[k] for k in range(1, len(ds) - 1)
+               if (c[ds[k]] / c[ds[k - 1]] - 1 > SPIKE and c[ds[k]] / c[ds[k + 1]] - 1 > SPIKE) or
+                  (c[ds[k - 1]] / c[ds[k]] - 1 > SPIKE and c[ds[k + 1]] / c[ds[k]] - 1 > SPIKE)]
+        if not bad: return c
+        for d in bad: del c[d]
+
+
 def check(isin, closes, backup):
     """-> (ok, text): compare with the archived Scalable history on common dates."""
     common = [(d, closes[d], float(backup[d][isin])) for d in closes if d in backup and isin in backup[d]]
     if len(common) < 5: return True, f'{len(common)} common dates with the Scalable history (too few to compare)'
-    devs = [abs(a / b - 1) * 100 for _, a, b in common]
-    med, big = statistics.median(devs), sum(x > 5 for x in devs)
+    sdev = [(a / b - 1) * 100 for _, a, b in common]
+    bias, med = statistics.median(sdev), statistics.median(abs(x) for x in sdev)
+    far = sum(abs(x) > 10 for x in sdev) / len(sdev) * 100
     worst = max(common, key=lambda x: abs(x[1] / x[2] - 1))
-    txt = (f'{len(common)} common dates, median deviation {med:.2f} %, {big} > 5 %, worst {worst[0]} '
-           f'{worst[1]:g} vs Scalable {worst[2]:g}')
-    return med <= MAX_MEDIAN_DEV, txt
+    txt = (f'{len(common)} common dates, bias {bias:+.2f} %, median |dev| {med:.2f} %, {far:.0f} % of dates > 10 % off, '
+           f'worst {worst[0]} {worst[1]:g} vs Scalable {worst[2]:g}')
+    return abs(bias) <= MAX_BIAS and far <= MAX_FAR, txt
 
 
 def merge():
@@ -115,6 +134,8 @@ def merge():
         rd = csv.reader(f); hh = next(rd)
         for r in rd:
             if r: table[r[0]] = dict({'res': r[1]}, **{hh[k]: r[k] for k in range(2, len(r)) if r[k]})
+    _, scal = read_wide(BACKUP, key_cols=2) if BACKUP.exists() else ({}, {})
+    have = {i for v in daily.values() for i in v}
     n = 0
     for d, v in daily.items():
         if d >= first_daily: continue
@@ -122,6 +143,14 @@ def merge():
         row['res'] = 'dh'
         for i, p in v.items():
             if i in cols and row.get(i) != p: row[i] = p; n += 1
+    for d, row in table.items():                 # a daily-history ISIN without a close that day (gap, dropped spike):
+        if row.get('res') != 'dh': continue      # back to the Scalable point of that date, if any
+        for i in have - set(daily.get(d, {})):
+            old = (scal.get(d) or {}).get(i)
+            if row.get(i) != old:
+                if old: row[i] = old
+                else: row.pop(i, None)
+                n += 1
     if not dry:
         with open(HIST, 'w', encoding='utf-8', newline='') as f:
             w = csv.writer(f, lineterminator='\n'); w.writerow(['date', 'res'] + cols)
@@ -177,7 +206,9 @@ if '--import' in args:
         d = ds if '-' in ds else f'{m.group(3)}-{m.group(2)}-{m.group(1)}'
         v = num(r[ci])
         if v and v > 0 and d <= TO and datetime.date.fromisoformat(d).weekday() < 5: closes[d] = v
-    results[isin] = (closes, {'manual': len(closes)}, f'file {f.name}')
+    n0, closes = len(closes), despike(closes)
+    results[isin] = (closes, {'manual': len(closes), **({'spikes_dropped': n0 - len(closes)} if n0 > len(closes) else {})},
+                     f'file {f.name}')
 else:
     if '--fetch' not in args: sys.exit(__doc__ or 'usage: --fetch [ISIN,…] | --import FILE --isin ISIN | --merge')
     k = args.index('--fetch')
@@ -201,6 +232,8 @@ else:
                 for d, v in got.get(ex, {}).items():
                     if d not in closes: closes[d] = v; per[ex] = per.get(ex, 0) + 1
             if not closes: raise ValueError('no prices on ' + ', '.join(EXCHANGES))
+            n0, closes = len(closes), despike(closes)
+            if len(closes) < n0: per['spikes_dropped'] = n0 - len(closes)
             results[isin] = (closes, per, slug)
             print(f'  {n:>2}/{len(want)} {isin} {inst[isin]["short"]:<22} {len(closes):>5} days {min(closes)} .. {max(closes)} '
                   + ' '.join(f'{e}:{c}' for e, c in per.items()))
@@ -218,6 +251,9 @@ for isin, (closes, per, slug) in results.items():
     src_rows[isin] = {'isin': isin, 'short': inst[isin]['short'], 'slug': slug, 'first': min(closes), 'last': max(closes),
                       'days': len(closes), 'per_exchange': ' '.join(f'{e}:{c}' for e, c in per.items()),
                       'fetched': datetime.date.today().isoformat()}
+for isin in {i for v in daily.values() for i in v}:        # stored series too (idempotent)
+    col = {d: float(v[isin]) for d, v in daily.items() if isin in v}
+    for d in set(col) - set(despike(col)): del daily[d][isin]
 daily = {d: v for d, v in daily.items() if v}
 if refused: print('\nNOT WRITTEN (show the user):', *refused, sep='\n  ')
 if dry: print('dry run: nothing written.'); sys.exit(1 if refused else 0)
