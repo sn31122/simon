@@ -4,7 +4,7 @@ Repo `sn31122/simon`, branch `main`; the user works only in Claude Code cloud se
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 30.09.2026 12:00 Berlin): 191 trading days 2026-01-02 … 2026-09-30; last row 2026-09-30 = intraday, asof 2026-09-30T09:59Z; history (prices_history.csv): 171 rows 2016-09-30 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 9 sessions 2026-09-18 … 2026-09-30; 2-h (intraday_2h.csv): 27 sessions 2026-08-25 … 2026-09-30; engine tests: 58 passed, 0 failed; crosscheck: 3070/3071 checks passed.
+- Data status (update 02.10.2026 00:11 Berlin): 192 trading days 2026-01-02 … 2026-10-01; last row 2026-10-01 = final; history (prices_history.csv): 171 rows 2016-09-30 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 10 sessions 2026-09-18 … 2026-10-01; 2-h (intraday_2h.csv): 28 sessions 2026-08-25 … 2026-10-01; engine tests: 58 passed, 0 failed; crosscheck: 3273/3273 checks passed.
 <!-- data-status:end -->
 (Block rewritten by `--finish` / `--finish-add`; do not edit by hand.)
 
@@ -28,5 +28,6 @@ Repo `sn31122/simon`, branch `main`; the user works only in Claude Code cloud se
 ## Access
 - Look at the page: ask for screenshots, or download the ZIP and open `dashboard.html`.
 - Windows live view: `tools/yacht-live.bat` (new 30.09.: own clone `%USERPROFILE%\yacht-live-main`, fetch + hard reset to `origin/main` every 60 s, reopens the page on a new version; the old version's `pull --ff-only` failed silently). Mac live view: `tools/yacht-live.command` (30.09., same logic, clone `~/yacht-live-main`, double-click in Finder).
+- Mac local setup: `LOCAL_MAC.md` (user steps + checklist for a local session: tools, GitHub login, tests, Scalable connector, hook, Desktop launcher, trial update).
 - Going local: install Claude Code + Node + Python, `git clone https://github.com/sn31122/simon`, start `claude` (or `claude --teleport <session-id>`); the Scalable connector must be available; push local commits.
 - Claude Sonnet 5.5 requires Claude Code v2.1.284 or later; update older local installations before running a price fetch.

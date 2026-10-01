@@ -1,2 +1,2 @@
 asof_utc,securities_value,total_value,gv_since_buy,source
-2026-09-29T21:00:00Z,261239.69,256711.45,57414.73,"Scalable get_portfolio_holdings + get_portfolio_overview (valuation.securities / valuation.total / performance MAX simpleAbsoluteReturn), read 30.09.2026 on user request"
+2026-10-01T21:00:00Z,295459.65,261264.91,61968.67,"Scalable get_portfolio_holdings + get_portfolio_overview (valuation.securities / valuation.total / performance MAX simpleAbsoluteReturn), saved 2026-10-01T22:13Z by data/update_depot.py"
