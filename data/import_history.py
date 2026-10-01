@@ -2,15 +2,17 @@
 # Scalable keeps handling everything from 2026 on (update_prices.py). User 02.10.2026: Xetra, closes only, as far back as
 # possible (asked for 1995; finanzen.net serves only the last 20 years, so the import of 02.10.2026 starts 04.10.2006).
 #
-#   python data/import_history.py --fetch                 every stock (type Aktie in instruments.csv) not fetched yet
+#   python data/import_history.py --fetch                 every instrument (stocks, ETFs, ETCs, ETPs) not fetched yet
 #   python data/import_history.py --fetch ISIN[,ISIN]     these ISINs (again)
-#   python data/import_history.py --import FILE --isin ISIN   a CSV the user exported by hand (ETFs/ETPs): columns
+#   python data/import_history.py --import FILE --isin ISIN   a CSV exported by hand (fallback): columns
 #                                                         Datum/Date + Schluss/Schlusskurs/Close (German or English numbers)
 #   python data/import_history.py --merge                 only re-merge prices_history_daily.csv into prices_history.csv
 #   add --dry-run to only report.
-# Fetch: finanzen.net's ISIN search gives the stock page (/aktien/<slug>-aktie); the history page
-# /historische-kurse/<slug>?from=<20 years back>&to=2025-12-31&exchange=XETRA holds every day in one HTML table (close = "Schluss").
-# Days Xetra lacks are filled from Frankfurt (FSE), then gettex (BMN), then Tradegate (TGT); data/history_sources.csv
+# Fetch: finanzen.net's ISIN search gives the page: stocks /aktien/<slug>-aktie -> the history page
+# /historische-kurse/<slug>?from=<20 years back>&to=2025-12-31&exchange=XETRA; ETFs /etf/<slug> and ETCs/ETPs /etc/<slug> ->
+# the POST their page makes (/ajax/FundController_HistoricPriceListRedesign or _HistoricPriceList/<slug>/<exchange>/<from>_<to>).
+# Each answer holds the whole period in one HTML table (close = "Schluss"; the site's pages 1 … 40 are only browser paging).
+# Days Xetra lacks are filled from Frankfurt (FSE), gettex (BMN), Tradegate (TGT), Stuttgart (STU); data/history_sources.csv
 # records slug, days per exchange and coverage. One request per second; nothing else is fetched.
 # Checks before an ISIN is written: the page names the ISIN; one-/two-day bad prints are dropped (SPIKE); the closes agree
 # with the Scalable history archived in data/source/prices_history_scalable_2026-10-02.csv (signed median deviation <= 1 %
@@ -29,11 +31,13 @@ BACKUP = D / 'source' / 'prices_history_scalable_2026-10-02.csv'   # the Scalabl
 # (tested 02.10.2026: 03.10.2006 works, 25.09.2006 fails), so the earliest possible start is today minus 20 years
 _lim = datetime.date.today().replace(year=datetime.date.today().year - 20) + datetime.timedelta(days=2)
 FROM, TO = max('1995-01-01', _lim.isoformat()), '2025-12-31'
-EXCHANGES = ['XETRA', 'FSE', 'BMN', 'TGT']                        # Xetra first (user), then fill missing days
+EXCHANGES = ['XETRA', 'FSE', 'BMN', 'TGT', 'STU']                 # Xetra first (user), then fill missing days
 UA = {'User-Agent': 'Mozilla/5.0 (personal portfolio dashboard; one-time history import)'}
 MAX_BIAS = 1.0          # % systematic offset vs. the Scalable history (median of signed deviations): wrong adjustment
 MAX_FAR = 5.0           # % of common dates more than 10 % apart (single big days differ: Xetra closes 17:30, gettex 22:00)
+MAX_BIAS_ETP, MAX_FAR_ETP = 3.0, 10.0   # leveraged ETPs triple the 17:30-vs-22:00 gap (Alphabet 3x Q4 2025: -1.5 %, Alphabet -0.5 %)
 SPIKE = 0.25            # a close > 25 % above/below BOTH neighbours that reverts = bad print, dropped
+SPIKE_ETP = 0.5         # leveraged ETPs move 25 % on real days: only clearer outliers
 args = sys.argv[1:]
 dry = '--dry-run' in args
 
@@ -63,12 +67,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a, **k): return None
 
 
-def get(url, follow=True):
+def get(url, follow=True, post=False):
     op = urllib.request.build_opener() if follow else urllib.request.build_opener(NoRedirect)
     for attempt in range(3):                               # network hiccups (SSL EOF, timeouts): two retries
         time.sleep(1.0 + 4 * attempt)
         try:
-            r = op.open(urllib.request.Request(url, headers=UA), timeout=90)
+            r = op.open(urllib.request.Request(url, data=b'' if post else None, headers=UA), timeout=90)
             return r.status, r.read().decode('utf-8', 'replace'), r.headers.get('Location')
         except urllib.error.HTTPError as e:
             return e.code, '', e.headers.get('Location')
@@ -77,17 +81,28 @@ def get(url, follow=True):
 
 
 def slug_for(isin, cache):
+    """-> "<slug>" for a stock (/aktien/<slug>-aktie), "etf/<slug>" or "etc/<slug>" for funds / ETCs / ETPs"""
     if cache.get(isin): return cache[isin]
     code, _, loc = get(f'https://www.finanzen.net/suchergebnis.asp?_search={isin}', follow=False)
     m = re.search(r'/aktien/([^/?#]+)-aktie', loc or '')
-    if not m: raise ValueError(f'search gave no stock page (HTTP {code}, {loc or "no redirect"})')
-    return m.group(1)
+    if m: return m.group(1)
+    m = re.search(r'/(etf|etc)/([^/?#]+)$', loc or '')
+    if m and m.group(2).endswith(isin.lower()): return f'{m.group(1)}/{m.group(2)}'
+    raise ValueError(f'search gave no stock / ETF / ETC page (HTTP {code}, {loc or "no redirect"})')
 
 
 def history(slug, isin, ex):
-    code, s, _ = get(f'https://www.finanzen.net/historische-kurse/{slug}?from={FROM}&to={TO}&exchange={ex}')
-    if code != 200: return None
-    if isin not in s: raise ValueError(f'the history page of {slug} does not name {isin}')
+    """One request per exchange; the whole period comes in one answer (the site's 1 … 40 pages are only shown/hidden in
+    the browser). Stocks: the history page; ETFs and ETCs/ETPs: the POST the page itself makes to fill its table."""
+    if slug.startswith(('etf/', 'etc/')):
+        kind, s2 = slug.split('/', 1)
+        ctl = 'FundController_HistoricPriceListRedesign' if kind == 'etf' else 'FundController_HistoricPriceList'
+        code, s, _ = get(f'https://www.finanzen.net/ajax/{ctl}/{s2}/{ex}/{FROM}_{TO}', post=True)
+        if code != 200: return None
+    else:
+        code, s, _ = get(f'https://www.finanzen.net/historische-kurse/{slug}?from={FROM}&to={TO}&exchange={ex}')
+        if code != 200: return None
+        if isin not in s: raise ValueError(f'the history page of {slug} does not name {isin}')
     out = {}
     for row in re.findall(r'<tr[^>]*>(.*?)</tr>', s, re.S):
         c = [html.unescape(re.sub(r'<[^>]+>', '', x)).strip() for x in re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)]
@@ -98,8 +113,9 @@ def history(slug, isin, ex):
     return out
 
 
-def despike(closes):
-    """drops closes that sit > SPIKE above or below both neighbours (repeated, so a two-day bad print goes too)"""
+def despike(closes, lim=SPIKE):
+    """drops closes that sit > lim above or below both neighbours (repeated, so a two-day bad print goes too)"""
+    SPIKE = lim
     c = dict(closes)
     while True:
         ds = sorted(c)
@@ -120,7 +136,8 @@ def check(isin, closes, backup):
     worst = max(common, key=lambda x: abs(x[1] / x[2] - 1))
     txt = (f'{len(common)} common dates, bias {bias:+.2f} %, median |dev| {med:.2f} %, {far:.0f} % of dates > 10 % off, '
            f'worst {worst[0]} {worst[1]:g} vs Scalable {worst[2]:g}')
-    return abs(bias) <= MAX_BIAS and far <= MAX_FAR, txt
+    etp = (inst.get(isin) or {}).get('type') == 'ETP'
+    return abs(bias) <= (MAX_BIAS_ETP if etp else MAX_BIAS) and far <= (MAX_FAR_ETP if etp else MAX_FAR), txt
 
 
 def merge():
@@ -206,14 +223,14 @@ if '--import' in args:
         d = ds if '-' in ds else f'{m.group(3)}-{m.group(2)}-{m.group(1)}'
         v = num(r[ci])
         if v and v > 0 and d <= TO and datetime.date.fromisoformat(d).weekday() < 5: closes[d] = v
-    n0, closes = len(closes), despike(closes)
+    n0, closes = len(closes), despike(closes, SPIKE_ETP if inst[isin]['type'] == 'ETP' else SPIKE)
     results[isin] = (closes, {'manual': len(closes), **({'spikes_dropped': n0 - len(closes)} if n0 > len(closes) else {})},
                      f'file {f.name}')
 else:
     if '--fetch' not in args: sys.exit(__doc__ or 'usage: --fetch [ISIN,…] | --import FILE --isin ISIN | --merge')
     k = args.index('--fetch')
     want = [x.strip().upper() for x in args[k + 1].split(',')] if k + 1 < len(args) and not args[k + 1].startswith('--') else \
-        [i for i, r in inst.items() if r['type'] == 'Aktie' and i not in src_rows]
+        [i for i, r in inst.items() if i not in src_rows]          # every instrument not fetched yet (stocks, ETFs, ETCs, ETPs)
     print(f'fetching {len(want)} ISIN(s) from finanzen.net ({FROM} .. {TO}, {" > ".join(EXCHANGES)}) ...')
     for n, isin in enumerate(want, 1):
         try:
@@ -222,7 +239,8 @@ else:
             for ex in EXCHANGES:
                 h = history(slug, isin, ex)
                 if h: got[ex] = h
-                if ex == 'FSE' and got:                # stop after Xetra + Frankfurt unless they leave gaps
+                if ex == 'FSE' and got:                # stop after Xetra + Frankfurt unless they leave gaps (ETCs/ETPs
+                                                       # have no Frankfurt: gettex, Tradegate, Stuttgart fill in)
                     ds = set().union(*(set(v) for v in got.values()))
                     span = list(ds)
                     wd = sum(1 for x in range((datetime.date.fromisoformat(max(span)) - datetime.date.fromisoformat(min(span))).days + 1)
@@ -232,7 +250,7 @@ else:
                 for d, v in got.get(ex, {}).items():
                     if d not in closes: closes[d] = v; per[ex] = per.get(ex, 0) + 1
             if not closes: raise ValueError('no prices on ' + ', '.join(EXCHANGES))
-            n0, closes = len(closes), despike(closes)
+            n0, closes = len(closes), despike(closes, SPIKE_ETP if inst[isin]['type'] == 'ETP' else SPIKE)
             if len(closes) < n0: per['spikes_dropped'] = n0 - len(closes)
             results[isin] = (closes, per, slug)
             print(f'  {n:>2}/{len(want)} {isin} {inst[isin]["short"]:<22} {len(closes):>5} days {min(closes)} .. {max(closes)} '
@@ -253,7 +271,8 @@ for isin, (closes, per, slug) in results.items():
                       'fetched': datetime.date.today().isoformat()}
 for isin in {i for v in daily.values() for i in v}:        # stored series too (idempotent)
     col = {d: float(v[isin]) for d, v in daily.items() if isin in v}
-    for d in set(col) - set(despike(col)): del daily[d][isin]
+    lim = SPIKE_ETP if (inst.get(isin) or {}).get('type') == 'ETP' else SPIKE
+    for d in set(col) - set(despike(col, lim)): del daily[d][isin]
 daily = {d: v for d, v in daily.items() if v}
 if refused: print('\nNOT WRITTEN (show the user):', *refused, sep='\n  ')
 if dry: print('dry run: nothing written.'); sys.exit(1 if refused else 0)
