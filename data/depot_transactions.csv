@@ -1,4 +1,11 @@
 date;time;status;reference;description;assetType;type;isin;shares;price;amount;fee;tax;currency
+2026-10-01;02:00:00;Executed;"790636_edsTx1VDfEAnNTSt1c8WK3";"Coca-Cola";Cash;Distribution;US1912161007;;;1,39;0,00;0,48;EUR
+2026-10-01;02:00:00;Executed;"INTEREST-PAY-edsTx1VDfEAnNTSt1c8WK3-10369145-TOLERATED";;Cash;Interest;;;;-0,25;0,00;0,00;EUR
+2026-10-01;02:00:00;Executed;"INTEREST-PAY-edsTx1VDfEAnNTSt1c8WK3-10369145-GRANTED";;Cash;Interest;;;;-118,84;0,00;0,00;EUR
+2026-09-30;17:36:42;Executed;"SCAL7bMJQ2kkxVh";"Coherent";Security;Buy;US19247G1076;19;250,90;-4.767,10;0,00;0,00;EUR
+2026-09-30;17:33:55;Executed;"SCALjwyiXqHwYw6";"Coherent";Security;Buy;US19247G1076;40;250,40;-10.016,00;0,00;0,00;EUR
+2026-09-30;17:31:23;Executed;"SCALyg3nS5Jmx6W";"Coherent";Security;Buy;US19247G1076;20;250,20;-5.004,00;0,00;0,00;EUR
+2026-09-30;17:30:49;Executed;"SCALqmvdHbQf1rd";"Coherent";Security;Buy;US19247G1076;39;250,30;-9.761,70;0,00;0,00;EUR
 2026-09-29;16:10:12;Cancelled;"SCALupkRjC3Ra29";"Coherent";Security;Buy;US19247G1076;0;0,00;0,00;0,00;0,00;EUR
 2026-09-29;14:43:07;Executed;"SCALVkafjNEq1pb";"Leverage Shares 2x Alphabet ETP";Security;Sell;IE00BF01VY89;25;200,412;5.010,30;0,00;-121,26;EUR
 2026-09-29;14:42:50;Cancelled;"SCAL3DzzU7jGSRj";"Leverage Shares 2x Alphabet ETP";Security;Sell;IE00BF01VY89;0;0,00;0,00;0,00;0,00;EUR

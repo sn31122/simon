@@ -12,16 +12,17 @@ branches reach `main` via pull request (protocol: `AGENTS.md`).
 - 108 price series, 32 Yacht positions. Real depot: 7 positions, read 01.10.2026 (`update_depot.py`): Coherent 5 → 123;
   securities 295,459.65 €, total 261,264.91 € (cash ≈ −34,195 €), G/V seit Kauf 61,968.67 €; "Mein Depot" weights from
   the 01.10. closes.
-- Depot-Historie replays `depot_transactions.csv` (export of 30.09., newest row 29.09.): it still ends at Coherent 5 until
-  the user's newer export is imported (`python data/import_transactions.py`; user 01.10.: "the latest file in Downloads").
+- Depot-Historie replays `depot_transactions.csv` (Scalable export of 02.10.2026 00:10, imported with
+  `import_transactions.py`: 240 rows 02.12.2025 … 01.10.2026, incl. the four Coherent buys of 30.09.); its replay ends exactly
+  at `depot.csv`.
 - Presets: "Mein Depot" card at load; menu: Energie, Old portfolio, Situational Awareness (SharonAI not on Scalable, its
   weight went to SanDisk/Micron), Memory, Depot-Historie. The page opens on 1T.
 - Page (30.09.): card "Yacht-Portfolio" first among the benchmark cards (show/hide only); "Statistik" above the range tabs
   with Start/Ende columns; period pills fixed right of the page (≥ 1500 px), else a slim sticky bar; totals ≠ 100 % are drawn
   as absolute amounts; "Benchmark-Positionen" (off by default) shows P&L per holding of every shown benchmark; MAX = whole
   history from 30.09.2016; menu "Startjahr" (– / 2016 … 2026); "Risikofreier Zins" at the right end of the settings row.
-- Price fetching: `price-fetcher` (Claude Sonnet 5.5), ≤ 50 ISINs per agent: 3 agents / 216 chart calls per routine update
-  (324 after more than 5 weekdays).
+- Price fetching: **one** `price-fetcher` (Claude Sonnet 5.5) for all ISINs (user 02.10.2026): 216 chart calls
+  per routine update (324 after more than 5 weekdays).
 - Data notes: Astera Labs US04626A1034 history begins 13.11.2025 (Scalable has nothing earlier). Big moves confirmed against
   a second Scalable timeframe are listed in `AGENTS.md` ("Build warnings").
 - Acceptance: 93/93 on 29.09. (`docs/verification/2026-09-29/`); 30.09.: 90/94 – the 4 failures (lists side by side at
@@ -37,9 +38,8 @@ only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools
 - Merged remote branches to delete on GitHub (sessions may not delete branches): claude/benchmark-breakdown,
   claude/wizardly-dijkstra-2gmwtb, claude/yacht-card-stats-top, claude/zen-hawking-i3rv1t,
   codex/import-yacht-folder-2026-09-29, codex/revert-yfinance-history, codex/yfinance-daily-history, test/add-test-file.
-  Tip: repo Settings → General → "Automatically delete head branches". `claude/macos11-claude-desktop` is an unrelated
-  Mac/OCLP project (no common history with main) – keep or move it, the user decides.
-- Import the user's newer Scalable transaction export (Depot-Historie still ends at Coherent 5).
+  plus `claude/macos11-claude-desktop` (unrelated Mac/OCLP project; user 02.10.: delete). "Automatically delete head
+  branches" is on since 02.10. (applies to future merges only).
 - Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
 - With 2–3 benchmarks the band above the plot reserves hover space (deliberate). Beyond 5 custom cards the palette colours
   get close.

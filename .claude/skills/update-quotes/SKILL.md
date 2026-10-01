@@ -10,15 +10,15 @@ Use `python` (Windows) or `python3` where `python` is missing. Read-only Scalabl
 
 1. **Plan**: `python data/update_prices.py --plan`
    - `WARNING: … more than three_months covers` → stop and ask the user how to proceed.
-   - Otherwise it prints one prompt per batch (`--- prompt 1/2 ---` …). Do not print them to the user.
-2. **Fetch**: start one agent per printed prompt, **all in one message** (agent type `price-fetcher`, model `claude-sonnet-5-5`),
-   each prompt copied exactly. Wait for all answers. The hook `.claude/hooks/save-chart.cjs` writes the files; each agent
+   - Otherwise it prints one prompt (`--- prompt 1/1 ---`) for all ISINs. Do not print it to the user.
+2. **Fetch**: start **one** agent (agent type `price-fetcher`, model `claude-sonnet-5-5`) with the prompt copied exactly
+   (user 02.10.2026: one Sonnet 5.5 subagent for all calls; never split it up). Wait for its answer. The hook `.claude/hooks/save-chart.cjs` writes the files; the agent
    only answers `SAVED n of m` plus any problem lines.
    - Any answer `HOOK NOT ACTIVE` → stop. Tell the user the quote-saving hook did not run: Node must be installed and on
      PATH, and Claude Code must be restarted once after `.claude/settings.json` was added (`/hooks` lists it).
      Never fall back to copying prices by hand.
 3. **Merge**: `python data/update_prices.py --finish`
-   - `FETCH AGAIN …` → start the printed prompts the same way, then `--finish` again (at most 2 rounds per ISIN, then show
+   - `FETCH AGAIN …` → start the printed prompt the same way, then `--finish` again (at most 2 rounds per ISIN, then show
      the reason lines to the user).
    - `STOP: …` or `CHECK WITH USER: …` → show those lines to the user and change nothing else.
 4. **Report** in the user's language, 2–4 lines: the `== REPORT ==` lines (last price date, 30-min / 2-h coverage,
