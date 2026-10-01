@@ -27,7 +27,10 @@ BENCH = {
     'depot_qty': ('holdings', DEPOT_QTY),
     'mix_w': ('weights', {'IE00B4L5Y983': 40.0, 'FR0010342592': 35.0, 'US5951121038': 25.0}),
     'spacex_w': ('weights', {'US84615Q1031': 50.0, 'IE00B53SZB19': 50.0}),     # SpaceX quoted from 12.06. (flat before)
-    'energie': presets['energie'],                                               # weighting preset of benchmarks.csv
+    # the former Energie preset (removed from benchmarks.csv 02.10.2026), kept here as a fixed 11-stock weighting case
+    'energie': ('weights', {'US36828A1016': 20.0, 'US92537N1081': 12.0, 'US21037T1097': 12.0, 'US0937121079': 11.0,
+                            'US0255371017': 10.0, 'US92840M1027': 8.0, 'US2333311072': 6.0, 'US3379321074': 6.0,
+                            'US6293775085': 6.0, 'US1258961002': 6.0, 'US83418M1036': 3.0}),
 }
 rows = list(csv.reader(open(R/'data/prices_daily.csv', encoding='utf-8')))
 head, rows = rows[0], rows[1:]

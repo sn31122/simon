@@ -15,8 +15,9 @@ branches reach `main` via pull request (protocol: `AGENTS.md`).
 - Depot-Historie replays `depot_transactions.csv` (Scalable export of 02.10.2026 00:10, imported with
   `import_transactions.py`: 240 rows 02.12.2025 … 01.10.2026, incl. the four Coherent buys of 30.09.); its replay ends exactly
   at `depot.csv`.
-- Presets: "Mein Depot" card at load; menu: Energie, Old portfolio, Situational Awareness (SharonAI not on Scalable, its
-  weight went to SanDisk/Micron), Memory, Depot-Historie. The page opens on 1T.
+- Presets: "Mein Depot" card at load; menu: Altes Depot (renamed from Old portfolio 02.10.), Situational Awareness (SharonAI not on Scalable, its
+  weight went to SanDisk/Micron), Memory, Depot-Historie (Energie removed 02.10.; its weights live on as a fixed
+  case in `tests/crosscheck.py`). The page opens on 1T.
 - Page (30.09.): card "Yacht-Portfolio" first among the benchmark cards (show/hide only); "Statistik" above the range tabs
   with Start/Ende columns; period pills fixed right of the page (≥ 1500 px), else a slim sticky bar; totals ≠ 100 % are drawn
   as absolute amounts; "Benchmark-Positionen" (off by default) shows P&L per holding of every shown benchmark; MAX = whole
