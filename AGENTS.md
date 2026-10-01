@@ -79,7 +79,7 @@ Nov 2024 (not splits – the `CHECK WITH USER` lines for them need no action).
 ## Model conventions (details: SPEC.md)
 - Backcast with constant share counts, price return in EUR, no dividends; forward-fill gaps, flat at the first quote before it.
 - History before 2026 is prepended (`res` per date, `ctx.dailyFrom`); chart, Rendite, p.a., Max. DD use all points, risk
-  metrics only daily returns. Long ranges start where ≥ 90 % of today's value has quotes (`coverageStart`), except MAX and
+  metrics only daily returns (`d` + `dh` rows; since 02.10.2026 the whole selected range). Long ranges start where ≥ 90 % of today's value has quotes (`coverageStart`), except MAX and
   a "Startjahr" (whole span, titles without quotes flat). YTD starts at the previous year's last price.
 - Benchmark cards `{weights: {ISIN: %}}` (or `schedule` for Depot-Historie): bought at the range start, buy and hold,
   normalized to the start value; a total ≠ 100 % counts as absolute amounts (110 % = 1,1 × start value); new rows: first

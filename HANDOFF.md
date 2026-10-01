@@ -51,12 +51,11 @@ only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools
   history (ETFs median |dev| 0.2–0.6 %, stocks 0.3–2.2 %: Xetra closes 17:30 vs. gettex 22:00; leveraged ETPs ×3).
   Without daily history (Scalable month-end kept): Western Digital (bad data, ~30 % off before the SanDisk spin-off),
   Applied Optoelectronics, Astera Labs (refused: too noisy), Eaton, Keel, SanDisk (USD only), Alphabet 2x (no page),
-  SpaceX and Memory 3x (listed 2026). Risk metrics still start 02.01.2026. Sizes: `prices_history.csv` ~2 MB,
+  SpaceX and Memory 3x (listed 2026). Risk metrics (vol, Sharpe, VaR …) use the selected range
+  incl. the daily history (user 02.10.; `dailyFrom` = 0). Sizes: `prices_history.csv` ~2 MB,
   `prices_history_daily.csv` ~1.8 MB, `portfolio-data.js` 3.6 MB (was 0.7).
 
 ## Open points
-- Risk metrics (vol, Sharpe, VaR …) still use only 2026 daily returns; with 99 of 108 series daily since 2006 they could
-  start in 2006 (`dailyFrom`) – ask the user.
 - Riot US7672921050: −74 % on 21.01.2009 (FSE only, before Scalable's history; then AspenBio, not a miner) – unverified.
 - Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
 - With 2–3 benchmarks the band above the plot reserves hover space (deliberate). Beyond 5 custom cards the palette colours

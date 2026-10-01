@@ -99,10 +99,12 @@
     const dates = Array.isArray(data.dates) ? data.dates : [];
     const n = dates.length;
     const status = dates.map((_, k) => (Array.isArray(data.status) && data.status[k]) || 'final');
-    // resolution per date (user 28.09.): 'm' month-end / '2d' every 2nd trading day (history before the daily data), 'd'
-    // daily; dailyFrom = first daily index – risk metrics (volatility, Sharpe, VaR, beta, correlation …) start there
+    // resolution per date (user 28.09.): 'm' month-end / '2d' every 2nd trading day (history before the daily data), 'dh'
+    // daily history before 2026 (finanzen.net, user 02.10.), 'd' daily; dailyFrom = first index from which every date is
+    // daily ('d' or 'dh') – risk metrics (volatility, Sharpe, VaR …) start there or at the range start, whichever is later
     const res = dates.map((_, k) => (Array.isArray(data.res) && data.res[k]) || 'd');
-    const dailyFrom = Math.max(0, res.indexOf('d') < 0 ? n : res.indexOf('d'));
+    let dailyFrom = n;
+    while (dailyFrom > 0 && (res[dailyFrom - 1] === 'd' || res[dailyFrom - 1] === 'dh')) dailyFrom--;
     const positions = Array.isArray(data.positions) ? data.positions : [];
     const benchmarks = Array.isArray(data.benchmarks) ? data.benchmarks : [];
     const groups = (Array.isArray(data.groups) ? data.groups : []).slice();

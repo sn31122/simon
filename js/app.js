@@ -666,15 +666,16 @@
     if (!el) return;
     if (!iv) { el.textContent = ''; return; }
     var why = iv.stepped && iv.skipped.length ? 'keine ' + (iv.skipped.length > 1 ? '30-Min- oder 2-Std-Kurse' : IV_KURSE[iv.skipped[0]]) + ' für diesen Zeitraum' : '';
-    if (iv.key === 'day' && !M.intra && M.R.start < (ctx.dailyFrom || 0)) {        // history in the range: coarser before 2026
+    var scal = ctx.res ? ctx.res.indexOf('d') : -1;                            // first Scalable daily row (02.01.2026)
+    if (iv.key === 'day' && !M.intra && scal > 0 && M.R.start < scal) {          // history in the range (before 2026)
       var hasM = false, has2 = false, hasDH = false, lastM = null;
-      for (var k = M.R.start; k < ctx.dailyFrom; k++) {
+      for (var k = M.R.start; k < scal; k++) {
         if (ctx.res[k] === 'm') { hasM = true; lastM = ctx.dates[k]; } else if (ctx.res[k] === 'dh') hasDH = true; else has2 = true;
       }
       if (hasDH) why = 'davor Tagesschluss Xetra (finanzen.net; einzelne Titel ohne diese Daten: Monatsschluss), ab ' +
-        F.date(ctx.dates[ctx.dailyFrom], 'short') + ' Scalable';             // daily history 2006–2025 (import_history.py)
+        F.date(ctx.dates[scal], 'short') + ' Scalable';             // daily history 2006–2025 (import_history.py)
       else why = 'davor ' + [has2 ? 'jeder 2. Handelstag' : '', hasM ? 'Monatsschluss' + (has2 && lastM ? ' bis ' + F.date(lastM, 'monthYear') : '') : '']
-        .filter(Boolean).join(', ') + ' (ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') + ' täglich)';
+        .filter(Boolean).join(', ') + ' (ab ' + F.date(ctx.dates[scal], 'short') + ' täglich)';
     }
     el.innerHTML = 'Intervall: <b>' + esc(IV_SHORT[iv.key]) + '</b>' + (why ? '<span class="chart-iv-why"> · ' + esc(why) + '</span>' : '');
     var have = ['m30', 'h2'].map(function (k) {
