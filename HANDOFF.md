@@ -43,19 +43,20 @@ only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools
 - Removed the predefined subagents `dashboard-designer` and `opus-engineer` (user: will ask personally when needed);
   only `price-fetcher` remains. Merged branches and the Mac project branch were deleted by the user.
 
-- Daily history before 2026 (user 02.10.; `data/import_history.py`): 66 of 73 stocks have daily closes from finanzen.net,
-  Xetra first (gaps from Frankfurt/gettex/Tradegate), 03.10.2006 (the site serves only 20 years; the user asked for 1995) or
-  their listing … 30.12.2025, merged into `prices_history.csv` as `dh` rows (4,897 dates); bad one-/two-day prints dropped
-  (e.g. Eli Lilly 0.25 € on 14.11.2008); every stock checked against the Scalable history (median |dev| 0.3–2.2 %, Xetra
-  closes 17:30 vs. gettex 22:00). Refused: Western Digital (47 bad prints, ~30 % off before the SanDisk spin-off),
-  Applied Optoelectronics (8 % of dates > 10 % off), Astera Labs (too short/noisy). No history on finanzen.net: Eaton, Keel,
-  SanDisk (Nasdaq/USD only), SpaceX (listed 2026). These keep their Scalable month-end history. Risk metrics still start
-  02.01.2026. Sizes: `prices_history.csv` 1.6 MB, `prices_history_daily.csv` 1.4 MB, `portfolio-data.js` 3.5 MB (was 0.7).
+- Daily history before 2026 (user 02.10.; `data/import_history.py`): 99 of 108 series (65 stocks, 34 ETFs/ETCs/ETPs) have
+  daily closes from finanzen.net, Xetra first (gaps from Frankfurt/gettex/Tradegate/Stuttgart), 03.10.2006 (the site serves
+  only 20 years; the user asked for 1995) or their listing … 30.12.2025, merged into `prices_history.csv` as `dh` rows (4,897
+  dates). ETFs come from the POST the page makes (`/ajax/FundController_HistoricPriceList[Redesign]/…`, whole period in one
+  answer). Bad one-/two-day prints dropped (e.g. Eli Lilly 0.25 € on 14.11.2008); every series checked against the Scalable
+  history (ETFs median |dev| 0.2–0.6 %, stocks 0.3–2.2 %: Xetra closes 17:30 vs. gettex 22:00; leveraged ETPs ×3).
+  Without daily history (Scalable month-end kept): Western Digital (bad data, ~30 % off before the SanDisk spin-off),
+  Applied Optoelectronics, Astera Labs (refused: too noisy), Eaton, Keel, SanDisk (USD only), Alphabet 2x (no page),
+  SpaceX and Memory 3x (listed 2026). Risk metrics still start 02.01.2026. Sizes: `prices_history.csv` ~2 MB,
+  `prices_history_daily.csv` ~1.8 MB, `portfolio-data.js` 3.6 MB (was 0.7).
 
 ## Open points
-- ETF/ETP/ETC daily history (35 instruments): the user exports CSVs by hand → `import_history.py --import FILE --isin ISIN`
-  (check the column detection on the first file). Until then ETFs step monthly / every 2nd day before 2026 (visible in
-  "Mein Depot" before 2026). Once all series are daily, `dailyFrom` (risk metrics) could move back to 2006 – ask the user.
+- Risk metrics (vol, Sharpe, VaR …) still use only 2026 daily returns; with 99 of 108 series daily since 2006 they could
+  start in 2006 (`dailyFrom`) – ask the user.
 - Riot US7672921050: −74 % on 21.01.2009 (FSE only, before Scalable's history; then AspenBio, not a miner) – unverified.
 - Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
 - With 2–3 benchmarks the band above the plot reserves hover space (deliberate). Beyond 5 custom cards the palette colours

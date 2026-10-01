@@ -72,10 +72,10 @@ Every price column is fetched by every normal update and can be picked in the da
 A new *position* also needs its row in `positions.csv` and a logo `company-logos/<ISIN>.png` (user instruction only).
 
 ## Daily history before 2026 from finanzen.net (user 02.10.2026)
-`python data/import_history.py --fetch [ISIN,…]` (default: every stock not fetched yet) gets the daily Xetra closes (gaps
-from Frankfurt / gettex / Tradegate) from 20 years back to 31.12.2025, checks them against the Scalable history and merges
-them into `prices_history.csv` (`dh` rows). ETFs/ETPs: the user exports a CSV by hand, then
-`--import FILE --isin ISIN`. `--finish-history` / `--finish-add` re-merge these daily closes automatically.
+`python data/import_history.py --fetch [ISIN,…]` (default: every instrument not fetched yet – stocks, ETFs, ETCs, ETPs)
+gets the daily Xetra closes (gaps from Frankfurt / gettex / Tradegate / Stuttgart) from 20 years back to 31.12.2025, checks
+them against the Scalable history and merges them into `prices_history.csv` (`dh` rows). A new instrument: run it with its
+ISIN after `--finish-add`. Fallback for a missing one: a CSV exported by hand, `--import FILE --isin ISIN`. `--finish-history` / `--finish-add` re-merge these daily closes automatically.
 
 ## History before 2026 (only on user instruction; done 28.09.2026 for all columns)
 `python data/update_prices.py --plan-history [ISIN,…]` (default: every column) → one `price-fetcher` agent per printed prompt

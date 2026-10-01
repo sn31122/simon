@@ -671,8 +671,8 @@
       for (var k = M.R.start; k < ctx.dailyFrom; k++) {
         if (ctx.res[k] === 'm') { hasM = true; lastM = ctx.dates[k]; } else if (ctx.res[k] === 'dh') hasDH = true; else has2 = true;
       }
-      if (hasDH) why = 'davor Aktien täglich (Xetra-Schluss, finanzen.net), ETFs/ETPs Monatsschluss bzw. jeder 2. Handelstag (ab ' +
-        F.date(ctx.dates[ctx.dailyFrom], 'short') + ' alle täglich)';      // daily stock history 2006–2025 (import_history.py)
+      if (hasDH) why = 'davor Tagesschluss Xetra (finanzen.net; einzelne Titel ohne diese Daten: Monatsschluss), ab ' +
+        F.date(ctx.dates[ctx.dailyFrom], 'short') + ' Scalable';             // daily history 2006–2025 (import_history.py)
       else why = 'davor ' + [has2 ? 'jeder 2. Handelstag' : '', hasM ? 'Monatsschluss' + (has2 && lastM ? ' bis ' + F.date(lastM, 'monthYear') : '') : '']
         .filter(Boolean).join(', ') + ' (ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') + ' täglich)';
     }

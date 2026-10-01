@@ -17,7 +17,7 @@ packages.
 | **"update"** (or "refresh", "Kurse aktualisieren") | Scalable quotes for all 108 series (30-min, 2-h, daily closes) → merge → rebuild → tests | Claude Code (needs the Scalable connector) |
 | **"update depot"** | reads your Scalable holdings + valuation (read-only) → `depot.csv`, `depot_ref.csv`, "Mein Depot" weights → rebuild → tests | Claude Code |
 | **"add benchmark asdf: microsoft 30 nvidia 40 palantir 30"**, **"change energie to ge vernova 20 vertiv 80"**, **"remove energie"**, "rename …", "list benchmarks" | edits the "+ Benchmark" menu presets (`data/benchmarks.py`; names are matched against the tracked instruments, weights must total 100 %) → rebuild → tests | Claude Code **or** Codex |
-| **"import price history"** (one-time) | daily closes before 2026 for all stocks from finanzen.net (Xetra first, back to 2006 – the site serves 20 years); ETF/ETP CSVs you export by hand are imported with the same script → rebuild → tests | Claude Code **or** Codex (also works in the cloud session) |
+| **"import price history"** (one-time) | daily closes before 2026 for stocks, ETFs, ETCs and ETPs from finanzen.net (Xetra first, back to 2006 – the site serves 20 years; done 02.10.2026 for 99 of 108 series) → rebuild → tests | Claude Code **or** Codex (also works in the cloud session) |
 | **"import transactions"** | takes the newest Scalable transaction export from your Downloads folder (or a file you attach) → `depot_transactions.csv` ("Depot-Historie") → rebuild → tests | Claude Code **or** Codex |
 
 Then say **"merge"**: the agent opens a pull request to `main` and merges it, and the live view shows it within a minute.
