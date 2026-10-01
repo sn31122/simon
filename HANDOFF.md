@@ -1,6 +1,7 @@
 # Handoff
 
-Repo `sn31122/simon`, branch `main`; the user works only in Claude Code cloud sessions. Session branches reach `main` via pull request.
+Repo `sn31122/simon`, branch `main`. The user works in Claude Code cloud sessions and in Codex on Windows; session
+branches reach `main` via pull request (protocol: `AGENTS.md`).
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
@@ -8,26 +9,46 @@ Repo `sn31122/simon`, branch `main`; the user works only in Claude Code cloud se
 <!-- data-status:end -->
 (Block rewritten by `--finish` / `--finish-add`; do not edit by hand.)
 
-- 106 price series, 32 Yacht positions, real depot 7 positions (`depot.csv`, read 30.09.2026: since 29.09. sold WTI Short, Broadcom, Coca-Cola, Alphabet 2x; bought MSCI USA Momentum 15, Coherent 5; Alphabet A 34 → 35; "Mein Depot" weights recomputed from these counts × closes of 29.09.). Depot-Historie replays the export of 30.09. (`depot_transactions.csv`, ends at these holdings). On 29.09., four GPT-6 Luna high subagents each received eight distinct requested ISINs; 29 new tracked instruments received the five-timeframe Scalable backfill (2026 daily, 30-min, 2-h, prior-year every second trading day, older month-end), while Amazon, Palantir and Vertiv were already tracked and left untouched. No portfolio positions changed.
-- Price fetching (29.09.): `price-fetcher` is pinned to Claude Sonnet 5.5 (`claude-sonnet-5-5`); routine updates, new-instrument backfills and history fetches each use at most 50 ISINs per agent. For 106 price series, a routine update uses 3 agents and 212 chart calls (318 after more than 5 weekdays). Adding 100 new instruments uses 2 backfill agents and 500 one-time chart calls.
-- New-price moves confirmed against another Scalable chart timeframe on 29.09.: Applied Optoelectronics US03823U1025 +38.2% (27.02.2026; `year_to_date` = `max`), Atlassian US0494681010 +34.3% (06.08.; `year_to_date` = `one_year`), Super Micro Computer US86800U3023 −31.9% (20.03.; `year_to_date` = `one_year`) and −26.8% (10.06.; `year_to_date` = `six_months`). These are source-confirmed price observations, not independently verified corporate-action assessments.
-- Scalable's `max` chart for Astera Labs US04626A1034 returned only 11 monthly points starting 28.11.2025; its merged history begins 13.11.2025 from `one_year`. No earlier prices were available from the requested broker chart timeframes.
-- Presets: "Mein Depot" card at load; menu: Energie, Old portfolio, Situational Awareness (SharonAI not on Scalable, its weight went to SanDisk/Micron), Memory, Depot-Historie (BestIdeas, Packaging+Tools, AI Compute, AI Infrastructure removed 30.09.). The page opens on 1T (user 30.09.; before YTD).
-- Page (30.09., branch `claude/yacht-card-stats-top`, awaiting the user's check): card "Yacht-Portfolio" first among the benchmark cards (show/hide only; hidden = no Yacht line, y scale fits the shown benchmarks); "Statistik" under the two values above the range tabs, with G/V €; (auto split of empty rows removed 30.09.: first row 100 %, further rows empty, nothing auto-filled). No title bar: the period pills (same look as before) are fixed right of the page column (≥ 1500 px), else in a slim sticky bar at the top.
-- Page (30.09., branch `claude/prices-ui-refinements-ddncgd`, awaiting the user's check): card totals ≠ 100 % are drawn as absolute amounts (each % of the start value, 196 % starts at 1,96 × start value; engine `absolute: true`); benchmark colours start #3B82F6 #FF7A00 #FF4D3D #B84DFF; Benchmark-Positionen: one tight box per benchmark, Statistik type size, no weight bars, ≤ 400px, side placement from 1500px as before, lines between holdings. Subagents only on request (AGENTS.md). Also 30.09.: MAX shows the whole history from 30.09.2016 (no 90 % coverage cut; note names the titles counted flat before their first quote); new menu "Startjahr" (– / 2016 … 2026) in the settings row = from the last close before 01.01. of that year to today (a custom Von/Bis range); "Risikofreier Zins" moved to the right end of the row. Statistik and Benchmark-Positionen got a "Start" column (value at the range start) next to "Ende"; Benchmark-Positionen side box up to 470px, widened to the left (1500–1719px: start weights hidden, 11px). Acceptance: 90/94, the same 4 pre-existing failures.
-- Page (30.09., branch `claude/benchmark-breakdown`, awaiting the user's check): removed the "Benchmark-Vergleich" table and all Sortino / `relative` (beta, alpha, correlation, tracking error, capture …) code and tests; new off-by-default card "Benchmark-Positionen" (button left of the content, ≥ 1500 px; else a block above Drawdown): P&L per holding of every shown benchmark (`E.benchmarkHoldings`).
-- Page (29.09.): legend-only headline, notes under the chart; one measurement box per line; Statistik panel right of the chart; Monatsrenditen and Risiko & Korrelation removed; "Gruppen" table removed (27.09.).
-- Acceptance: 93/93 (`docs/verification/2026-09-29/`); 30.09.: 90/94 – the 4 failures (lists side by side at 1903/1920, resize switch, 375 1W measure) also fail on `main` before this branch; not covered: real Segoe UI/Edge, physical touch device, a session in progress.
+- 108 price series, 32 Yacht positions. Real depot: 7 positions, read 01.10.2026 (`update_depot.py`): Coherent 5 → 123;
+  securities 295,459.65 €, total 261,264.91 € (cash ≈ −34,195 €), G/V seit Kauf 61,968.67 €; "Mein Depot" weights from
+  the 01.10. closes.
+- Depot-Historie replays `depot_transactions.csv` (Scalable export of 02.10.2026 00:10, imported with
+  `import_transactions.py`: 240 rows 02.12.2025 … 01.10.2026, incl. the four Coherent buys of 30.09.); its replay ends exactly
+  at `depot.csv`.
+- Presets: "Mein Depot" card at load; menu: Energie, Old portfolio, Situational Awareness (SharonAI not on Scalable, its
+  weight went to SanDisk/Micron), Memory, Depot-Historie. The page opens on 1T.
+- Page (30.09.): card "Yacht-Portfolio" first among the benchmark cards (show/hide only); "Statistik" above the range tabs
+  with Start/Ende columns; period pills fixed right of the page (≥ 1500 px), else a slim sticky bar; totals ≠ 100 % are drawn
+  as absolute amounts; "Benchmark-Positionen" (off by default) shows P&L per holding of every shown benchmark; MAX = whole
+  history from 30.09.2016; menu "Startjahr" (– / 2016 … 2026); "Risikofreier Zins" at the right end of the settings row.
+- Price fetching: **one** `price-fetcher` (Claude Sonnet 5.5) for all ISINs (user 02.10.2026): 216 chart calls
+  per routine update (324 after more than 5 weekdays).
+- Data notes: Astera Labs US04626A1034 history begins 13.11.2025 (Scalable has nothing earlier). Big moves confirmed against
+  a second Scalable timeframe are listed in `AGENTS.md` ("Build warnings").
+- Acceptance: 93/93 on 29.09. (`docs/verification/2026-09-29/`); 30.09.: 90/94 – the 4 failures (lists side by side at
+  1903/1920, resize switch, 375 1W measure) predate the 30.09. changes; not covered: real Segoe UI/Edge, physical touch.
+
+## Cleanup 01.10.2026
+New: `tools/check.py` (session start for Claude Code and Codex), `data/update_depot.py` + hook `save-portfolio.cjs`,
+`data/import_transactions.py`; UTF-8 output in all Python scripts (Windows). `AGENTS.md` is the shared rule file, `CLAUDE.md`
+only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools/open-dashboard.bat` (use
+`yacht-live.bat`), `docs/verification/2026-09-27/` (superseded by 2026-09-29).
 
 ## Open points
-- With 2–3 benchmarks the band above the plot reserves hover space (deliberate).
-- Beyond 5 custom cards the palette colours get close.
-- Decided without asking: custom-range length counts trading days; a day's last point reads "23:00"; "Zeitraum auf Auswahl setzen" hidden on 30-min/2-h charts.
+- Merged remote branches to delete on GitHub (sessions may not delete branches): claude/benchmark-breakdown,
+  claude/wizardly-dijkstra-2gmwtb, claude/yacht-card-stats-top, claude/zen-hawking-i3rv1t,
+  codex/import-yacht-folder-2026-09-29, codex/revert-yfinance-history, codex/yfinance-daily-history, test/add-test-file.
+  plus `claude/macos11-claude-desktop` (unrelated Mac/OCLP project; user 02.10.: delete). "Automatically delete head
+  branches" is on since 02.10. (applies to future merges only).
+- Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
+- With 2–3 benchmarks the band above the plot reserves hover space (deliberate). Beyond 5 custom cards the palette colours
+  get close.
+- Decided without asking: custom-range length counts trading days; a day's last point reads "23:00"; "Zeitraum auf
+  Auswahl setzen" hidden on 30-min/2-h charts.
 - Proposed, awaiting the user: ticker tiers (core / daily-only / on-demand) for more tickers.
 
 ## Access
-- Look at the page: ask for screenshots, or download the ZIP and open `dashboard.html`.
-- Windows live view: `tools/yacht-live.bat` (new 30.09.: own clone `%USERPROFILE%\yacht-live-main`, fetch + hard reset to `origin/main` every 60 s, reopens the page on a new version; the old version's `pull --ff-only` failed silently). Mac live view: `tools/yacht-live.command` (30.09., same logic, clone `~/yacht-live-main`, double-click in Finder).
-- Mac local setup: `LOCAL_MAC.md` (user steps + checklist for a local session: tools, GitHub login, tests, Scalable connector, hook, Desktop launcher, trial update).
-- Going local: install Claude Code + Node + Python, `git clone https://github.com/sn31122/simon`, start `claude` (or `claude --teleport <session-id>`); the Scalable connector must be available; push local commits.
-- Claude Sonnet 5.5 requires Claude Code v2.1.284 or later; update older local installations before running a price fetch.
+- Live view of `main`: Windows `tools/yacht-live.bat` (clone `%USERPROFILE%\yacht-live-main`, fetch + hard reset every
+  60 s, reopens the page on a new version); Mac `tools/yacht-live.command` (`~/yacht-live-main`). Never work in those clones.
+- Local work: Windows + Codex → `README.md` ("Working with Codex on Windows"); Mac + Claude Code → `docs/LOCAL_MAC.md`.
+- Claude Sonnet 5.5 (price-fetcher) needs Claude Code v2.1.284 or later.

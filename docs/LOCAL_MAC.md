@@ -17,7 +17,7 @@ The file only opens the dashboard; price updates stay a Claude Code command.
    ```
    Log in with your claude.ai account when asked, then paste this into Claude Code:
 
-   > Read `LOCAL_MAC.md` and do the section "Local session: setup checklist" completely.
+   > Read `docs/LOCAL_MAC.md` and do the section "Local session: setup checklist" completely.
 
 ## Local session: setup checklist
 Work in `~/simon` (this clone). Never work in `~/yacht-live-main`: the launcher hard-resets that folder to `origin/main`

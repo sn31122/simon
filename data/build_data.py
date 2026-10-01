@@ -1,6 +1,7 @@
 # Builds portfolio-data.js (window.PORTFOLIO_DATA) for dashboard.html from the CSVs in this folder.
 # Run after every data change:  python build_data.py   (exit code 1 = data error, nothing written)
 import csv, json, datetime, pathlib, sys, urllib.parse
+if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8', errors='replace')   # Windows consoles/pipes (cp1252)
 
 D = pathlib.Path(__file__).resolve().parent
 LOGO_DIR = 'company-logos'   # Scalable logos (128x128 PNG, file = <ISIN>.png), copied 1:1 from Downloads/scalable-company-pictures/images

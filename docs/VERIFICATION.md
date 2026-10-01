@@ -32,7 +32,7 @@ injects Selawik (Microsoft, SIL OFL, metric-compatible with Segoe UI; `Selawik_R
 as "Segoe UI" into the test browser only; the dashboard files are unchanged. Without the variable the run uses the system font
 and the side-by-side check fails for that reason alone. On Windows the variable is not needed.
 
-Evidence of the final run of 27.09.2026 (results + screenshots): `docs/verification/2026-09-27/`.
+Evidence of the run of 29.09.2026 (results + screenshots): `docs/verification/2026-09-29/`.
 
 ## Manual checks and diagnostics
 

@@ -1,6 +1,7 @@
 # Independent reference implementation of the SPEC.md metrics, straight from the CSVs (no engine code).
 # Writes tests/reference.json; tests/crosscheck.cjs compares PFEngine against it.
-import csv, json, math, datetime, pathlib
+import csv, json, math, datetime, pathlib, sys
+if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8', errors='replace')   # Windows consoles/pipes (cp1252)
 
 R = pathlib.Path(__file__).resolve().parent.parent
 pos = list(csv.DictReader(open(R/'data/positions.csv', encoding='utf-8')))

@@ -27,6 +27,7 @@
 #         python update_prices.py             writes prices_daily.csv + intraday*.csv, rebuilds, deletes the incoming files
 #         python update_prices.py --add-column ISIN[,ISIN]  (legacy) adds empty price columns before a plain run
 import csv, datetime, math, pathlib, re, subprocess, sys
+if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8', errors='replace')   # Windows consoles/pipes (cp1252)
 
 D = pathlib.Path(__file__).resolve().parent
 INC = D / 'incoming'
@@ -35,7 +36,7 @@ STORE_30M, STORE_2H = D / 'intraday.csv', D / 'intraday_2h.csv'
 INC1Y, INCMAX = INC / '1y', INC / 'max'           # one_year / max fetches: history before 2026 (prices_history.csv)
 HIST = D / 'prices_history.csv'
 CLOSE_HOUR_BERLIN = 23   # a day's last point counts as the close once Berlin time is past 23:00
-BATCH = 50               # max ISINs per fetch agent (2 or 3 chart calls per ISIN in a routine update)
+BATCH = 1000             # max ISINs per fetch agent: one Sonnet 5.5 agent handles all calls (user 02.10.2026)
 GAP_DAYS = 5             # more weekdays since the last final close: also fetch three_months (seven_days covers ~5 sessions)
 MAX_GAP_DAYS = 60        # three_months covers ~63 sessions; beyond that ask the user (year_to_date by hand, AGENTS.md)
 LINE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z,\d+(\.\d+)?$')
@@ -132,7 +133,7 @@ if '--plan' in sys.argv:
              f'TIMEFRAMES: {" ".join(tfs)}',
              'TOOL: get_security_chart(isin=<ISIN>, timeframe=<each timeframe>)   (read-only; no portfolioId)',
              'FILES: written by the hook .claude/hooks/save-chart.cjs (data/incoming/<ISIN>.csv, 2h/, 3m/); the result is one line "SAVED ..."',
-             f'{len(isins)} ISINs in {len(batches)} batches (one fetch agent per batch):']
+             f'{len(isins)} ISINs in {len(batches)} batch(es) (one fetch agent per batch):']
     for j, b in enumerate(batches, 1):
         lines.append(f'BATCH {j}: ' + ' '.join(b))
         for i in b: lines.append(f'    {i}  {nm.get(i, "")}')
@@ -144,7 +145,7 @@ if '--plan' in sys.argv:
     if left:
         lines.append(f'NOTE: removed {left} files of an earlier, unmerged fetch from data/incoming/ (they are fetched again).')
     lines.append('')
-    lines.append(f'AGENT PROMPTS - start {len(batches)} agents at once: agent type price-fetcher, model claude-sonnet-5-5, one prompt each '
+    lines.append(f'AGENT PROMPTS - start {len(batches)} agent(s): agent type price-fetcher, model claude-sonnet-5-5, one prompt each '
                  '(copy each block exactly):')
     for j, b in enumerate(batches, 1):
         lines += [f'--- prompt {j}/{len(batches)} ---', agent_prompt(tfs, b)]
@@ -215,7 +216,7 @@ if '--finish' in sys.argv:
     if code:
         redo = [ln.split(':')[0].strip() for ln in out.splitlines() if re.match(r'^\s+[A-Z]{2}[A-Z0-9]{9}\d:', ln)]
         parts = [redo[j:j + BATCH] for j in range(0, len(redo), BATCH)] or [[]]
-        print(f'\nFETCH AGAIN: start {len(parts)} agent(s) at once (price-fetcher, claude-sonnet-5-5), one prompt each:')
+        print(f'\nFETCH AGAIN: start {len(parts)} agent(s) (price-fetcher, claude-sonnet-5-5), one prompt each:')
         for j, b in enumerate(parts, 1): print(f'--- prompt {j}/{len(parts)} ---\n' + agent_prompt(planned_timeframes(), b))
         print('--- end of prompts --- then run: python data/update_prices.py --finish   '
               '(after 2 failed rounds for the same ISIN: ask the user)')
@@ -231,7 +232,7 @@ if '--finish' in sys.argv:
 # ------------------------------------------------------------------ new instruments: --plan-add / --finish-add (backfill)
 ISIN_RE = re.compile(r'^[A-Z]{2}[A-Z0-9]{9}\d$')
 YTD = INC / 'ytd'
-ADD_BATCH = BATCH        # new-instrument backfill and history agents also handle up to 50 ISINs
+ADD_BATCH = BATCH        # new-instrument backfill and history: also one agent
 
 def add_prompt(isins):
     """The exact prompt for one backfill agent (price-fetcher, Claude Sonnet 5.5)."""
@@ -355,7 +356,7 @@ if '--plan-add' in sys.argv:
     missing = [i for i in new if i not in ins]
     if missing:
         print('TODO before --finish-add: add a row to data/instruments.csv (isin,name,short,type) for: ' + ', '.join(missing))
-    print(f'\nAGENT PROMPTS - start {len(batches)} agent(s) at once: agent type price-fetcher, model claude-sonnet-5-5, one prompt each:')
+    print(f'\nAGENT PROMPTS - start {len(batches)} agent(s): agent type price-fetcher, model claude-sonnet-5-5, one prompt each:')
     for j, b in enumerate(batches, 1): print(f'--- prompt {j}/{len(batches)} ---\n' + add_prompt(b))
     print('--- end of prompts --- then: python data/update_prices.py --finish-add ' + ','.join(new))
     sys.exit(0)
@@ -460,7 +461,7 @@ if '--plan-history' in sys.argv:
     size = math.ceil(len(isins) / k)
     batches = [isins[j:j + size] for j in range(0, len(isins), size)]
     print(f'HISTORY PLAN for {len(isins)} ISINs (one_year + max; the hook writes data/incoming/1y/ and data/incoming/max/):')
-    print(f'\nAGENT PROMPTS - start {len(batches)} agents at once: agent type price-fetcher, model claude-sonnet-5-5, one prompt each:')
+    print(f'\nAGENT PROMPTS - start {len(batches)} agent(s): agent type price-fetcher, model claude-sonnet-5-5, one prompt each:')
     for j, b in enumerate(batches, 1): print(f'--- prompt {j}/{len(batches)} ---\n' + agent_prompt(['one_year', 'max'], b))
     print('--- end of prompts --- then: python data/update_prices.py --finish-history')
     sys.exit(0)
@@ -508,7 +509,7 @@ if '--finish-history' in sys.argv:
         print('ERRORS (nothing written):', *errs, sep='\n  ')
         if redo:
             parts = [redo[j:j + ADD_BATCH] for j in range(0, len(redo), ADD_BATCH)]
-            print(f'\nFETCH AGAIN: start {len(parts)} agent(s) at once (price-fetcher, claude-sonnet-5-5), one prompt each, then --finish-history again:')
+            print(f'\nFETCH AGAIN: start {len(parts)} agent(s) (price-fetcher, claude-sonnet-5-5), one prompt each, then --finish-history again:')
             for j, b in enumerate(parts, 1): print(f'--- prompt {j}/{len(parts)} ---\n' + agent_prompt(['one_year', 'max'], b))
             print('--- end of prompts ---')
         sys.exit(1)
