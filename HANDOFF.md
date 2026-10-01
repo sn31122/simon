@@ -31,9 +31,14 @@ branches reach `main` via pull request (protocol: `AGENTS.md`).
 New: `tools/check.py` (session start for Claude Code and Codex), `data/update_depot.py` + hook `save-portfolio.cjs`,
 `data/import_transactions.py`; UTF-8 output in all Python scripts (Windows). `AGENTS.md` is the shared rule file, `CLAUDE.md`
 only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools/open-dashboard.bat` (use
-`yacht-live.bat`), `docs/verification/2026-09-27/` (superseded by 2026-09-29), merged remote branches.
+`yacht-live.bat`), `docs/verification/2026-09-27/` (superseded by 2026-09-29).
 
 ## Open points
+- Merged remote branches to delete on GitHub (sessions may not delete branches): claude/benchmark-breakdown,
+  claude/wizardly-dijkstra-2gmwtb, claude/yacht-card-stats-top, claude/zen-hawking-i3rv1t,
+  codex/import-yacht-folder-2026-09-29, codex/revert-yfinance-history, codex/yfinance-daily-history, test/add-test-file.
+  Tip: repo Settings → General → "Automatically delete head branches". `claude/macos11-claude-desktop` is an unrelated
+  Mac/OCLP project (no common history with main) – keep or move it, the user decides.
 - Import the user's newer Scalable transaction export (Depot-Historie still ends at Coherent 5).
 - Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
 - With 2–3 benchmarks the band above the plot reserves hover space (deliberate). Beyond 5 custom cards the palette colours
