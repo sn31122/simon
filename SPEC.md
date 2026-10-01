@@ -42,7 +42,11 @@ Real data (29.09.2026): 32 Yacht positions, 106 tracked price series (32 Yacht i
 ## History before the daily data (user 28.09.2026)
 `data/prices_history.csv` (`date,res,<ISIN>…`): `m` = month-end close from `max` (~2016 … Aug 2025, one row per month dated on
 the month's latest point; an instrument's missing month is forward-filled), `2d` = every 2nd trading day from `one_year`
-(29.09.–29.12.2025). `build_data.py` prepends the rows (status final) and writes `data.res` per date (`'m' | '2d' | 'd'`),
+(29.09.–29.12.2025), `dh` = daily history (user 02.10.2026): Xetra closes of every stock from finanzen.net, 03.10.2006 …
+31.12.2025 (`data/import_history.py` → `data/prices_history_daily.csv`, merged into this file; on a `dh` date the stocks have
+that day's close, ETFs/ETPs keep their Scalable `m`/`2d` points and are forward-filled until their daily data is imported).
+`build_data.py` prepends the rows (status final) and writes `data.res` per date (`'m' | '2d' | 'dh' | 'd'`; only `'d'`
+counts as daily for `dailyFrom`, so the risk metrics still start 02.01.2026),
 `meta.daily_from`. Engine: `ctx.res`, `ctx.dailyFrom` (first daily index); series carry `dailyOff` (points before the daily
 data); `stats` computes totalReturn, CAGR, drawdown over every point and vol, Sharpe, VaR/CVaR, best/worst day,
 % positive days only over the daily returns (`riskFrom` = their first date, `n` = their count); `assets().vol`
@@ -52,7 +56,8 @@ index where the selected positions with a real quote make up ≥ share of the va
 `coverageStart(…, 0.9)` when it would begin earlier (headline note names the flat titles) – except MAX and a "Startjahr" (menu in the settings row: from the last close before 01.01. of the year to the last day, as a custom range), which show the whole span with titles flat before their first quote (user 30.09.), YTD begins at the previous year's
 last price, a preset target between month-end rows takes the nearer date. With history in the range the chart x-axis is by
 calendar time (`model.xs` = day numbers; > 800 days: year labels), hover labels read "30.06.2022 (Monatsschluss)", the
-interval note says "Intervall: 1 Tag · davor jeder 2. Handelstag, Monatsschluss bis Aug. 2025 (ab 02.01.2026 täglich)" and the
+interval note says "Intervall: 1 Tag · davor jeder 2. Handelstag, Monatsschluss bis Aug. 2025 (ab 02.01.2026 täglich)" (with `dh`
+rows: "davor Aktien täglich (Xetra-Schluss, finanzen.net), ETFs/ETPs Monatsschluss bzw. jeder 2. Handelstag …") and the
 Kennzahlen / Statistik subtitles say the risk metrics start at 02.01.2026.
 
 ## Engine API (`js/engine.js`, global `PFEngine`)

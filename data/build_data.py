@@ -28,7 +28,7 @@ with open(D/'prices_daily.csv', encoding='utf-8') as f:
 isins = head[3:]
 errors, warns = [], []
 # history before the daily data (update_prices.py --finish-history): prices_history.csv, date,res,<ISIN>… with res "m"
-# (month-end close) or "2d" (every 2nd trading day); prepended as final rows, res marks the resolution of every date
+# (month-end close), "2d" (every 2nd trading day) or "dh" (daily history from finanzen.net, import_history.py); prepended as final rows, res marks the resolution of every date
 hrows, hres = [], []
 if (D/'prices_history.csv').exists():
     with open(D/'prices_history.csv', encoding='utf-8') as f:
@@ -37,7 +37,7 @@ if (D/'prices_history.csv').exists():
         pos_h = {i: k for k, i in enumerate(hh)}
         for r in rd:
             if not r: continue
-            if r[1] not in ('m', '2d'): errors.append(f'prices_history.csv {r[0]}: bad res {r[1]!r}')
+            if r[1] not in ('m', '2d', 'dh'): errors.append(f'prices_history.csv {r[0]}: bad res {r[1]!r}')
             hres.append(r[1])
             hrows.append([r[0], 'final', ''] + [r[pos_h[i]] if i in pos_h and pos_h[i] < len(r) else '' for i in isins])
             if r[0] >= rows[0][0]: errors.append(f'prices_history.csv {r[0]}: not before the daily data ({rows[0][0]})')
