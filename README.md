@@ -11,11 +11,12 @@ packages.
 - **From a checkout:** open `dashboard.html` directly, or run `python -m http.server 8770` and open
   http://localhost:8770/dashboard.html.
 
-## The three jobs
+## What you can say
 | You say | What happens | Where |
 |---|---|---|
 | **"update"** (or "refresh", "Kurse aktualisieren") | Scalable quotes for all 108 series (30-min, 2-h, daily closes) → merge → rebuild → tests | Claude Code (needs the Scalable connector) |
 | **"update depot"** | reads your Scalable holdings + valuation (read-only) → `depot.csv`, `depot_ref.csv`, "Mein Depot" weights → rebuild → tests | Claude Code |
+| **"add benchmark asdf: microsoft 30 nvidia 40 palantir 30"**, **"change energie to ge vernova 20 vertiv 80"**, **"remove energie"**, "rename …", "list benchmarks" | edits the "+ Benchmark" menu presets (`data/benchmarks.py`; names are matched against the tracked instruments, weights must total 100 %) → rebuild → tests | Claude Code **or** Codex |
 | **"import transactions"** | takes the newest Scalable transaction export from your Downloads folder (or a file you attach) → `depot_transactions.csv` ("Depot-Historie") → rebuild → tests | Claude Code **or** Codex |
 
 Then say **"merge"**: the agent opens a pull request to `main` and merges it, and the live view shows it within a minute.
@@ -46,9 +47,9 @@ engine, tests and docs.
 | `dashboard.html`, `css/`, `js/` | the page (`js/engine.js` = all math, `js/charts.js`, `js/app.js` = UI) |
 | `data/*.csv` | inputs: prices, positions, depot, transactions, benchmarks, instruments |
 | `data/portfolio-data.js` | generated from the CSVs by `python data/build_data.py` |
-| `data/update_prices.py`, `update_depot.py`, `import_transactions.py` | the three jobs above |
+| `data/update_prices.py`, `update_depot.py`, `import_transactions.py`, `benchmarks.py` | the jobs above |
 | `data/source/` | archived raw fetches (history only) |
-| `.claude/` | Claude Code: hooks, the `update-quotes` skill, subagents |
+| `.claude/` | Claude Code: hooks, the skills `update-quotes` and `benchmarks`, the `price-fetcher` subagent |
 | `tests/` | `engine.test.cjs`, `crosscheck.py` + `crosscheck.cjs` |
 | `tools/` | `check.py`, live-view launchers, browser acceptance test |
 | `docs/` | `VERIFICATION.md`, `LOCAL_MAC.md`, reference images, test evidence |

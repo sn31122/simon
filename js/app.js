@@ -1189,7 +1189,7 @@
   }
   /** After a pick: on to the percent field of the same row. */
   function toPct(o) { if (o) focusCard(o.c.id, '[data-row="' + o.r.id + '"] .bb-pct', false, true); }
-  /** Below the field (above when there is more room there), at least 340 px wide, inside the window. */
+  /** Below the field (above when there is more room there), at least 340 px wide, up to 640 px tall (user 02.10.), inside the window. */
   function placeDrop() {
     if (!drop) return;
     var row = drop.inp.closest('.bb-row') || drop.inp, rr = row.getBoundingClientRect(), ir = drop.inp.getBoundingClientRect();
@@ -1199,7 +1199,7 @@
     var w = Math.min(Math.max(rr.width, 340), vw - 16), left = Math.max(8, Math.min(rr.left, vw - 8 - w));
     dropEl.style.width = w + 'px';
     dropEl.style.maxHeight = 'none';
-    var need = Math.min(dropEl.scrollHeight + dropEl.offsetHeight - dropEl.clientHeight, 320), below = vh - ir.bottom - 12;   // + borders
+    var need = Math.min(dropEl.scrollHeight + dropEl.offsetHeight - dropEl.clientHeight, 640), below = vh - ir.bottom - 12;   // + borders
     var above = ir.top - (bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0) - 12;
     var up = below < need && above > below, h = Math.max(96, Math.min(need, up ? above : below));
     dropEl.style.maxHeight = h + 'px';

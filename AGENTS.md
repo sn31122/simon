@@ -17,11 +17,12 @@ something is even slightly unclear. Reply in the user's language.
 5. Generated or derived files are committed, never edited by hand: `data/portfolio-data.js` (`python data/build_data.py`),
    `tests/reference.json` (`python tests/crosscheck.py`).
 
-## The three jobs
+## The jobs
 | User says | What runs | Who can do it |
 |---|---|---|
 | "update", "refresh", "new prices", "Kurse aktualisieren", "run UPDATE.md" | price update: `python data/update_prices.py --plan` → fetch → `--finish` (`UPDATE_PRICES.md`) | **Claude Code only**: needs the Scalable connector **and** the hook `.claude/hooks/save-chart.cjs`, which writes every chart answer to `data/incoming/` (nobody copies numbers) |
 | "update depot", "new holdings" | read `get_portfolio_holdings` + `get_portfolio_overview` (hook saves them) → `python data/update_depot.py` | Claude Code (connector + hook). Elsewhere only with the two JSON answers saved as files: `--holdings F --overview F` |
+| "add benchmark asdf: microsoft 30 nvidia 40", "change energie to …", "rename …", "remove energie", "list benchmarks" | `python data/benchmarks.py add / set / rename / remove / list …` (resolves names via `instruments.csv`, checks 100 %) | **any tool** (Claude Code: skill `benchmarks`) |
 | "import transactions", "new export", "historic csv" | `python data/import_transactions.py [FILE]` (default: newest Scalable export in `~/Downloads`) | **any tool**, also Codex on Windows; in a cloud session the user attaches the file |
 After any of them: report in 2–4 lines, commit on a branch, PR, merge on request.
 
@@ -33,7 +34,7 @@ to run "update" in Claude Code; everything else (UI, engine, tests, transaction 
 | Path | Role | Edit? |
 |---|---|---|
 | `data/positions.csv` | Yacht holdings: isin, name, short, group, shares, ref_date, ref_price, gv_ref, cost_basis (= shares·ref_price − gv_ref), note, optional logo | only on explicit user instruction |
-| `data/benchmarks.csv` | presets: id, name, holdings (`ISIN:20%|…` = 100 %; `transactions` = replay of `depot_transactions.csv`), description, start (`card` = shown at load: only `my_depot`; `menu` = "+ Benchmark" menu) | on user instruction; `my_depot` only via `update_depot.py`; every ISIN must be a price column |
+| `data/benchmarks.csv` | presets: id, name, holdings (`ISIN:20%|…` = 100 %; `transactions` = replay of `depot_transactions.csv`), description, start (`card` = shown at load: only `my_depot`; `menu` = "+ Benchmark" menu) | only via `benchmarks.py` (user instruction); `my_depot` only via `update_depot.py`; every ISIN must be a price column |
 | `data/depot.csv`, `data/depot_ref.csv` | real Scalable depot (`isin,name,shares`) + snapshot (`asof_utc,securities_value,total_value,gv_since_buy,source`) | only via `update_depot.py` |
 | `data/depot_transactions.csv` | Scalable transaction export (`;`, German decimals) → preset "Depot-Historie" (config `DEPOT_HISTORY` in `build_data.py`) | only via `import_transactions.py` |
 | `data/instruments.csv` | isin, name, short, type for **every** price column | a row per new column (before `--finish-add`) |

@@ -34,12 +34,15 @@ New: `tools/check.py` (session start for Claude Code and Codex), `data/update_de
 only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools/open-dashboard.bat` (use
 `yacht-live.bat`), `docs/verification/2026-09-27/` (superseded by 2026-09-29).
 
+## Changes 02.10.2026
+- `data/benchmarks.py` + skill `benchmarks`: "add benchmark asdf: microsoft 30 nvidia 40 palantir 30", "change energie to
+  ge vernova 20 vertiv 80", "rename …", "remove energie", "list benchmarks" (names resolved via `instruments.csv`, 100 % check,
+  rebuild + tests; Mein Depot / Depot-Historie protected).
+- Instrument search dropdown in the benchmark cards up to 640 px tall (was 320; still limited by the window).
+- Removed the predefined subagents `dashboard-designer` and `opus-engineer` (user: will ask personally when needed);
+  only `price-fetcher` remains. Merged branches and the Mac project branch were deleted by the user.
+
 ## Open points
-- Merged remote branches to delete on GitHub (sessions may not delete branches): claude/benchmark-breakdown,
-  claude/wizardly-dijkstra-2gmwtb, claude/yacht-card-stats-top, claude/zen-hawking-i3rv1t,
-  codex/import-yacht-folder-2026-09-29, codex/revert-yfinance-history, codex/yfinance-daily-history, test/add-test-file.
-  plus `claude/macos11-claude-desktop` (unrelated Mac/OCLP project; user 02.10.: delete). "Automatically delete head
-  branches" is on since 02.10. (applies to future merges only).
 - Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
 - With 2–3 benchmarks the band above the plot reserves hover space (deliberate). Beyond 5 custom cards the palette colours
   get close.
