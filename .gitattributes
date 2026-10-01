@@ -5,5 +5,9 @@
 *.py text eol=lf
 *.html text eol=lf
 *.css text eol=lf
+*.csv text eol=lf
+*.json text eol=lf
+*.command text eol=lf
 *.png binary
+*.jpg binary
 *.bat text eol=crlf

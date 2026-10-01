@@ -27,6 +27,7 @@
 #         python update_prices.py             writes prices_daily.csv + intraday*.csv, rebuilds, deletes the incoming files
 #         python update_prices.py --add-column ISIN[,ISIN]  (legacy) adds empty price columns before a plain run
 import csv, datetime, math, pathlib, re, subprocess, sys
+if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8', errors='replace')   # Windows consoles/pipes (cp1252)
 
 D = pathlib.Path(__file__).resolve().parent
 INC = D / 'incoming'

@@ -8,7 +8,7 @@ into the daily closes (`data/prices_daily.csv`), the 30-minute history (`data/in
 (`data/intraday_2h.csv`), and do all checks, tests and the HANDOFF status. Both histories keep every collected session.
 
 Shortcut: the skill `update-quotes` (`.claude/skills/update-quotes/SKILL.md`; the user says "update", "refresh",
-"check for new quotes", "Kurse aktualisieren" or "run UPDATE.md") runs the orchestrator steps below.
+"check for new quotes", "Kurse aktualisieren") runs the orchestrator steps below.
 
 ## The hook (writes the files)
 `.claude/settings.json` runs `.claude/hooks/save-chart.cjs` (Node, no dependencies) after every `get_security_chart` call,
