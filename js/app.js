@@ -666,11 +666,16 @@
     if (!el) return;
     if (!iv) { el.textContent = ''; return; }
     var why = iv.stepped && iv.skipped.length ? 'keine ' + (iv.skipped.length > 1 ? '30-Min- oder 2-Std-Kurse' : IV_KURSE[iv.skipped[0]]) + ' für diesen Zeitraum' : '';
-    if (iv.key === 'day' && !M.intra && M.R.start < (ctx.dailyFrom || 0)) {        // history in the range: coarser before 2026
-      var hasM = false, has2 = false, lastM = null;
-      for (var k = M.R.start; k < ctx.dailyFrom; k++) { if (ctx.res[k] === 'm') { hasM = true; lastM = ctx.dates[k]; } else has2 = true; }
-      why = 'davor ' + [has2 ? 'jeder 2. Handelstag' : '', hasM ? 'Monatsschluss' + (has2 && lastM ? ' bis ' + F.date(lastM, 'monthYear') : '') : '']
-        .filter(Boolean).join(', ') + ' (ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') + ' täglich)';
+    var scal = ctx.res ? ctx.res.indexOf('d') : -1;                            // first Scalable daily row (02.01.2026)
+    if (iv.key === 'day' && !M.intra && scal > 0 && M.R.start < scal) {          // history in the range (before 2026)
+      var hasM = false, has2 = false, hasDH = false, lastM = null;
+      for (var k = M.R.start; k < scal; k++) {
+        if (ctx.res[k] === 'm') { hasM = true; lastM = ctx.dates[k]; } else if (ctx.res[k] === 'dh') hasDH = true; else has2 = true;
+      }
+      if (hasDH) why = 'davor Tagesschluss Xetra (finanzen.net; einzelne Titel ohne diese Daten: Monatsschluss), ab ' +
+        F.date(ctx.dates[scal], 'short') + ' Scalable';             // daily history 2006–2025 (import_history.py)
+      else why = 'davor ' + [has2 ? 'jeder 2. Handelstag' : '', hasM ? 'Monatsschluss' + (has2 && lastM ? ' bis ' + F.date(lastM, 'monthYear') : '') : '']
+        .filter(Boolean).join(', ') + ' (ab ' + F.date(ctx.dates[scal], 'short') + ' täglich)';
     }
     el.innerHTML = 'Intervall: <b>' + esc(IV_SHORT[iv.key]) + '</b>' + (why ? '<span class="chart-iv-why"> · ' + esc(why) + '</span>' : '');
     var have = ['m30', 'h2'].map(function (k) {
@@ -1189,7 +1194,7 @@
   }
   /** After a pick: on to the percent field of the same row. */
   function toPct(o) { if (o) focusCard(o.c.id, '[data-row="' + o.r.id + '"] .bb-pct', false, true); }
-  /** Below the field (above when there is more room there), at least 340 px wide, inside the window. */
+  /** Below the field (above when there is more room there), at least 340 px wide, up to 640 px tall (user 02.10.), inside the window. */
   function placeDrop() {
     if (!drop) return;
     var row = drop.inp.closest('.bb-row') || drop.inp, rr = row.getBoundingClientRect(), ir = drop.inp.getBoundingClientRect();
@@ -1199,7 +1204,7 @@
     var w = Math.min(Math.max(rr.width, 340), vw - 16), left = Math.max(8, Math.min(rr.left, vw - 8 - w));
     dropEl.style.width = w + 'px';
     dropEl.style.maxHeight = 'none';
-    var need = Math.min(dropEl.scrollHeight + dropEl.offsetHeight - dropEl.clientHeight, 320), below = vh - ir.bottom - 12;   // + borders
+    var need = Math.min(dropEl.scrollHeight + dropEl.offsetHeight - dropEl.clientHeight, 640), below = vh - ir.bottom - 12;   // + borders
     var above = ir.top - (bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0) - 12;
     var up = below < need && above > below, h = Math.max(96, Math.min(need, up ? above : below));
     dropEl.style.maxHeight = h + 'px';

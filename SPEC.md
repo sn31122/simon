@@ -42,7 +42,11 @@ Real data (29.09.2026): 32 Yacht positions, 106 tracked price series (32 Yacht i
 ## History before the daily data (user 28.09.2026)
 `data/prices_history.csv` (`date,res,<ISIN>…`): `m` = month-end close from `max` (~2016 … Aug 2025, one row per month dated on
 the month's latest point; an instrument's missing month is forward-filled), `2d` = every 2nd trading day from `one_year`
-(29.09.–29.12.2025). `build_data.py` prepends the rows (status final) and writes `data.res` per date (`'m' | '2d' | 'd'`),
+(29.09.–29.12.2025), `dh` = daily history (user 02.10.2026): Xetra closes (gaps from Frankfurt/gettex/Tradegate/Stuttgart)
+from finanzen.net, 03.10.2006 … 31.12.2025, for 99 of 108 series (`data/import_history.py` → `data/prices_history_daily.csv`,
+merged into this file; the 9 others keep their Scalable `m`/`2d` points on `dh` dates and are forward-filled).
+`build_data.py` prepends the rows (status final) and writes `data.res` per date (`'m' | '2d' | 'dh' | 'd'`; `dailyFrom` = first index from which every date is `'d'` or
+`'dh'` – since 02.10.2026 index 0, so the risk metrics use exactly the selected range, back to 2006),
 `meta.daily_from`. Engine: `ctx.res`, `ctx.dailyFrom` (first daily index); series carry `dailyOff` (points before the daily
 data); `stats` computes totalReturn, CAGR, drawdown over every point and vol, Sharpe, VaR/CVaR, best/worst day,
 % positive days only over the daily returns (`riskFrom` = their first date, `n` = their count); `assets().vol`
@@ -52,8 +56,11 @@ index where the selected positions with a real quote make up ≥ share of the va
 `coverageStart(…, 0.9)` when it would begin earlier (headline note names the flat titles) – except MAX and a "Startjahr" (menu in the settings row: from the last close before 01.01. of the year to the last day, as a custom range), which show the whole span with titles flat before their first quote (user 30.09.), YTD begins at the previous year's
 last price, a preset target between month-end rows takes the nearer date. With history in the range the chart x-axis is by
 calendar time (`model.xs` = day numbers; > 800 days: year labels), hover labels read "30.06.2022 (Monatsschluss)", the
-interval note says "Intervall: 1 Tag · davor jeder 2. Handelstag, Monatsschluss bis Aug. 2025 (ab 02.01.2026 täglich)" and the
-Kennzahlen / Statistik subtitles say the risk metrics start at 02.01.2026.
+interval note says "Intervall: 1 Tag · davor jeder 2. Handelstag, Monatsschluss bis Aug. 2025 (ab 02.01.2026 täglich)" (with `dh`
+rows: "davor Tagesschluss Xetra (finanzen.net; einzelne Titel ohne diese Daten: Monatsschluss), ab 02.01.2026 Scalable") and the
+Kennzahlen / Statistik subtitles say when the risk metrics start later than the range (only with `m`/`2d` rows before
+`dailyFrom`; none since 02.10.2026). Series without daily history (9 of 108) are forward-filled between their month-end
+points, so their own daily returns before 2026 are zero except at month-ends.
 
 ## Engine API (`js/engine.js`, global `PFEngine`)
 

@@ -15,8 +15,9 @@ branches reach `main` via pull request (protocol: `AGENTS.md`).
 - Depot-Historie replays `depot_transactions.csv` (Scalable export of 02.10.2026 00:10, imported with
   `import_transactions.py`: 240 rows 02.12.2025 … 01.10.2026, incl. the four Coherent buys of 30.09.); its replay ends exactly
   at `depot.csv`.
-- Presets: "Mein Depot" card at load; menu: Energie, Old portfolio, Situational Awareness (SharonAI not on Scalable, its
-  weight went to SanDisk/Micron), Memory, Depot-Historie. The page opens on 1T.
+- Presets: "Mein Depot" card at load; menu: Altes Depot (renamed from Old portfolio 02.10.), Situational Awareness (SharonAI not on Scalable, its
+  weight went to SanDisk/Micron), Memory, Depot-Historie (Energie removed 02.10.; its weights live on as a fixed
+  case in `tests/crosscheck.py`). The page opens on 1T.
 - Page (30.09.): card "Yacht-Portfolio" first among the benchmark cards (show/hide only); "Statistik" above the range tabs
   with Start/Ende columns; period pills fixed right of the page (≥ 1500 px), else a slim sticky bar; totals ≠ 100 % are drawn
   as absolute amounts; "Benchmark-Positionen" (off by default) shows P&L per holding of every shown benchmark; MAX = whole
@@ -34,12 +35,28 @@ New: `tools/check.py` (session start for Claude Code and Codex), `data/update_de
 only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools/open-dashboard.bat` (use
 `yacht-live.bat`), `docs/verification/2026-09-27/` (superseded by 2026-09-29).
 
+## Changes 02.10.2026
+- `data/benchmarks.py` + skill `benchmarks`: "add benchmark asdf: microsoft 30 nvidia 40 palantir 30", "change energie to
+  ge vernova 20 vertiv 80", "rename …", "remove energie", "list benchmarks" (names resolved via `instruments.csv`, 100 % check,
+  rebuild + tests; Mein Depot / Depot-Historie protected).
+- Instrument search dropdown in the benchmark cards up to 640 px tall (was 320; still limited by the window).
+- Removed the predefined subagents `dashboard-designer` and `opus-engineer` (user: will ask personally when needed);
+  only `price-fetcher` remains. Merged branches and the Mac project branch were deleted by the user.
+
+- Daily history before 2026 (user 02.10.; `data/import_history.py`): 99 of 108 series (65 stocks, 34 ETFs/ETCs/ETPs) have
+  daily closes from finanzen.net, Xetra first (gaps from Frankfurt/gettex/Tradegate/Stuttgart), 03.10.2006 (the site serves
+  only 20 years; the user asked for 1995) or their listing … 30.12.2025, merged into `prices_history.csv` as `dh` rows (4,897
+  dates). ETFs come from the POST the page makes (`/ajax/FundController_HistoricPriceList[Redesign]/…`, whole period in one
+  answer). Bad one-/two-day prints dropped (e.g. Eli Lilly 0.25 € on 14.11.2008); every series checked against the Scalable
+  history (ETFs median |dev| 0.2–0.6 %, stocks 0.3–2.2 %: Xetra closes 17:30 vs. gettex 22:00; leveraged ETPs ×3).
+  Without daily history (Scalable month-end kept): Western Digital (bad data, ~30 % off before the SanDisk spin-off),
+  Applied Optoelectronics, Astera Labs (refused: too noisy), Eaton, Keel, SanDisk (USD only), Alphabet 2x (no page),
+  SpaceX and Memory 3x (listed 2026). Risk metrics (vol, Sharpe, VaR …) use the selected range
+  incl. the daily history (user 02.10.; `dailyFrom` = 0). Sizes: `prices_history.csv` ~2 MB,
+  `prices_history_daily.csv` ~1.8 MB, `portfolio-data.js` 3.6 MB (was 0.7).
+
 ## Open points
-- Merged remote branches to delete on GitHub (sessions may not delete branches): claude/benchmark-breakdown,
-  claude/wizardly-dijkstra-2gmwtb, claude/yacht-card-stats-top, claude/zen-hawking-i3rv1t,
-  codex/import-yacht-folder-2026-09-29, codex/revert-yfinance-history, codex/yfinance-daily-history, test/add-test-file.
-  plus `claude/macos11-claude-desktop` (unrelated Mac/OCLP project; user 02.10.: delete). "Automatically delete head
-  branches" is on since 02.10. (applies to future merges only).
+- Riot US7672921050: −74 % on 21.01.2009 (FSE only, before Scalable's history; then AspenBio, not a miner) – unverified.
 - Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
 - With 2–3 benchmarks the band above the plot reserves hover space (deliberate). Beyond 5 custom cards the palette colours
   get close.

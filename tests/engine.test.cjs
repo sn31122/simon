@@ -784,6 +784,22 @@ test('schedule benchmark: holdings changing over time, flat before the first ste
   approxArr(s2.value, [139, 120], 1e-12, 'range start inside the schedule');
 });
 
+test('daily history rows (res dh) count as daily: risk metrics over the whole selected range', () => {
+  const dates = ['2025-10-31', '2025-12-29', '2025-12-30', '2026-01-02', '2026-01-05'];
+  const A = [100, 90, 99, 108.9, 98.01];
+  const d = dataOf(dates, { prices: { A }, positions: [{ isin: 'A', name: 'A', short: 'A', group: 'G1', shares: 1, cost_basis: 1 }] });
+  d.res = ['m', 'dh', 'dh', 'd', 'd'];
+  const c = E.prepare(d);
+  assert.strictEqual(c.dailyFrom, 1, 'after the last month-end row');
+  const st = E.stats(E.portfolio(c, { start: 1, end: 4 }), { rf: 0 });
+  assert.strictEqual(st.n, 3); assert.strictEqual(st.riskFrom, null);
+  approx(st.volAnn, sdRef([0.1, 0.1, -0.1]) * S252, 1e-12, 'vol over the selected range incl. dh');
+  const s2 = E.stats(E.portfolio(c, { start: 3, end: 4 }), { rf: 0 });
+  assert.strictEqual(s2.n, 1, 'only the selected range');
+  d.res = ['dh', 'dh', 'dh', 'd', 'd'];
+  assert.strictEqual(E.prepare(d).dailyFrom, 0);
+});
+
 test('prepare without res: everything counts as daily (dailyFrom 0)', () => {
   const c = ctxOf(['2026-03-02', '2026-03-03']);
   assert.strictEqual(c.dailyFrom, 0); assert.deepStrictEqual(c.res, ['d', 'd']);

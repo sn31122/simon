@@ -27,7 +27,10 @@ BENCH = {
     'depot_qty': ('holdings', DEPOT_QTY),
     'mix_w': ('weights', {'IE00B4L5Y983': 40.0, 'FR0010342592': 35.0, 'US5951121038': 25.0}),
     'spacex_w': ('weights', {'US84615Q1031': 50.0, 'IE00B53SZB19': 50.0}),     # SpaceX quoted from 12.06. (flat before)
-    'energie': presets['energie'],                                               # weighting preset of benchmarks.csv
+    # the former Energie preset (removed from benchmarks.csv 02.10.2026), kept here as a fixed 11-stock weighting case
+    'energie': ('weights', {'US36828A1016': 20.0, 'US92537N1081': 12.0, 'US21037T1097': 12.0, 'US0937121079': 11.0,
+                            'US0255371017': 10.0, 'US92840M1027': 8.0, 'US2333311072': 6.0, 'US3379321074': 6.0,
+                            'US6293775085': 6.0, 'US1258961002': 6.0, 'US83418M1036': 3.0}),
 }
 rows = list(csv.reader(open(R/'data/prices_daily.csv', encoding='utf-8')))
 head, rows = rows[0], rows[1:]
@@ -40,8 +43,10 @@ if (R/'data/prices_history.csv').exists():
     hpos = {i: k for k, i in enumerate(hr[0])}
     hist = [[r[0], 'final', ''] + [r[hpos[i]] if i in hpos else '' for i in head[3:]] for r in hr[1:] if r]
 rows = hist + rows
-DAILY = len(hist)                                  # first daily index
+DAILY = len(hist)                                  # first row of prices_daily.csv
 RES = [r[1] for r in hr[1:] if r] + ['d'] * (len(rows) - DAILY) if hist else ['d'] * len(rows)
+RISK = len(RES)                                    # first index from which every date is daily ('d' or 'dh', user 02.10.)
+while RISK > 0 and RES[RISK - 1] in ('d', 'dh'): RISK -= 1
 dates, status = [r[0] for r in rows], [r[1] for r in rows]
 n = len(dates)
 
@@ -150,7 +155,7 @@ for c in cases:
     scale = c['startValue'] / raw[0] if c['startValue'] else 1.0
     v = [x * scale for x in raw]
     ds = dates[s:e + 1]
-    off = min(max(0, DAILY - s), e - s)
+    off = min(max(0, RISK - s), e - s)
     res = dict(name=c['name'], isins=sorted(c['hold']), start=s, end=e, startDate=ds[0], endDate=ds[-1],
                startValueInput=c['startValue'], scale=scale, stats=stats(v, ds, off=off), bench={}, contrib_sum=None)
     for b in c['bench']:
@@ -167,7 +172,7 @@ def coverage(hold, share=0.9):
     for i in sorted(hold, key=lambda i: fq[i]):
         c += val[i]
         if c >= share * V - 1e-9: return fq[i]
-out['coverage'] = dict(all_90=coverage(ALL), semis_90=coverage(SEMI), all_50=coverage(ALL, 0.5), daily_from=DAILY)
+out['coverage'] = dict(all_90=coverage(ALL), semis_90=coverage(SEMI), all_50=coverage(ALL, 0.5), daily_from=RISK)
 
 # --- withShares ---
 
@@ -175,7 +180,7 @@ WHATIF = {'US5951121038': 0.0, 'AT0000969985': 100.0, 'US4581401001': 500.0}
 wi_hold = {i: WHATIF.get(i, q) for i, q in ALL.items()}
 v = raw_value(wi_hold, 0, n - 1)
 cb = {p['isin']: float(p['cost_basis']) * (WHATIF[p['isin']] / float(p['shares'])) for p in pos if p['isin'] in WHATIF}
-out['whatif'] = dict(overrides=WHATIF, stats=stats(v, dates, off=DAILY),
+out['whatif'] = dict(overrides=WHATIF, stats=stats(v, dates, off=RISK),
                      cost_basis=cb, gl_since_buy={i: WHATIF[i] * px[i][n - 1] - cb[i] for i in WHATIF})
 print('whatif MAX: TR %+.2f%%  end %.2f' % (out['whatif']['stats']['totalReturn'] * 100, out['whatif']['stats']['endValue']))
 # ---- sub-daily grids (chart interval: 1T/1W 30 min, 1M 2 h, custom by length), straight from data/intraday.csv and

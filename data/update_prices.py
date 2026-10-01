@@ -337,7 +337,14 @@ def add_history(new):
     with open(HIST, 'w', encoding='utf-8', newline='') as f:
         w = csv.writer(f); w.writerow(['date', 'res'] + head[3:])
         for d in sorted(table): w.writerow([d, table[d]['res']] + [table[d].get(i, '') for i in head[3:]])
+    remerge_daily_history()
     return f'prices_history.csv: {n} history points of {len(new)} new ISIN(s) merged ({len(table)} rows)'
+
+
+def remerge_daily_history():
+    """Daily closes before 2026 (prices_history_daily.csv, finanzen.net) win over Scalable's month-end / 2nd-day points."""
+    if (D/'prices_history_daily.csv').exists():
+        run_cmd([sys.executable, str(D/'import_history.py'), '--merge', '--no-build'])
 
 
 if '--plan-add' in sys.argv:
@@ -519,6 +526,7 @@ if '--finish-history' in sys.argv:
         for d in sorted(hist):
             res, v = hist[d]
             w.writerow([d, res] + ['%.10g' % v[i] if i in v else '' for i in head[3:]])
+    remerge_daily_history()
     nm, n2 = sum(1 for v in hist.values() if v[0] == 'm'), sum(1 for v in hist.values() if v[0] == '2d')
     firsts = sorted((min(d for d, v in hist.items() if i in v[1]), i) for i in head[3:] if any(i in v[1] for v in hist.values()))
     print(f'prices_history.csv: {len(hist)} rows {min(hist)} .. {max(hist)} ({nm} month-end + {n2} every-2nd-day rows) for '

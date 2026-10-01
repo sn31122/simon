@@ -17,28 +17,32 @@ something is even slightly unclear. Reply in the user's language.
 5. Generated or derived files are committed, never edited by hand: `data/portfolio-data.js` (`python data/build_data.py`),
    `tests/reference.json` (`python tests/crosscheck.py`).
 
-## The three jobs
+## The jobs
 | User says | What runs | Who can do it |
 |---|---|---|
 | "update", "refresh", "new prices", "Kurse aktualisieren", "run UPDATE.md" | price update: `python data/update_prices.py --plan` → fetch → `--finish` (`UPDATE_PRICES.md`) | **Claude Code only**: needs the Scalable connector **and** the hook `.claude/hooks/save-chart.cjs`, which writes every chart answer to `data/incoming/` (nobody copies numbers) |
 | "update depot", "new holdings" | read `get_portfolio_holdings` + `get_portfolio_overview` (hook saves them) → `python data/update_depot.py` | Claude Code (connector + hook). Elsewhere only with the two JSON answers saved as files: `--holdings F --overview F` |
+| "add benchmark asdf: microsoft 30 nvidia 40", "change energie to …", "rename …", "remove energie", "list benchmarks" | `python data/benchmarks.py add / set / rename / remove / list …` (resolves names via `instruments.csv`, checks 100 %) | **any tool** (Claude Code: skill `benchmarks`) |
+| "import price history", "history for <ISIN>" (one-time, before 2026) | `python data/import_history.py --fetch [ISIN,…]` (stocks, ETFs, ETCs, ETPs; finanzen.net, Xetra first, from 20 years back – the site's limit; fallback: a CSV exported by hand → `--import FILE --isin ISIN`). Checked against the Scalable history, merged into `prices_history.csv` as `dh` rows | **any tool** (plain HTTP, no connector). The only non-Scalable price source allowed (user 02.10.2026), and only for dates ≤ 31.12.2025 |
 | "import transactions", "new export", "historic csv" | `python data/import_transactions.py [FILE]` (default: newest Scalable export in `~/Downloads`) | **any tool**, also Codex on Windows; in a cloud session the user attaches the file |
 After any of them: report in 2–4 lines, commit on a branch, PR, merge on request.
 
 **Codex (or any agent without the Claude hook):** never fetch prices by reading chart JSON and typing numbers into files,
-and never pull prices from other sources (yfinance etc. was tried and reverted on 30.09.). If prices are stale, tell the user
+and never pull prices from other sources (yfinance etc. was tried and reverted on 30.09.) – except the one-time daily
+history before 2026 via `data/import_history.py` (finanzen.net, user 02.10.2026). If prices are stale, tell the user
 to run "update" in Claude Code; everything else (UI, engine, tests, transaction import, docs) works the same in both tools.
 
 ## Files
 | Path | Role | Edit? |
 |---|---|---|
 | `data/positions.csv` | Yacht holdings: isin, name, short, group, shares, ref_date, ref_price, gv_ref, cost_basis (= shares·ref_price − gv_ref), note, optional logo | only on explicit user instruction |
-| `data/benchmarks.csv` | presets: id, name, holdings (`ISIN:20%|…` = 100 %; `transactions` = replay of `depot_transactions.csv`), description, start (`card` = shown at load: only `my_depot`; `menu` = "+ Benchmark" menu) | on user instruction; `my_depot` only via `update_depot.py`; every ISIN must be a price column |
+| `data/benchmarks.csv` | presets: id, name, holdings (`ISIN:20%|…` = 100 %; `transactions` = replay of `depot_transactions.csv`), description, start (`card` = shown at load: only `my_depot`; `menu` = "+ Benchmark" menu) | only via `benchmarks.py` (user instruction); `my_depot` only via `update_depot.py`; every ISIN must be a price column |
 | `data/depot.csv`, `data/depot_ref.csv` | real Scalable depot (`isin,name,shares`) + snapshot (`asof_utc,securities_value,total_value,gv_since_buy,source`) | only via `update_depot.py` |
 | `data/depot_transactions.csv` | Scalable transaction export (`;`, German decimals) → preset "Depot-Historie" (config `DEPOT_HISTORY` in `build_data.py`) | only via `import_transactions.py` |
 | `data/instruments.csv` | isin, name, short, type for **every** price column | a row per new column (before `--finish-add`) |
 | `data/prices_daily.csv` | `date,status,asof_utc,<ISIN>…`, EUR close per trading day; only the last row may be `intraday` | only via `update_prices.py` |
-| `data/prices_history.csv` | `date,res,<ISIN>…` before 2026: `m` month-end (~2016–Aug 2025), `2d` every 2nd day (29.09.–29.12.2025) | only via `--finish-history` / `--finish-add` |
+| `data/prices_history.csv` | `date,res,<ISIN>…` before 2026: `dh` daily (99 of 108 series, Xetra via finanzen.net, from 03.10.2006), `m` month-end (~2016–Aug 2025), `2d` every 2nd day (29.09.–29.12.2025) | only via `--finish-history` / `--finish-add` / `import_history.py` |
+| `data/prices_history_daily.csv`, `data/history_sources.csv` | daily closes ≤ 31.12.2025 from finanzen.net (source of the `dh` rows) + per-ISIN slug / exchange counts | only via `import_history.py` |
 | `data/intraday.csv`, `data/intraday_2h.csv` | `isin,timestamp_utc,price`: 30-min / 2-h points of every session, kept forever | only via `update_prices.py` |
 | `data/incoming/` | files written by the hooks (`<ISIN>.csv`, `2h/`, `3m/`, `ytd/`, `1y/`, `max/`, `depot/`); git-ignored | only by the hooks |
 | `.claude/hooks/save-chart.cjs`, `save-portfolio.cjs` (+ `.claude/settings.json`) | PostToolUse hooks: save each chart / depot answer | change together with the scripts |
@@ -75,7 +79,7 @@ Nov 2024 (not splits – the `CHECK WITH USER` lines for them need no action).
 ## Model conventions (details: SPEC.md)
 - Backcast with constant share counts, price return in EUR, no dividends; forward-fill gaps, flat at the first quote before it.
 - History before 2026 is prepended (`res` per date, `ctx.dailyFrom`); chart, Rendite, p.a., Max. DD use all points, risk
-  metrics only daily returns. Long ranges start where ≥ 90 % of today's value has quotes (`coverageStart`), except MAX and
+  metrics only daily returns (`d` + `dh` rows; since 02.10.2026 the whole selected range). Long ranges start where ≥ 90 % of today's value has quotes (`coverageStart`), except MAX and
   a "Startjahr" (whole span, titles without quotes flat). YTD starts at the previous year's last price.
 - Benchmark cards `{weights: {ISIN: %}}` (or `schedule` for Depot-Historie): bought at the range start, buy and hold,
   normalized to the start value; a total ≠ 100 % counts as absolute amounts (110 % = 1,1 × start value); new rows: first
