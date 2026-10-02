@@ -1,4 +1,5 @@
-# Updates the real Scalable depot ("update depot"): depot.csv (isin,name,shares), depot_ref.csv (Scalable snapshot) and the
+# Updates the real Scalable depot ("update depot"; also after every price update): depot.csv (isin,name,shares),
+# depot_ref.csv (Scalable snapshot: securities value, total, G/V per period = what the "Mein Depot" block shows) and the
 # weights of the "Mein Depot" card (benchmarks.csv row my_depot = shares x latest final close), then rebuilds + runs the tests.
 #
 # Input: the raw answers of the read-only Scalable tools get_portfolio_holdings and get_portfolio_overview, saved by the
@@ -9,7 +10,7 @@
 #         python data/update_depot.py --dry-run  only print what would change
 # Checks: every held ISIN must be a price column (else: add it as a new instrument first, UPDATE_PRICES.md); the sum of
 # shares x Scalable quote must match the overview's securities value within 0.5 %.
-import csv, io, json, pathlib, subprocess, sys
+import csv, io, json, pathlib, re, subprocess, sys
 
 if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 D = pathlib.Path(__file__).resolve().parent
@@ -54,7 +55,11 @@ crypto = [c['ticker'] for c in hold.get('cryptoHoldings', []) if (c.get('positio
 if crypto: errors.append(f'crypto holdings are not supported by the dashboard: {crypto}')
 val = over.get('valuation') or {}
 sec, tot = val.get('securities'), val.get('total')
-gv = next((p['simpleAbsoluteReturn'] for p in over.get('performance', []) if p.get('timeframe') == 'MAX'), None)
+perf = {p.get('timeframe'): p.get('simpleAbsoluteReturn') for p in over.get('performance', [])}
+gv = perf.get('MAX')
+# Scalable's own € result per period (user 02.10.2026: the "Mein Depot" block shows these, never a recomputation)
+PERIODS = [('pl_1t', 'INTRADAY'), ('pl_1w', 'ONE_WEEK'), ('pl_1m', 'ONE_MONTH'), ('pl_3m', 'THREE_MONTHS'),
+           ('pl_6m', 'SIX_MONTHS'), ('pl_ytd', 'YEAR_TO_DATE'), ('pl_1j', 'ONE_YEAR')]
 if sec is None or gv is None: errors.append('overview.json lacks valuation.securities or the MAX performance')
 if hold.get('portfolioId') != over.get('portfolioId'): errors.append('holdings and overview belong to different portfolios')
 if errors:
@@ -75,12 +80,13 @@ depot_csv = buf.getvalue()
 
 # depot_ref.csv
 asof = (over.get('timestamps') or {}).get('valuationTimestampUtc', '')
-asof = asof.replace('.000Z', 'Z')
+asof = re.sub(r'\.\d+Z$', 'Z', asof)                     # 2026-10-02T10:18:00.147Z -> …:00Z
 buf = io.StringIO(); w = csv.writer(buf, lineterminator='\n')
-w.writerow(['asof_utc', 'securities_value', 'total_value', 'gv_since_buy', 'source'])
-w.writerow([asof, f'{sec:.2f}', f'{tot:.2f}' if tot is not None else '', f'{gv:.2f}',
-            f'Scalable get_portfolio_holdings + get_portfolio_overview (valuation.securities / valuation.total / performance '
-            f'MAX simpleAbsoluteReturn), saved {(saved or asof)[:16]}Z by data/update_depot.py'])
+w.writerow(['asof_utc', 'securities_value', 'total_value', 'gv_since_buy'] + [c for c, _ in PERIODS] + ['source'])
+w.writerow([asof, f'{sec:.2f}', f'{tot:.2f}' if tot is not None else '', f'{gv:.2f}'] +
+           [f'{perf[t]:.2f}' if isinstance(perf.get(t), (int, float)) else '' for _, t in PERIODS] +
+           [f'Scalable get_portfolio_holdings + get_portfolio_overview (valuation.securities / valuation.total / performance '
+            f'simpleAbsoluteReturn MAX, INTRADAY … ONE_YEAR), saved {(saved or asof)[:16]}Z by data/update_depot.py'])
 ref_csv = buf.getvalue()
 
 # benchmarks.csv: my_depot weights = shares x latest final close (3 decimals, rounding rest on the largest weight)
@@ -110,6 +116,7 @@ bench_csv = '\n'.join(out) + '\n'
 
 print(f'DEPOT {asof}: securities {sec:,.2f} EUR, total {tot:,.2f} EUR, G/V seit Kauf {gv:,.2f} EUR '
       f'(shares x quote {quoted:,.2f} EUR)')
+print('  Scalable G/V: ' + ', '.join(f"{c[3:].upper()} {perf[t]:+,.2f}" for c, t in PERIODS if isinstance(perf.get(t), (int, float))))
 for i in dict.fromkeys(list(old) + list(new)):
     a, b = old.get(i, 0), new.get(i, 0)
     name = next((h['name'] for h in held if h['isin'] == i), i)

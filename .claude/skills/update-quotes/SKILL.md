@@ -1,7 +1,7 @@
 ---
 name: update-quotes
 description: Fetches the latest Scalable quotes for every instrument of the yacht dashboard (30-min + 2-h + daily closes), merges them, rebuilds the page data and runs the tests. Use whenever the user says "update", "refresh", "check for new quotes", "new prices", "Kurse aktualisieren", "aktualisieren", or asks to run UPDATE.md / update-quotes.
-allowed-tools: Bash(python data/update_prices.py:*), Bash(python3 data/update_prices.py:*), Agent
+allowed-tools: Bash(python data/update_prices.py:*), Bash(python3 data/update_prices.py:*), Bash(python data/update_depot.py:*), Bash(python3 data/update_depot.py:*), Agent, mcp__Scalable_Capital__get_portfolio_holdings, mcp__Scalable_Capital__get_portfolio_overview
 ---
 # Update quotes (one command)
 
@@ -21,6 +21,9 @@ Use `python` (Windows) or `python3` where `python` is missing. Read-only Scalabl
    - `FETCH AGAIN …` → start the printed prompt the same way, then `--finish` again (at most 2 rounds per ISIN, then show
      the reason lines to the user).
    - `STOP: …` or `CHECK WITH USER: …` → show those lines to the user and change nothing else.
-4. **Report** in the user's language, 2–4 lines: the `== REPORT ==` lines (last price date, 30-min / 2-h coverage,
-   tests), anything that needs the user, and "reload the dashboard (Ctrl+F5)". Skip `note:` lines and known warnings.
+4. **Depot snapshot** (user 02.10.2026: "Mein Depot" at the top must always show the real value and G/V from Scalable):
+   call `get_portfolio_holdings` and `get_portfolio_overview` (`includeYearToDate: true`, no `portfolioId`; the hook saves
+   both), then `python data/update_depot.py`. `STOP: …` → show the line to the user.
+5. **Report** in the user's language, 2–4 lines: the `== REPORT ==` lines (last price date, 30-min / 2-h coverage,
+   tests), the `DEPOT` line (Scalable value, G/V seit Kauf), anything that needs the user, and "reload the dashboard (Ctrl+F5)". Skip `note:` lines and known warnings.
    Do not commit unless the user asks.

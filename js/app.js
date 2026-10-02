@@ -1814,33 +1814,42 @@
   }
 
   /**
-   * "Mein Depot" beside the Yacht at the top: the real Scalable depot (engine.depotNow / depotChange). Its change follows
-   * the period like the Yacht block (1T = since the previous close, 1M = over the month …; the depot's current share
-   * counts valued at the start and end of the range); "Seit Kauf" = G/V seit Kauf from the Scalable snapshot.
+   * "Mein Depot" beside the Yacht at the top (user 02.10.): value and G/V exactly as Scalable reports them (engine.depotNow /
+   * depotPeriod = the snapshot of depot_ref.csv, refreshed with every price update), never recomputed from our quotes.
+   * Scalable gives a € result for 1T … 1J and seit Kauf; MAX and a Startjahr before the depot opened = seit Kauf, Startjahr
+   * of the current year = YTD; only a free Von/Bis range has no Scalable figure and falls back to today's share counts
+   * valued at the range start and end (engine.depotChange), marked in the tooltip.
    */
+  function depotPeriodKey(H) {
+    if (H.hp !== 'CUSTOM') return H.hp;
+    if (state.startYear == null) return null;
+    var d = E.depotNow(ctx0), y = +ctx.dates[ctx.n - 1].slice(0, 4);
+    if (state.startYear === y) return 'YTD';
+    return d && d.opened && ctx.dates[H.R.start] <= d.opened ? 'MAX' : null;
+  }
   function renderDepotBlock(H, label) {
     var d = E.depotNow ? E.depotNow(ctx0) : null, box = $('ovDepot');
     box.hidden = !d;
     if (!d) return;
-    var R = H.R, ch = !H.sk && E.depotChange ? E.depotChange(ctx0, { start: R.start, end: R.end }) : null;
-    $('depotTotal').innerHTML = bigValueHTML(ch ? ch.endValue : d.value);
-    var asof = d.asof ? F.date(d.asof.slice(0, 10), 'short') : '';
-    var cash = isNum(d.refTotal) && isNum(d.refValue) ? ' (Scalable gesamt inkl. Guthaben ' + eur(d.refTotal, { dec: 0 }) +
-      (asof ? ' am ' + asof : '') + ')' : '';
-    var chgEur, per, tip;
-    if (ch) {
+    var R = H.R, key = depotPeriodKey(H), sp = key ? E.depotPeriod(ctx0, key) : null;
+    var ch = !sp && !H.sk && E.depotChange ? E.depotChange(ctx0, { start: R.start, end: R.end }) : null;
+    $('depotTotal').innerHTML = bigValueHTML(d.value);
+    var stand = d.asof ? F.date(d.asof.slice(0, 10), 'dayMonthShort') + ' ' + F.asofBerlin(d.asof) : '';
+    $('depotStand').textContent = stand ? 'Scalable · Stand ' + stand : 'Scalable';
+    var cash = isNum(d.total) ? ' · Scalable gesamt inkl. Guthaben ' + eur(d.total, { dec: 0 }) : '';
+    var src = 'Wert = Wertpapiere laut Scalable' + (stand ? ' (Stand ' + stand + ')' : '') + cash;
+    var chgEur = null, per = label, tip;
+    if (sp) {
+      chgEur = sp.pl;
+      if (key === 'SK' || key === 'MAX') per = 'seit Kauf';
+      tip = (key === 'SK' || key === 'MAX' ? pct(d.glPct) + ' gegenüber Einstand ' + eur(d.costBasis, { dec: 0 }) + ' · G/V seit Kauf'
+        : '≈ ' + pct(sp.ret) + ' · G/V „' + label + '“') + ' laut Scalable · ' + src;
+    } else if (ch) {
       chgEur = ch.pl;
-      per = label;
-      tip = pct(ch.ret) + ' · Wertänderung deines Scalable-Depots im Zeitraum ' + periodText(R) +
-        (ctx0.status[R.end] === 'intraday' ? ' (intraday' + (ASOF ? ' ' + ASOF : '') + ')' : '') +
-        ': heutige Stückzahlen × Kurse (' + eur(ch.startValue) + ' → ' + eur(ch.endValue) + '), Käufe/Verkäufe im Zeitraum nicht berücksichtigt' +
-        ' · G/V seit Kauf ' + eurS(d.gl) + ' · nur Wertpapiere' + cash;
+      tip = pct(ch.ret) + ' · für einen eigenen Zeitraum liefert Scalable keinen Wert: berechnet aus heutigen Stückzahlen × Kursen ' +
+        periodText(R) + ' (' + eur(ch.startValue) + ' → ' + eur(ch.endValue) + '), Käufe/Verkäufe im Zeitraum nicht berücksichtigt · ' + src;
     } else {
-      chgEur = d.gl;
-      per = 'seit Kauf';
-      tip = pct(d.glPct) + ' gegenüber Einstand · G/V seit Kauf laut Scalable ' + (asof ? 'am ' + asof + ' ' : '') + eurS(d.refGl) +
-        ', seither mit den Kursen fortgeschrieben (Einstand ' + eur(d.costBasis, { dec: 0 }) + ') · Wert = Stückzahlen × letzter Kurs ' +
-        F.date(d.date, 'short') + ', nur Wertpapiere' + cash;
+      tip = 'kein G/V von Scalable für diesen Zeitraum · ' + src;
     }
     $('depotChg').innerHTML = '<b class="' + sgn(chgEur) + '">' + eurS(chgEur) + '</b> <span class="hold-per">' + esc(per) + '</span>' +
       '<span class="info" tabindex="0" role="img" aria-label="Info" aria-describedby="depotTip"></span>' +

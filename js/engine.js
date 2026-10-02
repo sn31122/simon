@@ -409,23 +409,31 @@
   }
 
   /**
-   * depotNow(ctx) -> the user's real Scalable depot (data.depot, user 29.09.): { value = Σ shares × latest price, costBasis
-   * (= Scalable securities value − G/V seit Kauf at the snapshot), gl = value − costBasis, glPct, date, asof, refValue,
-   * refTotal, refGl } | null without depot data or with an ISIN without prices.
+   * depotNow(ctx) -> the user's real Scalable depot exactly as Scalable reports it (data.depot = depot_ref.csv, user 02.10.:
+   * never recomputed from our quotes): { value = Scalable securities value, gl = G/V seit Kauf (performance MAX),
+   * costBasis = value − gl, glPct = gl / costBasis, total = value incl. cash, asof, opened } | null without a snapshot.
    */
   function depotNow(ctx) {
     const d = ctx && ctx.data && ctx.data.depot;
-    if (!d || !d.holdings || !ctx.n) return null;
-    const e = ctx.n - 1;
-    let v = 0;
-    for (const i of Object.keys(d.holdings)) {
-      const q = Number(d.holdings[i]), px = ctx.px[i];
-      if (!px || !isNum(q)) return null;
-      v += q * px[e];
-    }
-    const cb = isNum(d.cost_basis) ? d.cost_basis : null;
-    return { value: v, costBasis: cb, gl: cb === null ? null : v - cb, glPct: cb > 0 ? (v - cb) / cb : null, date: ctx.dates[e],
-      asof: d.asof_utc || null, refValue: fin(d.securities_value), refTotal: fin(d.total_value), refGl: fin(d.gv_since_buy) };
+    const v = d ? fin(d.securities_value) : null;
+    if (v === null) return null;
+    const gl = fin(d.gv_since_buy), cb = gl === null ? null : v - gl;
+    return { value: v, gl: gl, costBasis: cb, glPct: cb > 0 ? gl / cb : null, total: fin(d.total_value),
+      asof: d.asof_utc || null, opened: d.opened || null };
+  }
+
+  /**
+   * depotPeriod(ctx, key) -> Scalable's own € result of the depot for a period ('1T' = INTRADAY, '1W', '1M', '3M', '6M',
+   * 'YTD', '1J'; 'MAX' / 'SK' = G/V seit Kauf): { key, pl, ret ≈ pl / (value − pl) } | null when Scalable gave none.
+   */
+  function depotPeriod(ctx, key) {
+    const now = depotNow(ctx);
+    if (!now) return null;
+    const perf = ctx.data.depot.performance || {};
+    const pl = key === 'SK' || key === 'MAX' ? now.gl : fin(perf[key]);
+    if (pl === null) return null;
+    const base = now.value - pl;
+    return { key: key, pl: pl, ret: base > 0 ? pl / base : null };
   }
 
   /**
@@ -993,7 +1001,7 @@
     version: '1.1.0',
     PRESETS, ANN, DEFAULT_RF,
     prepare, presetRange, customRange, portfolio, benchmark, drawdown, stats, benchmarkHoldings, assets, groupSummary,
-    withShares, coverageStart, notQuoted, depotNow, depotChange,
+    withShares, coverageStart, notQuoted, depotNow, depotPeriod, depotChange,
     assetsTotal, chartInterval, gridCovers, gridFrame,
     intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },
