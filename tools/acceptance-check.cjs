@@ -193,16 +193,19 @@ async function depotBoxCheck(page) {
         instruments: ins.length, prices: Object.keys(D.prices).length, dates: n, last, lastStatus: D.status[n - 1],
         intradayOnlyLast: D.status.slice(0, -1).every((x) => x === 'final'), m30: g('m30'), h2: g('h2'), hist, dailyFrom: D.meta.daily_from,
         res: Array.isArray(D.res) && D.res.length === n, bloom: ins.filter((i) => i === 'US0937121079').length,
-        presets: (D.card_presets || []).map((b) => b.id + ':' + b.start), benchmarks: D.benchmarks.map((b) => b.id), positions: D.positions.length,
+        presets: (D.card_presets || []).map((b) => b.id + ':' + b.start),
+        phasesOk: Array.isArray(D.history_phases) && D.history_phases.every((h) => h.id && h.name && h.from <= h.to &&
+          Math.abs(Object.values(h.weights).reduce((a, b) => a + b, 0) - 100) < 0.01 && Object.keys(h.weights).every((i) => D.prices[i])),
+        benchmarks: D.benchmarks.map((b) => b.id), positions: D.positions.length,
         depot: !!(D.depot && D.depot.holdings && Object.keys(D.depot.holdings).length), allPriced: ins.every((i) => D.prices[i])
       };
     });
     check('data', 'every instrument has a price series; only the last row may be intraday; history rows before the daily data; 30-min and 2-h grids end on the last daily date',
       data.instruments === data.prices && data.allPriced && data.intradayOnlyLast && data.res && data.hist > 100 && data.dailyFrom === '2026-01-02' &&
       data.m30 === data.last && data.h2 === data.last, data);
-    check('data', 'Bloom once, 32 positions, no locked presets; presets Mein Depot (card) + Energie, Old portfolio, Situational Awareness, Depot-Historie (menu); depot data present',
+    check('data', 'Bloom once, 32 positions, no locked presets; presets Mein Depot (card) + Situational Awareness, Depot-Historie, Memory (menu); history phases valid; depot data present',
       data.bloom === 1 && data.positions === 32 && data.benchmarks.length === 0 && data.depot &&
-      ['my_depot:card', 'energie:menu', 'old_portfolio:menu', 'situational_awareness:menu', 'depot_history:menu'].every((x) => data.presets.indexOf(x) >= 0), data);
+      ['my_depot:card', 'situational_awareness:menu', 'depot_history:menu', 'memory:menu'].every((x) => data.presets.indexOf(x) >= 0) && data.phasesOk, data);
 
     // ================================================================= benchmark cards
     const init = await page.evaluate(() => {
@@ -219,19 +222,46 @@ async function depotBoxCheck(page) {
     await page.click('#benchCards .bb-add');
     const menu = await page.evaluate(() => ({ open: !document.getElementById('bbMenu').hidden,
       items: Array.from(document.querySelectorAll('#bbMenu .bb-mi')).map((b) => b.getAttribute('data-p') || b.getAttribute('data-act')) }));
-    await page.click('#bbMenu .bb-mi[data-p="energie"]');
+    await page.click('#bbMenu .bb-mi[data-p="memory"]');
     await settle(page);
     const eid = await page.evaluate(() => PFApp.state.cards[PFApp.state.cards.length - 1].id);
-    const eShown = await page.evaluate((id) => ({ shown: window.__shown(), legend: /Energie/.test(document.getElementById('legend').textContent),
-      lines: PFApp.charts.main.model.benches.length, table: Array.from(document.querySelectorAll('#cmpTable tbody tr')).some((r) => /Energie/.test(r.textContent)),
+    const eShown = await page.evaluate((id) => ({ shown: window.__shown(), legend: /Memory/.test(document.getElementById('legend').textContent),
+      lines: PFApp.charts.main.model.benches.length, table: Array.from(document.querySelectorAll('#cmpTable tbody tr')).some((r) => /Memory/.test(r.textContent)),
       rows: PFApp.state.cards.find((c) => c.id === id).rows.length }), eid);
     await page.click('#benchCards [data-card="' + eid + '"] [data-act="del"]');
     await settle(page);
     const eDel = await page.evaluate(() => ({ cards: PFApp.state.cards.length, dom: document.querySelectorAll('#benchCards .bb-card').length, shown: window.__shown() }));
-    check('cards', '"+ Benchmark" menu: Leere Karte + every preset; Energie is added shown (legend, chart line, Statistik), the trash deletes it',
-      menu.open && ['empty', 'my_depot', 'energie', 'old_portfolio', 'situational_awareness', 'depot_history'].every((x) => menu.items.indexOf(x) >= 0) &&
-      eShown.shown === 'Mein Depot,Energie' && eShown.legend && eShown.lines === 2 && eShown.table && eShown.rows === 11 &&
+    check('cards', '"+ Benchmark" menu: Leere Karte + every preset + Historie; Memory is added shown (legend, chart line, Statistik), the trash deletes it',
+      menu.open && ['empty', 'my_depot', 'situational_awareness', 'depot_history', 'memory', 'hist'].every((x) => menu.items.indexOf(x) >= 0) &&
+      eShown.shown === 'Mein Depot,Memory' && eShown.legend && eShown.lines === 2 && eShown.table && eShown.rows === 5 &&
       eDel.cards === 1 && eDel.dom === 2 && eDel.shown === 'Mein Depot', { menu, eShown, eDel });
+    // "Historie" (data/history_phases.csv): opens a submenu in the same popover, "‹ Zurück" returns, a phase becomes an own card
+    await page.click('#benchCards .bb-add');
+    await page.click('#bbMenu .bb-mi[data-act="hist"]');
+    const hSub = await page.evaluate(() => {
+      const v = (n) => document.querySelector('#bbMenu .bb-mview[data-view="' + n + '"]');
+      return { open: !document.getElementById('bbMenu').hidden, main: !v('main').hidden, sub: !v('hist').hidden,
+        phases: v('hist').querySelectorAll('[data-act="phase"]').length, want: PORTFOLIO_DATA.history_phases.length,
+        focus: document.activeElement && document.activeElement.getAttribute('data-act') };
+    });
+    await page.click('#bbMenu .bb-mi[data-act="histback"]');
+    const hBack = await page.evaluate(() => ({ open: !document.getElementById('bbMenu').hidden,
+      main: !document.querySelector('#bbMenu .bb-mview[data-view="main"]').hidden, focus: document.activeElement.getAttribute('data-act') }));
+    await page.click('#bbMenu .bb-mi[data-act="hist"]');
+    const ph = await page.evaluate(() => PORTFOLIO_DATA.history_phases[PORTFOLIO_DATA.history_phases.length - 1]);
+    await page.click('#bbMenu .bb-mi[data-act="phase"][data-p="' + ph.id + '"]');
+    await settle(page);
+    const hCard = await page.evaluate((ph) => {
+      const c = PFApp.state.cards[PFApp.state.cards.length - 1];
+      return { closed: document.getElementById('bbMenu').hidden, name: c.name, want: ph.name.slice(0, 40), shown: window.__shown(),
+        rows: c.rows.map((r) => r.isin).sort().join(), wantRows: Object.keys(ph.weights).sort().join(), id: c.id };
+    }, ph);
+    await page.click('#benchCards [data-card="' + hCard.id + '"] [data-act="del"]');
+    await settle(page);
+    check('cards', '"Historie" opens the phase submenu in place (one entry per history_phases row), "‹ Zurück" returns, a phase is added as an own card with its weights',
+      hSub.open && !hSub.main && hSub.sub && hSub.phases === hSub.want && hSub.want > 0 && hSub.focus === 'histback' &&
+      hBack.open && hBack.main && hBack.focus === 'hist' && hCard.closed && hCard.name === hCard.want && hCard.rows === hCard.wantRows &&
+      hCard.shown === 'Mein Depot,' + hCard.want, { hSub, hBack, hCard });
     await page.click('#benchCards .bb-card:nth-child(2) [data-act="show"]');
     await settle(page);
     const hidden = await page.evaluate(() => ({ shown: PFApp.state.benchmarks.length, legend: document.getElementById('legend').textContent,

@@ -245,6 +245,11 @@ button { -webkit-tap-highlight-color: transparent; }
 .bb-mi b { display: block; color: var(--text); font-size: 13px; font-weight: 700; line-height: 1.3; }
 .bb-mi span { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.35; }
 .bb-mi:hover, .bb-mi:focus-visible { outline: none; border-left-color: var(--accent); background: rgba(var(--accent-rgb), .13); }
+/* submenu "Historie" (data/history_phases.csv): replaces the main list in the same popover; "‹ Zurück" stays on top while it scrolls */
+.bb-mback { position: sticky; top: -4px; z-index: 1; background: #1c1f21; box-shadow: 0 1px 0 var(--tooltip-border); }
+.bb-mback + .bb-msep { border-top: 0; }
+.bb-mback:hover, .bb-mback:focus-visible { background: linear-gradient(rgba(var(--accent-rgb), .13), rgba(var(--accent-rgb), .13)) #1c1f21; }
+.bb-mview[hidden] { display: none; }
 .bb-msep { margin: 4px 0 2px; padding: 5px 11px 2px 12px; border-top: 1px solid var(--tooltip-border); color: #7d848a;
   font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
 /* instrument search list (overlay on <body>, placed by placeDrop(); below the sticky top bar) */
