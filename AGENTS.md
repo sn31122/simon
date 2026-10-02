@@ -85,7 +85,8 @@ Nov 2024 (not splits – the `CHECK WITH USER` lines for them need no action); R
 - Benchmark cards `{weights: {ISIN: %}}` (or `schedule` for Depot-Historie): bought at the range start, buy and hold,
   normalized to the start value; a total ≠ 100 % counts as absolute amounts (110 % = 1,1 × start value); new rows: first
   100 %, further ones empty, never auto-filled. Startwert empty = all lines start at the Yacht's value; typed = all start there.
-- Top blocks: real Yacht (never what-if) and "Mein Depot": **value and G/V always exactly as Scalable reports them** (user
+- Top blocks: real Yacht (never what-if) and "Mein Depot": **value and G/V always exactly as Scalable reports them**; the big
+  value is always the value of all holdings (`valuation.securities`, not the total incl. cash, for every period) (user
   02.10.2026; `depotNow` / `depotPeriod` read the snapshot `depot_ref.csv`, refreshed with every price update – never
   recompute them from our quotes); only a free Von/Bis range (no Scalable figure) falls back to `depotChange`, marked.
 - Chart interval: 1T/1W 30 min, 1M 2 h, longer daily; steps down where sessions are missing. Kennzahlen, tables,

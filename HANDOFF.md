@@ -56,7 +56,8 @@ only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools
   `prices_history_daily.csv` ~1.8 MB, `portfolio-data.js` 3.6 MB (was 0.7).
 
 - "Mein Depot" top block = Scalable's own numbers (user 02.10.: "the big value … should always reflect its real value and
-  pnl taken directly from Scalable"): big value = `valuation.securities`, G/V per period = `performance` simpleAbsoluteReturn
+  pnl taken directly from Scalable"; "display the value of all holdings always"): big value = `valuation.securities` for every
+  period (not the total incl. cash), G/V per period = `performance` simpleAbsoluteReturn
   (1T INTRADAY, 1W, 1M, 3M, 6M, YTD, 1J; Seit Kauf / MAX = MAX), label "Scalable · Stand TT.MM. HH:MM", tooltip ≈ % and
   total incl. cash. `depot_ref.csv` gained `pl_1t … pl_1j`; engine `depotNow` no longer recomputes from our quotes, new
   `depotPeriod`; only a free Von/Bis range falls back to `depotChange` (marked). Every price update now ends with the depot
