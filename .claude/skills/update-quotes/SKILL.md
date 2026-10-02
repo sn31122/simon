@@ -24,6 +24,8 @@ Use `python` (Windows) or `python3` where `python` is missing. Read-only Scalabl
 4. **Depot snapshot** (user 02.10.2026: "Mein Depot" at the top must always show the real value and G/V from Scalable):
    call `get_portfolio_holdings` and `get_portfolio_overview` (`includeYearToDate: true`, no `portfolioId`; the hook saves
    both), then `python data/update_depot.py`. `STOP: …` → show the line to the user.
-5. **Report** in the user's language, 2–4 lines: the `== REPORT ==` lines (last price date, 30-min / 2-h coverage,
+5. **Phone page** (user 02.10.2026): `python tools/build_mobile.py`, then republish `mobile/yacht-dashboard.html` with the
+   Artifact tool to the same private URL (https://claude.ai/artifact/FMoijrjc87baLhkc3bXj5g; pass it as `url` from a new conversation, read it first).
+6. **Report** in the user's language, 2–4 lines: the `== REPORT ==` lines (last price date, 30-min / 2-h coverage,
    tests), the `DEPOT` line (Scalable value, G/V seit Kauf), anything that needs the user, and "reload the dashboard (Ctrl+F5)". Skip `note:` lines and known warnings.
    Do not commit unless the user asks.
