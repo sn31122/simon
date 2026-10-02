@@ -1,2 +1,2 @@
 asof_utc,securities_value,total_value,gv_since_buy,pl_1t,pl_1w,pl_1m,pl_3m,pl_6m,pl_ytd,pl_1j,source
-2026-10-02T10:28:44Z,298198.38,264003.64,64707.40,2738.73,6286.54,29127.55,21119.11,71172.26,64595.53,64707.40,"Scalable get_portfolio_holdings + get_portfolio_overview (valuation.securities / valuation.total / performance simpleAbsoluteReturn MAX, INTRADAY … ONE_YEAR), saved 2026-10-02T10:28Z by data/update_depot.py"
+2026-10-02T11:38:53Z,297021.01,262826.27,63530.03,1561.36,5109.17,27950.18,19941.74,69994.89,63418.16,63530.03,"Scalable get_portfolio_holdings + get_portfolio_overview (valuation.securities / valuation.total / performance simpleAbsoluteReturn MAX, INTRADAY … ONE_YEAR), saved 2026-10-02T11:38Z by data/update_depot.py"

@@ -5,7 +5,7 @@ branches reach `main` via pull request (protocol: `AGENTS.md`).
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 02.10.2026 12:27 Berlin): 193 trading days 2026-01-02 … 2026-10-02; last row 2026-10-02 = intraday, asof 2026-10-02T10:27Z; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 11 sessions 2026-09-18 … 2026-10-02; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 59 passed, 0 failed; crosscheck: 3026/3027 checks passed.
+- Data status (update 02.10.2026 13:38 Berlin): 193 trading days 2026-01-02 … 2026-10-02; last row 2026-10-02 = intraday, asof 2026-10-02T11:38Z; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 11 sessions 2026-09-18 … 2026-10-02; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 59 passed, 0 failed; crosscheck: 3053/3053 checks passed.
 <!-- data-status:end -->
 (Block rewritten by `--finish` / `--finish-add`; do not edit by hand.)
 
