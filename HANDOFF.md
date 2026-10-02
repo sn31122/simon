@@ -27,7 +27,7 @@ branches reach `main` via pull request (protocol: `AGENTS.md`).
 - Data notes: Astera Labs US04626A1034 history begins 13.11.2025 (Scalable has nothing earlier). Big moves confirmed against
   a second Scalable timeframe are listed in `AGENTS.md` ("Build warnings").
 - Acceptance: 93/93 on 29.09. (`docs/verification/2026-09-29/`); 30.09.: 90/94 – the 4 failures (lists side by side at
-  1903/1920, resize switch, 375 1W measure) predate the 30.09. changes; not covered: real Segoe UI/Edge, physical touch.
+  1903/1920, resize switch, 375 1W measure) predate the 30.09. changes; 02.10. (Historie): 93/96, the same 3 lists failures; not covered: real Segoe UI/Edge, physical touch.
 
 ## Cleanup 01.10.2026
 New: `tools/check.py` (session start for Claude Code and Codex), `data/update_depot.py` + hook `save-portfolio.cjs`,

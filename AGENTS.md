@@ -37,6 +37,7 @@ to run "update" in Claude Code; everything else (UI, engine, tests, transaction 
 |---|---|---|
 | `data/positions.csv` | Yacht holdings: isin, name, short, group, shares, ref_date, ref_price, gv_ref, cost_basis (= shares·ref_price − gv_ref), note, optional logo | only on explicit user instruction |
 | `data/benchmarks.csv` | presets: id, name, holdings (`ISIN:20%|…` = 100 %; `transactions` = replay of `depot_transactions.csv`), description, start (`card` = shown at load: only `my_depot`; `menu` = "+ Benchmark" menu) | only via `benchmarks.py` (user instruction); `my_depot` only via `update_depot.py`; every ISIN must be a price column |
+| `data/history_phases.csv` | phases of the real depot for the Historie submenu (`id,name,from,to,holdings,description`, holdings `ISIN:62.5%|…` = 100 %, every ISIN a price column; optional); generated from depot_transactions.csv by the main session | not by hand |
 | `data/depot.csv`, `data/depot_ref.csv` | real Scalable depot (`isin,name,shares`) + snapshot (`asof_utc,securities_value,total_value,gv_since_buy,source`) | only via `update_depot.py` |
 | `data/depot_transactions.csv` | Scalable transaction export (`;`, German decimals) → preset "Depot-Historie" (config `DEPOT_HISTORY` in `build_data.py`) | only via `import_transactions.py` |
 | `data/instruments.csv` | isin, name, short, type for **every** price column | a row per new column (before `--finish-add`) |

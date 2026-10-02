@@ -780,6 +780,11 @@
   var PRESETS = (Array.isArray(D.card_presets) ? D.card_presets : []).filter(function (p) {
     return (p.schedule && p.schedule.steps && p.schedule.steps.length) || Object.keys(p.weights || {}).some(function (i) { return INSTR_BY[i]; });
   });
+  // phases of the real depot (data/history_phases.csv via build_data.py): submenu "Historie" of the "+ Benchmark" menu; a
+  // phase becomes an ordinary own card like a weighting preset
+  var PHASES = (Array.isArray(D.history_phases) ? D.history_phases : []).filter(function (h) {
+    return h && Object.keys(h.weights || {}).some(function (i) { return INSTR_BY[i]; });
+  });
   function presetCard(p) {
     if (p.schedule) {                    // "Depot-Historie" (user 29.09.): replayed transactions – a fixed card, no % rows
       return { id: 'bm' + (++cardSeq), name: String(p.name).slice(0, 40), defName: String(p.name).slice(0, 40), color: nextColor(),
@@ -945,43 +950,77 @@
       '<div class="bb-rows">' + c.rows.map(rowHTML).join('') + '</div>' +
       '<div class="bb-foot"><span class="bb-hint" aria-live="polite"></span><span class="bb-total"></span></div></div>';
   }
-  /** "+ Benchmark" tile with its menu: an empty card or one of the saved presets (data/benchmarks.csv). */
+  /** "62 % FTSE All-World · 38 % MSCI USA 2x · +1": the three largest weights of a preset (menu sublines). */
+  function weightSub(weights) {
+    var ws = Object.keys(weights).filter(function (i) { return INSTR_BY[i]; }).sort(function (a, b) { return weights[b] - weights[a]; });
+    return ws.slice(0, 3).map(function (i) { return fmtShare(Math.round(weights[i])) + ' % ' + INSTR_BY[i].short; }).join(' · ') +
+      (ws.length > 3 ? ' · +' + (ws.length - 3) : '');
+  }
+  function phaseRange(h) { return h.from === h.to ? dshort(h.from) : dshort(h.from) + ' – ' + dshort(h.to); }
+  function menuItem(act, id, name, sub, title, extra) {
+    return '<button type="button" class="bb-mi" role="menuitem" data-act="' + act + '"' + (id != null ? ' data-p="' + esc(id) + '"' : '') +
+      (title ? ' title="' + esc(title) + '"' : '') + (extra || '') + '><b>' + esc(name) + '</b><span>' + esc(sub) + '</span></button>';
+  }
+  /** "+ Benchmark" tile with its menu: an empty card or one of the saved presets (data/benchmarks.csv); the last entry
+   *  "Historie" swaps the list for a submenu with the phases of the real depot (data/history_phases.csv). */
   function addTileHTML() {
+    var hist = PHASES.length ? menuItem('hist', null, 'Historie', PHASES.length + (PHASES.length === 1 ? ' Phase' : ' Phasen') + ' · ' +
+      phaseRange({ from: PHASES[0].from, to: PHASES[PHASES.length - 1].to }), 'Gewichtungen des echten Depots je Phase', ' aria-haspopup="menu"') : '';
     return '<div class="bb-addw"><button type="button" class="bb-add" data-act="new" aria-haspopup="menu" aria-expanded="false" aria-controls="bbMenu"' +
       ' title="Leere Karte oder gespeicherte Vorlage hinzufügen"><span aria-hidden="true">+</span>Benchmark</button>' +
-      '<div class="bb-menu" id="bbMenu" role="menu" hidden>' +
+      '<div class="bb-menu" id="bbMenu" role="menu" hidden><div class="bb-mview" data-view="main">' +
       '<button type="button" class="bb-mi" role="menuitem" data-act="empty"><b>Leere Karte</b><span>Instrumente und Anteile selbst wählen</span></button>' +
-      (PRESETS.length ? '<div class="bb-msep">Vorlagen</div>' : '') +
+      (PRESETS.length || PHASES.length ? '<div class="bb-msep">Vorlagen</div>' : '') +
       PRESETS.map(function (p) {
-        if (p.schedule) return '<button type="button" class="bb-mi" role="menuitem" data-act="preset" data-p="' + esc(p.id) + '" title="' + esc(p.description || '') + '">' +
-          '<b>' + esc(p.name) + '</b><span>' + esc('Echte Transaktionen ab ' + F.date(p.schedule.start, 'short') + ' · Wertpapierwert') + '</span></button>';
-        var ws = Object.keys(p.weights).filter(function (i) { return INSTR_BY[i]; }).sort(function (a, b) { return p.weights[b] - p.weights[a]; });
-        var sub = ws.slice(0, 3).map(function (i) { return fmtShare(Math.round(p.weights[i])) + ' % ' + INSTR_BY[i].short; }).join(' · ') +
-          (ws.length > 3 ? ' · +' + (ws.length - 3) : '');
-        return '<button type="button" class="bb-mi" role="menuitem" data-act="preset" data-p="' + esc(p.id) + '" title="' + esc(p.description || '') + '">' +
-          '<b>' + esc(p.name) + '</b><span>' + esc(sub) + '</span></button>';
-      }).join('') + '</div></div>';
+        if (p.schedule) return menuItem('preset', p.id, p.name, 'Echte Transaktionen ab ' + F.date(p.schedule.start, 'short') + ' · Wertpapierwert', p.description);
+        return menuItem('preset', p.id, p.name, weightSub(p.weights), p.description);
+      }).join('') + hist + '</div>' +
+      (PHASES.length ? '<div class="bb-mview" data-view="hist" hidden>' +
+        '<button type="button" class="bb-mi bb-mback" role="menuitem" data-act="histback"><b>‹ Zurück</b></button>' +
+        '<div class="bb-msep">Historie</div>' +
+        PHASES.map(function (h) { return menuItem('phase', h.id, h.name, phaseRange(h) + ' · ' + weightSub(h.weights), h.description); }).join('') +
+        '</div>' : '') +
+      '</div></div>';
   }
   function menuOpen() { var m = $('bbMenu'); return !!(m && !m.hidden); }
+  /** Visible entries of the menu (main list or the "Historie" submenu). */
+  function menuItems() {
+    var v = $('bbMenu') && $('bbMenu').querySelector('.bb-mview:not([hidden])');
+    return v ? Array.prototype.slice.call(v.querySelectorAll('.bb-mi')) : [];
+  }
+  /** Shows the main list or the "Historie" submenu in the same popover, re-places it and focuses an entry. */
+  function menuView(view, focusSel) {
+    var m = $('bbMenu');
+    if (!m) return;
+    var nu = m.querySelector('.bb-mview[data-view="' + view + '"]');
+    if (!nu) return;
+    nu.hidden = false;
+    var f = (focusSel && nu.querySelector(focusSel)) || nu.querySelector('.bb-mi');
+    if (f) f.focus({ preventScroll: true });             // focus first, then hide the other list: focus never leaves the tile
+    Array.prototype.forEach.call(m.querySelectorAll('.bb-mview'), function (v) { if (v !== nu) v.hidden = true; });
+    placeMenu();
+    m.scrollTop = 0;
+    if (f && focusSel) f.scrollIntoView({ block: 'nearest' });
+  }
+  function placeMenu() {                                             // opens upward when there is more room above
+    // user 30.09.: the page stays where it is – the menu opens to the side with more room and scrolls inside if it is taller
+    var m = $('bbMenu'), b = m.parentNode.querySelector('.bb-add');
+    var r = b.getBoundingClientRect(), mid = r.top + r.height / 2, vh = window.innerHeight;
+    m.style.maxHeight = 'none';
+    var need = m.offsetHeight, below = vh - (mid + 22) - 8, above = mid - 22 - 8;
+    var up = below < need && above > below;
+    m.classList.toggle('is-up', up);
+    m.style.maxHeight = Math.max(120, Math.min(need, up ? above : below)) + 'px';
+  }
   function setMenu(open) {
     var m = $('bbMenu'), b = m && m.parentNode.querySelector('.bb-add');
     if (!m) return;
     m.hidden = !open;
     b.setAttribute('aria-expanded', String(open));
-    if (open) {                                                      // opens upward when there is more room above
-      // user 30.09.: the page stays where it is – the menu opens to the side with more room and scrolls inside if it is taller
-      var r = b.getBoundingClientRect(), mid = r.top + r.height / 2, vh = window.innerHeight;
-      m.style.maxHeight = 'none';
-      var need = m.offsetHeight, below = vh - (mid + 22) - 8, above = mid - 22 - 8;
-      var up = below < need && above > below;
-      m.classList.toggle('is-up', up);
-      m.style.maxHeight = Math.max(120, Math.min(need, up ? above : below)) + 'px';
-      var first = m.querySelector('.bb-mi');
-      if (first) first.focus({ preventScroll: true });          // user 30.09.: the page never jumps on "+ Benchmark"
-    }
+    if (open) menuView('main');                                     // always opens on the main list; user 30.09.: the page never jumps
   }
-  function addPresetCard(id) {
-    var p = PRESETS.filter(function (x) { return x.id === id; })[0];
+  function addPresetCard(id, list) {
+    var p = (list || PRESETS).filter(function (x) { return x.id === id; })[0];
     if (!p) return;
     var c = presetCard(p);
     state.cards.push(c);
@@ -1241,9 +1280,11 @@
       }
       var act = b.getAttribute('data-act'), o = ctxOf(b);
       if (act === 'new') { setMenu(!menuOpen()); return; }
-      if (act === 'empty' || act === 'preset') {
+      if (act === 'hist') { menuView('hist'); return; }
+      if (act === 'histback') { menuView('main', '[data-act="hist"]'); return; }
+      if (act === 'empty' || act === 'preset' || act === 'phase') {
         setMenu(false);
-        if (act === 'empty') addCard(); else addPresetCard(b.getAttribute('data-p'));
+        if (act === 'empty') addCard(); else addPresetCard(b.getAttribute('data-p'), act === 'phase' ? PHASES : PRESETS);
         return;
       }
       if (act === 'show') {
@@ -1272,9 +1313,11 @@
     });
     box.addEventListener('keydown', function (ev) {
       var t = ev.target, f = t.getAttribute('data-f'), o;
-      if (menuOpen() && t.closest('.bb-addw')) {                  // menu: Esc closes, ↑/↓ move between the entries
-        var its = Array.prototype.slice.call($('bbMenu').querySelectorAll('.bb-mi')), k = its.indexOf(t);
+      if (menuOpen() && t.closest('.bb-addw')) {                  // menu: Esc closes, ↑/↓ move between the entries, →/← in and out of "Historie"
+        var its = menuItems(), k = its.indexOf(t), act = t.getAttribute('data-act'), inSub = !!t.closest('.bb-mview[data-view="hist"]');
         if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); setMenu(false); box.querySelector('.bb-add').focus({ preventScroll: true }); }
+        else if (ev.key === 'ArrowRight' && act === 'hist') { ev.preventDefault(); menuView('hist'); }
+        else if ((ev.key === 'ArrowLeft' || ev.key === 'Backspace') && inSub) { ev.preventDefault(); menuView('main', '[data-act="hist"]'); }
         else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
           ev.preventDefault();
           its[(k + (ev.key === 'ArrowDown' ? 1 : its.length - 1)) % its.length].focus({ preventScroll: true });
