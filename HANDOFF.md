@@ -5,7 +5,7 @@ branches reach `main` via pull request (protocol: `AGENTS.md`).
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 02.10.2026 00:11 Berlin): 192 trading days 2026-01-02 … 2026-10-01; last row 2026-10-01 = final; history (prices_history.csv): 171 rows 2016-09-30 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 10 sessions 2026-09-18 … 2026-10-01; 2-h (intraday_2h.csv): 28 sessions 2026-08-25 … 2026-10-01; engine tests: 58 passed, 0 failed; crosscheck: 3273/3273 checks passed.
+- Data status (update 02.10.2026 08:19 Berlin): 193 trading days 2026-01-02 … 2026-10-02; last row 2026-10-02 = intraday, asof 2026-10-02T06:19Z; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 11 sessions 2026-09-18 … 2026-10-02; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 59 passed, 0 failed; crosscheck: 2935/2935 checks passed.
 <!-- data-status:end -->
 (Block rewritten by `--finish` / `--finish-add`; do not edit by hand.)
 
@@ -63,7 +63,7 @@ only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools
   `python data/source/history_phases.py` (phase boundaries + names hard-coded there) when the user asks.
 
 ## Open points
-- Riot US7672921050: −74 % on 21.01.2009 (FSE only, before Scalable's history; then AspenBio, not a miner) – unverified.
+- Riot US7672921050: −74 % on 21.01.2009 confirmed real (AspenBio AppyScore trial results 20.01.2009; Q1 2009 range $7.63 → $1.29, per 10-K) – no action.
 - Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
 - With 2–3 benchmarks the band above the plot reserves hover space (deliberate). Beyond 5 custom cards the palette colours
   get close.
