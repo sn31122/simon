@@ -5,6 +5,8 @@ All shared rules are in `AGENTS.md` (also read by Codex); the current state is i
 - **Price update** ("update", "refresh", "check for new quotes", "new prices", "Kurse aktualisieren", "run UPDATE.md"):
   run the skill `update-quotes` (`.claude/skills/update-quotes/SKILL.md`); it ends with the depot snapshot, so "Mein Depot"
   shows Scalable's real value and G/V (user 02.10.2026).
+- **Phone page** (user 02.10.2026): `python tools/build_mobile.py` bundles everything into `mobile/yacht-dashboard.html`,
+  published as a private artifact https://claude.ai/artifact/FMoijrjc87baLhkc3bXj5g (republish to that URL after every price / depot update).
 - **Depot update** ("update depot", "new holdings"): call `get_portfolio_holdings` and `get_portfolio_overview` (no
   `portfolioId`), then `python data/update_depot.py` (the hook `save-portfolio.cjs` saved both answers).
 - **Benchmark portfolios** ("add benchmark …", "change energie to …", "remove energie"): skill `benchmarks`.
