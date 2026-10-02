@@ -5,13 +5,13 @@ branches reach `main` via pull request (protocol: `AGENTS.md`).
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 02.10.2026 08:19 Berlin): 193 trading days 2026-01-02 … 2026-10-02; last row 2026-10-02 = intraday, asof 2026-10-02T06:19Z; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 11 sessions 2026-09-18 … 2026-10-02; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 59 passed, 0 failed; crosscheck: 2935/2935 checks passed.
+- Data status (update 02.10.2026 12:27 Berlin): 193 trading days 2026-01-02 … 2026-10-02; last row 2026-10-02 = intraday, asof 2026-10-02T10:27Z; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 11 sessions 2026-09-18 … 2026-10-02; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 59 passed, 0 failed; crosscheck: 3026/3027 checks passed.
 <!-- data-status:end -->
 (Block rewritten by `--finish` / `--finish-add`; do not edit by hand.)
 
-- 108 price series, 32 Yacht positions. Real depot: 7 positions, read 01.10.2026 (`update_depot.py`): Coherent 5 → 123;
-  securities 295,459.65 €, total 261,264.91 € (cash ≈ −34,195 €), G/V seit Kauf 61,968.67 €; "Mein Depot" weights from
-  the 01.10. closes.
+- 108 price series, 32 Yacht positions. Real depot: 7 positions, snapshot 02.10.2026 12:28 Berlin (`update_depot.py`):
+  securities 298,198.38 €, total 264,003.64 € (cash ≈ −34,195 €), G/V seit Kauf 64,707.40 €, heute +2,738.73 €; "Mein Depot"
+  weights from the 01.10. closes.
 - Depot-Historie replays `depot_transactions.csv` (Scalable export of 02.10.2026 00:10, imported with
   `import_transactions.py`: 240 rows 02.12.2025 … 01.10.2026, incl. the four Coherent buys of 30.09.); its replay ends exactly
   at `depot.csv`.
@@ -61,6 +61,8 @@ only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools
   total incl. cash. `depot_ref.csv` gained `pl_1t … pl_1j`; engine `depotNow` no longer recomputes from our quotes, new
   `depotPeriod`; only a free Von/Bis range falls back to `depotChange` (marked). Every price update now ends with the depot
   snapshot (`update-quotes` step 4, `UPDATE_PRICES.md` step 4). Acceptance 93/96 (the 3 known lists failures).
+  `tests/crosscheck.cjs`: "1M_h2 end = daily end" is exact for final sessions only (as in `crosscheck.py`); in a live
+  session the 2-h and 30-min fetches are seconds apart, so their newest quotes may differ (0.01 % tolerance).
 
 - "Historie" in the "+ Benchmark" menu (user 02.10.): opens a submenu of the 9 phases of the real depot
   (`data/history_phases.csv`, 08.12.2025 … 01.10.2026), each a weighting card. Phases grouped from the 35 trade-to-trade
