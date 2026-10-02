@@ -175,7 +175,8 @@ if (D/'history_phases.csv').exists():
         history_phases.append({'id': h['id'], 'name': h['name'], 'from': (h.get('from') or '').strip(), 'to': (h.get('to') or '').strip(),
                                'weights': w, 'description': h.get('description') or ''})
 # the user's real Scalable depot (user 29.09.2026): share counts (depot.csv) + the Scalable snapshot (depot_ref.csv:
-# securities value, total incl. cash, G/V seit Kauf = performance MAX) -> value and G/V since purchase at the latest prices
+# securities value, total incl. cash, G/V seit Kauf = performance MAX, G/V per period) -> the "Mein Depot" block shows these
+# numbers as Scalable reports them (user 02.10.2026); opened = first date of depot_transactions.csv
 depot = None
 if (D/'depot.csv').exists():
     dh = {r['isin']: float(r['shares']) for r in csv.DictReader(open(D/'depot.csv', encoding='utf-8'))}
@@ -184,9 +185,17 @@ if (D/'depot.csv').exists():
         if i not in isins: errors.append(f'depot.csv: {i} is not a price column')
     sv = float(ref['securities_value']) if ref else None
     gv = float(ref['gv_since_buy']) if ref else None
+    # Scalable's own € result per period (pl_1t … pl_1j, user 02.10.2026); older snapshots without them -> {}
+    perf = {k[3:].upper(): float(ref[k]) for k in ('pl_1t', 'pl_1w', 'pl_1m', 'pl_3m', 'pl_6m', 'pl_ytd', 'pl_1j')
+            if ref and (ref.get(k) or '').strip()}
+    if ref: perf['MAX'] = gv
+    tf = D/DEPOT_HISTORY['file']
+    opened = min((r['date'] for r in csv.DictReader(open(tf, encoding='utf-8-sig'), delimiter=';') if r.get('date')),
+                 default=None) if tf.exists() else None
     depot = {'holdings': dh, 'asof_utc': ref['asof_utc'] if ref else None, 'securities_value': sv,
              'total_value': float(ref['total_value']) if ref and ref['total_value'] else None,
-             'gv_since_buy': gv, 'cost_basis': sv - gv if ref else None, 'source': ref['source'] if ref else ''}
+             'gv_since_buy': gv, 'cost_basis': sv - gv if ref else None, 'performance': perf, 'opened': opened,
+             'source': ref['source'] if ref else ''}
 needed = [p['isin'] for p in pos] + [i for b in benchmarks for i in b['holdings']]
 for i in dict.fromkeys(needed):
     if i not in prices: errors.append(f'missing price column {i}')
@@ -296,7 +305,7 @@ data = {
     'benchmarks': benchmarks,                 # locked presets (fixed quantities)
     'card_presets': card_presets,             # weighting presets: start as editable own cards
     'history_phases': history_phases,         # phases of the real depot (submenu "Historie"): [{id, name, from, to, weights, description}]
-    'depot': depot,                           # the real Scalable depot: {holdings, asof_utc, securities_value, total_value, gv_since_buy, cost_basis}
+    'depot': depot,                           # the real Scalable depot: {holdings, asof_utc, securities_value, total_value, gv_since_buy, cost_basis, performance, opened}
     # instruments for the benchmark cards: every price column, sorted by short name
     'instruments': sorted(({'isin': i, 'name': (inst.get(i) or {}).get('name') or i, 'short': (inst.get(i) or {}).get('short') or i,
                             'type': (inst.get(i) or {}).get('type') or '', 'position': i in {p['isin'] for p in pos}}

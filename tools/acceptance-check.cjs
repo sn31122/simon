@@ -856,13 +856,12 @@ async function depotBoxCheck(page) {
     }
     const depExp = await page.evaluate(() => {
       const c = PFEngine.prepare(window.PORTFOLIO_DATA), F = PFEngine.fmt, out = {};
-      for (const p of ['1T', '1M', '3M']) out[p] = F.eur(PFEngine.depotChange(c, PFEngine.presetRange(c, p)).pl, { sign: true, dec: 2 });
-      out.SK = F.eur(PFEngine.depotNow(c).gl, { sign: true, dec: 2 });
+      for (const p of ['1T', '1M', '3M', 'SK', 'MAX']) out[p] = F.eur(PFEngine.depotPeriod(c, p).pl, { sign: true, dec: 2 });
       return out;
     });
-    check('periods', '"Mein Depot" top block follows the period (1T = daily P&L, 1M, 3M = depotChange; Seit Kauf = G/V seit Kauf) with the Yacht block\'s label',
-      ['1T', '1M', '3M', '6M', 'YTD'].every((k) => per[k].dLabel === per[k].label) && per.SK.dLabel === 'seit Kauf' &&
-      ['1T', '1M', '3M', 'SK'].every((k) => per[k].dEur === depExp[k]) && per['1T'].dEur !== per['1M'].dEur, { per, depExp });
+    check('periods', '"Mein Depot" top block shows Scalable\'s own G/V of the period (1T, 1M, 3M; Seit Kauf / MAX = G/V seit Kauf) with the Yacht block\'s label',
+      ['1T', '1M', '3M', '6M', 'YTD'].every((k) => per[k].dLabel === per[k].label) && per.SK.dLabel === 'seit Kauf' && per.MAX.dLabel === 'seit Kauf' &&
+      ['1T', '1M', '3M', 'SK', 'MAX'].every((k) => per[k].dEur === depExp[k]) && per['1T'].dEur !== per['1M'].dEur, { per, depExp });
     check('periods', '3M/6M pills and tabs update each other and the labels; MAX = no pill; Seit Kauf = MAX tab',
       per['3M'].pill === '3M' && per['3M'].tab === '3M' && per['3M'].label === '3 Monate' && per['6M'].pill === '6M' && per['6M'].tab === '6M' && per['6M'].label === '6 Monate' &&
       per['1W'].tab === '1W' && per.MAX.pill === null && per.MAX.tab === 'MAX' && per.SK.pill === 'Seit Kauf' && per.SK.tab === 'MAX' && per.YTD.pill === 'YTD', per);

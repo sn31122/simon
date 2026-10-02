@@ -569,7 +569,7 @@ test('UMD: classic script sets window.PFEngine without module', () => {
   const ws = W.portfolio(W.prepare(S_DATA), { selected: foreignSet, start: 0, end: 3 });
   assert.ok(ws && ws.raw.length === 4 && Math.abs(ws.raw[0] - 40) < 1e-12, 'cross-realm Set selection');
   for (const k of ['prepare', 'presetRange', 'customRange', 'portfolio', 'benchmark', 'drawdown', 'stats', 'benchmarkHoldings', 'assets', 'groupSummary',
-    'withShares', 'depotChange', 'chartInterval', 'gridCovers', 'gridFrame', 'intraday', 'intradayBenchmark',
+    'withShares', 'depotPeriod', 'depotChange', 'chartInterval', 'gridCovers', 'gridFrame', 'intraday', 'intradayBenchmark',
     'intradayAsset', 'intradayWindow', 'equalValueWindow', 'benchmarkValueNow', 'benchmarkRealPl'])
     assert.strictEqual(typeof E[k], 'function', k);
   for (const k of ['eur', 'num', 'pct', 'ratio', 'date', 'asofBerlin', 'parseDE']) assert.strictEqual(typeof E.fmt[k], 'function', 'fmt.' + k);
@@ -743,15 +743,22 @@ test('coverageStart / notQuoted: the long range starts once enough of the value 
   assert.deepStrictEqual(E.notQuoted(c, { start: 0 }).map((x) => x.isin), ['B', 'C']);
 });
 
-test('depotNow: real depot value at the latest price and G/V seit Kauf from the Scalable snapshot', () => {
+test('depotNow / depotPeriod: value and G/V exactly as Scalable reports them (no recomputation from our quotes)', () => {
   const d = dataOf(['2026-03-02', '2026-03-03'], { prices: { A: [10, 12], B: [5, 4] } });
-  d.depot = { holdings: { A: 3, B: 10 }, asof_utc: '2026-03-02T21:00:00Z', securities_value: 80, total_value: 70, gv_since_buy: 20, cost_basis: 60 };
-  const r = E.depotNow(E.prepare(d));
-  approx(r.value, 3 * 12 + 10 * 4); approx(r.gl, 76 - 60); approx(r.glPct, 16 / 60);
-  assert.strictEqual(r.date, '2026-03-03'); assert.strictEqual(r.refGl, 20); assert.strictEqual(r.refTotal, 70);
+  d.depot = { holdings: { A: 3, B: 10 }, asof_utc: '2026-03-03T10:18:00Z', securities_value: 80, total_value: 70, gv_since_buy: 20,
+    cost_basis: 60, performance: { '1T': 3, '1M': -5, MAX: 20 }, opened: '2025-12-02' };
+  const c = E.prepare(d), r = E.depotNow(c);
+  approx(r.value, 80, 1e-12, 'Scalable securities value, not Σ shares × price (76)');
+  approx(r.gl, 20); approx(r.costBasis, 60); approx(r.glPct, 20 / 60); approx(r.total, 70);
+  assert.strictEqual(r.asof, '2026-03-03T10:18:00Z'); assert.strictEqual(r.opened, '2025-12-02');
+  const t = E.depotPeriod(c, '1T');
+  approx(t.pl, 3); approx(t.ret, 3 / 77);
+  approx(E.depotPeriod(c, '1M').pl, -5); approx(E.depotPeriod(c, '1M').ret, -5 / 85);
+  approx(E.depotPeriod(c, 'SK').pl, 20); approx(E.depotPeriod(c, 'MAX').ret, 20 / 60);
+  assert.strictEqual(E.depotPeriod(c, '6M'), null, 'no Scalable figure');
   assert.strictEqual(E.depotNow(ctxOf(['2026-03-02'])), null, 'no depot data');
   d.depot.holdings.X = 1;
-  assert.strictEqual(E.depotNow(E.prepare(d)), null, 'unknown ISIN');
+  approx(E.depotNow(E.prepare(d)).value, 80, 1e-12, 'unknown ISIN does not matter for the Scalable value');
 });
 
 test('depotChange: the real depot\'s current shares valued at range start and end (period P&L)', () => {
@@ -762,7 +769,6 @@ test('depotChange: the real depot\'s current shares valued at range start and en
   approx(r.startValue, 3 * 10 + 10 * 5); approx(r.endValue, 3 * 11 + 10 * 4); approx(r.pl, 73 - 80); approx(r.ret, 73 / 80 - 1);
   const t = E.depotChange(c, { start: 1, end: 2 });                // 1T: since the previous close
   approx(t.pl, 73 - 76); assert.deepStrictEqual([t.start, t.end], [1, 2]);
-  approx(t.endValue, E.depotNow(c).value, 1e-12, 'end value = depotNow on the last day');
   approx(E.depotChange(c).pl, r.pl, 1e-12, 'default = whole range');
   assert.strictEqual(E.depotChange(ctxOf(['2026-03-02'])), null, 'no depot data');
   d.depot.holdings.X = 1;

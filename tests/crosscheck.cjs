@@ -120,7 +120,13 @@ if (ref.grid_cases && typeof E.gridFrame === 'function') {
     }
     for (const [a, b, v] of g.realpl) cmp(`${g.name} depot_qty real pl ${a}..${b}`, E.benchmarkRealPl(ctx, { id: 'depot_qty', holdings: g.realpl_def }, a, b, { frame: f }), v);
     const daily = ref.cases.find(c => c.start === g.start && c.end === g.end && c.isins.length === all.length);
-    if (daily) cmp(`${g.name} end = daily reference end`, s.value[s.last], daily.stats.endValue);
+    // finished sessions end exactly on the daily value; in a live session the 2-h and 30-min fetches are seconds apart,
+    // so their newest live quotes may differ slightly (02.10.2026: AMD 554.45 vs 554.50) -> 0.01 % there
+    if (daily && ctx.status[g.end] === 'final') cmp(`${g.name} end = daily reference end`, s.value[s.last], daily.stats.endValue);
+    else if (daily) {
+      checks++;
+      if (!(Math.abs(s.value[s.last] / daily.stats.endValue - 1) < 1e-4)) { fails++; console.log('MISMATCH', `${g.name} end ≈ daily reference end (intraday)`, s.value[s.last], daily.stats.endValue); }
+    }
   }
   for (const iv of ref.intervals || []) {
     if (iv.preset === 'custom') {

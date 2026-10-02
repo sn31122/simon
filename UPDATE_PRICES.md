@@ -39,7 +39,7 @@ or Claude Code started before `.claude/settings.json` existed: restart it, check
 - Fetch agents: always agent type `price-fetcher` / model **`claude-sonnet-5-5`** with **thinking ON** (the
   prompts printed by `--plan` start with the line `Thinking ON: think step by step before each tool call and before writing each file.`).
 
-## Steps for the orchestrator (the session the user talks to) – 3 steps
+## Steps for the orchestrator (the session the user talks to) – 4 steps
 1. `python data/update_prices.py --plan`
    Empties `data/incoming/` (not `ytd/`) and prints `TIMEFRAMES:` plus one ready prompt for **one** agent with all ISINs
    (`--- prompt 1/1 ---`; user 02.10.2026: a single Sonnet 5.5 agent handles all calls).
@@ -58,6 +58,10 @@ or Claude Code started before `.claude/settings.json` existed: restart it, check
      Nebius 30.07., IREN 30.07.2026 (> 30 %), Halbleiter 3x XS3091657729 05.06.2026 (−27 %, 3x a −9 % semiconductor day)
      and IREN 05.02.2026 (−24 %).
    - `note:` lines (gaps of thinly traded instruments) need no action.
+4. **Depot snapshot** (user 02.10.2026: the "Mein Depot" block always shows value and G/V exactly as Scalable reports them):
+   call `get_portfolio_holdings` and `get_portfolio_overview` (`includeYearToDate: true`, no `portfolioId`; the hook
+   `save-portfolio.cjs` saves both), then `python data/update_depot.py` (writes `depot_ref.csv` with the securities value,
+   total and G/V per period, rebuilds, tests). A `STOP:` line (e.g. a new holding without a price column) -> show it to the user.
 
 ## New instrument (only when the user asks for it) – 4 steps
 Every price column is fetched by every normal update and can be picked in the dashboard's benchmark cards.
