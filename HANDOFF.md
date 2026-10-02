@@ -63,7 +63,7 @@ only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools
   `python data/source/history_phases.py` (phase boundaries + names hard-coded there) when the user asks.
 
 ## Open points
-- Riot US7672921050: −74 % on 21.01.2009 (FSE only, before Scalable's history; then AspenBio, not a miner) – unverified.
+- Riot US7672921050: −74 % on 21.01.2009 confirmed real (AspenBio AppyScore trial results 20.01.2009; Q1 2009 range $7.63 → $1.29, per 10-K) – no action.
 - Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
 - With 2–3 benchmarks the band above the plot reserves hover space (deliberate). Beyond 5 custom cards the palette colours
   get close.

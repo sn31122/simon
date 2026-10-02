@@ -75,7 +75,7 @@ Chart error → search by name, ask before replacing an ISIN.
 02.06., D-Wave 21.05., AT&S 15.06., Bloom/Nebius/IREN 30.07., SanDisk +31 % 30.07., Halbleiter 3x −27 % 05.06., IREN −24 %
 and CleanSpark −25 % 05.02., Applied Digital +37 % 06.02.2026, Applied Optoelectronics +38 % 27.02., Atlassian +34 % 06.08.,
 Super Micro −32 % 20.03. / −27 % 10.06.2026, the leveraged ETPs XS2779861082 / XS3388191457; Bloom +193 % / D-Wave +198 %
-Nov 2024 (not splits – the `CHECK WITH USER` lines for them need no action).
+Nov 2024 (not splits – the `CHECK WITH USER` lines for them need no action); Riot −74 % 21.01.2009 (AspenBio trial results, real).
 
 ## Model conventions (details: SPEC.md)
 - Backcast with constant share counts, price return in EUR, no dividends; forward-fill gaps, flat at the first quote before it.
