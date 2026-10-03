@@ -41,8 +41,10 @@ for name,a,b in PH:
     for d in ds:
         for i,p in daily[d].items(): avg[i]=avg.get(i,0)+p/len(ds)
     w={i:p for i,p in avg.items() if p>=1}; t=sum(w.values())
-    w={i:round(p/t*100,1) for i,p in sorted(w.items(),key=lambda x:-x[1])}
-    top=max(w,key=w.get); w[top]=round(w[top]+100-sum(w.values()),1)
+    raw={i:p/t*100 for i,p in sorted(w.items(),key=lambda x:-x[1])}   # whole percents, total exactly 100 (user 03.10.)
+    w={i:int(v) for i,v in raw.items()}
+    for i in sorted(raw,key=lambda i:-(raw[i]-int(raw[i])))[:100-sum(w.values())]: w[i]+=1
+    w={i:v for i,v in w.items() if v>0}
     nm=f"{name} ({a[8:10]}.{a[5:7]}.{a[2:4]})"
     rows.append({'id':'h'+a.replace('-',''),'name':nm,'from':a,'to':b,'holdings':'|'.join(f'{i}:{p:g}%' for i,p in w.items()),
                  'description':f'Echtes Depot {a} … {b}: zeitgewichteter Durchschnitt der Tagesschluss-Gewichte über {len(ds)} Handelstage (Positionen < 1 % weggelassen)'})
