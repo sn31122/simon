@@ -63,7 +63,7 @@ button { -webkit-tap-highlight-color: transparent; }
 @media (min-width: 1500px) {
   .hdr { padding: 0 24px; }
   .hdr .wi-banner { margin-bottom: 8px; }
-  .hdr .pills { position: fixed; top: 46px; right: max(8px, calc(50% - 426px - 320px)); z-index: 61; }   /* ~16px right of the column, never cut off */
+  .hdr .hdr-ctl { position: fixed; top: 46px; right: max(8px, calc(50% - 426px - 320px)); z-index: 61; }   /* ~16px right of the column, never cut off */
   .block { scroll-margin-top: 16px; }
 }
 
@@ -561,6 +561,11 @@ th.is-sorted { color: var(--text); }
 }
 .info:hover + .info-tip, .info:focus + .info-tip { display: block; }
 .pills { display: inline-flex; flex: 0 0 auto; padding: 3px; border-radius: 999px; background: var(--pill); }
+/* period pills + price-interval pills below them, right-aligned (user 03.10.) */
+.hdr-ctl { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.pills--step .pill { height: 22px; font-size: 12.5px; }
+.pill:disabled { opacity: .4; cursor: default; }
+.pill:disabled:hover { color: var(--text); }
 .pill {
   height: 24px; padding: 0 7px;
   border: 0; border-radius: 999px; background: none;

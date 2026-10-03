@@ -28,7 +28,7 @@ with open(D/'prices_daily.csv', encoding='utf-8') as f:
 isins = head[3:]
 errors, warns = [], []
 # history before the daily data (update_prices.py --finish-history): prices_history.csv, date,res,<ISIN>… with res "m"
-# (month-end close), "2d" (every 2nd trading day) or "dh" (daily history from finanzen.net, import_history.py); prepended as final rows, res marks the resolution of every date
+# (month-end close), "2d" (every 2nd trading day) or "dh" (daily history from finanzen.net, one-time import); prepended as final rows, res marks the resolution of every date
 hrows, hres = [], []
 if (D/'prices_history.csv').exists():
     with open(D/'prices_history.csv', encoding='utf-8') as f:
