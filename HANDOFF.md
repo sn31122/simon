@@ -77,6 +77,10 @@ only adds Claude extras. Removed: `TEST.md`, `UPDATE.md` (now in README), `tools
   (opens in a phone browser / the Claude app when logged in). Lives on branch `mobile` (user: separate branch, main
   untouched); rebuilt + republished by `update-quotes` step 5. Checked at 390 px: no errors, no horizontal scroll.
 
+- Benchmark weights in whole percents (user 03.10.): Situational Awareness, Memory and the 9 Historie phases are rounded
+  (largest remainder, total exactly 100 %); Situational Awareness lost WhiteFiber, Bitdeer, T1 Energy (0.2–0.3 % each → 0).
+  `data/source/history_phases.py` now rounds the same way. "Mein Depot" keeps its exact weights (real holdings).
+
 ## Open points
 - Riot US7672921050: −74 % on 21.01.2009 confirmed real (AspenBio AppyScore trial results 20.01.2009; Q1 2009 range $7.63 → $1.29, per 10-K) – no action.
 - Codex has no Scalable connector: price and depot updates stay in Claude Code (see `AGENTS.md`).
