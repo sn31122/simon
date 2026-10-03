@@ -18,7 +18,7 @@ Translate the request into one call of `python data/benchmarks.py` (`python3` wh
 Pass the instrument words as the user wrote them; the script resolves them against `data/instruments.csv` and checks that
 the weights total 100 %. Never edit `benchmarks.csv` by hand.
 - `STOP: … ambiguous: …` → ask the user which one (show the listed choices).
-- `STOP: no tracked instrument matches …` → ask whether to add it as a new instrument (`UPDATE_PRICES.md`, "New
+- `STOP: no tracked instrument matches …` → ask whether to add it as a new instrument (skill `update-quotes`, "New
   instrument"), then rerun.
 - `STOP: weights total …` → ask for the corrected weights. "Mein Depot" and "Depot-Historie" cannot be changed here.
 Report in one or two lines (the script's first line + tests), then commit on a branch, PR, merge on request (`AGENTS.md`).

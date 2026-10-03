@@ -1,5 +1,5 @@
 # Merges fetched Scalable quotes into prices_daily.csv (daily closes), intraday.csv (30-min points) and intraday_2h.csv
-# (2-hour points), then rebuilds portfolio-data.js via build_data.py.  The runbook for the fetch is UPDATE_PRICES.md.
+# (2-hour points), then rebuilds portfolio-data.js via build_data.py.  Runbook: skill update-quotes.
 #
 # Input: files written by the PostToolUse hook .claude/hooks/save-chart.cjs, which saves every get_security_chart result
 # (header timestamp_utc,price; values verbatim, ascending; nobody copies numbers by hand):
@@ -14,9 +14,9 @@
 # intraday.csv / intraday_2h.csv keep every collected point (user, 27.09.): per ISIN and Berlin date the newest fetch
 # replaces the stored points of that date (a shorter, cut-off first session of a later fetch never replaces a full one).
 #
-# Usage (normal update = --plan, fetch agents, --finish; see UPDATE_PRICES.md or the update-quotes skill):
+# Usage (normal update = --plan, fetch agents, --finish; see the update-quotes skill):
 #         python update_prices.py --plan      empties incoming/, prints one ready agent prompt per batch
-#         python update_prices.py --finish    check -> merge -> rebuild -> tests -> HANDOFF status block -> short report
+#         python update_prices.py --finish    check -> merge -> rebuild -> tests -> AGENTS.md status block -> short report
 #   new instrument (only on user instruction; row in instruments.csv first):
 #         python update_prices.py --plan-add ISIN[,ISIN]    prints the backfill prompts (year_to_date + seven_days + one_month
 #                                                           + one_year + max: the history before 2026, prices_history.csv)
@@ -92,7 +92,7 @@ def last_price(isin):
 THINK = 'Thinking ON: think step by step before each tool call and before writing each file.'
 def agent_prompt(tfs, isins):
     """The exact prompt for one price-fetcher agent (Claude Sonnet 5.5)."""
-    return (f'{THINK}\nRead `UPDATE_PRICES.md` (section "Steps for a fetch agent") in `{D.parent}` and follow it exactly. '
+    return (f'{THINK}\nNormal update in `{D.parent}`: follow your agent instructions (fetch agent). '
             f'TIMEFRAMES: `{" ".join(tfs)}`. Your ISINs: `{" ".join(isins)}`.')
 
 def planned_timeframes():
@@ -164,16 +164,13 @@ def run_cmd(cmd, show=True):
 
 
 def tests_status_report(alerts, step=''):
-    """Runs the tests, rewrites the data-status block in HANDOFF.md, prints the report. -> exit code (0 = tests OK)."""
+    """Runs the tests, rewrites the data-status block in AGENTS.md, prints the report. -> exit code (0 = tests OK)."""
     root = D.parent
     print(f'\n== {step}tests ==')
     c1, o1 = run_cmd(['node', 'tests/engine.test.cjs'], show=False)
-    c2, _ = run_cmd([sys.executable, 'tests/crosscheck.py'], show=False)
-    c3, o3 = run_cmd(['node', 'tests/crosscheck.cjs'], show=False)
     t1 = next((ln for ln in o1.splitlines() if ln.startswith('engine tests')), 'engine tests: no result')
-    t3 = next((ln for ln in o3.splitlines() if ln.startswith('crosscheck')), 'crosscheck: no result')
-    print(t1); print(t3)
-    # HANDOFF.md: machine-maintained status block
+    print(t1)
+    # AGENTS.md: machine-maintained status block
     with open(D/'prices_daily.csv', encoding='utf-8') as f:
         allrows = [r for r in csv.reader(f) if r]
     hd, rr = allrows[0], allrows[1:]
@@ -191,24 +188,24 @@ def tests_status_report(alerts, step=''):
     status = (f'<!-- data-status:start (written by update_prices.py --finish) -->\n'
               f'- Data status (update {now_berlin:%d.%m.%Y %H:%M} Berlin): {len(rr)} trading days {rr[0][0]} … {last[0]}; '
               f'last row {last[0]} = {last[1]}{asof}; {hist}30-min (intraday.csv): {span(idays)}; 2-h (intraday_2h.csv): {span(hdays)}; '
-              f'{t1}; {t3}.\n<!-- data-status:end -->')
-    hf = root/'HANDOFF.md'
+              f'{t1}.\n<!-- data-status:end -->')
+    hf = root/'AGENTS.md'
     h = hf.read_text(encoding='utf-8')
     if '<!-- data-status:start' in h:
         h = re.sub(r'<!-- data-status:start.*?<!-- data-status:end -->', lambda m: status, h, flags=re.S)
     else:
         h = h.replace('## State\n', '## State\n' + status + '\n', 1)
     hf.write_text(h, encoding='utf-8', newline='')
-    ok = c1 == 0 and c3 == 0 and c2 == 0
+    ok = c1 == 0
     print('\n== REPORT (give this to the user) ==')
     print(f'Prices up to {last[0]} ({last[1]}{asof}); {len(hd) - 3} ISINs; 30-min data: {span(idays)}; 2-h data: {span(hdays)}.')
-    print('Tests: ' + ('OK - ' if ok else 'FAILED - ') + t1 + '; ' + t3)
+    print('Tests: ' + ('OK - ' if ok else 'FAILED - ') + t1)
     for a in alerts: print('CHECK WITH USER: ' + a)
-    print('HANDOFF.md status updated. Hard-reload the dashboard (Ctrl+F5).')
+    print('AGENTS.md status updated. Hard-reload the dashboard (Ctrl+F5).')
     return 0 if ok else 1
 
 
-# ------------------------------------------------------------------ --finish: check -> merge -> tests -> HANDOFF -> report
+# ------------------------------------------------------------------ --finish: check -> merge -> tests -> AGENTS.md status -> report
 if '--finish' in sys.argv:
     me = [sys.executable, str(pathlib.Path(__file__).resolve())]
     print('== 1/3 check ==')
@@ -236,8 +233,8 @@ ADD_BATCH = BATCH        # new-instrument backfill and history: also one agent
 
 def add_prompt(isins):
     """The exact prompt for one backfill agent (price-fetcher, Claude Sonnet 5.5)."""
-    return (f'{THINK}\nRead `UPDATE_PRICES.md` (section "Steps for a backfill agent (new ISIN)") in `{D.parent}` and follow it '
-            f'exactly. Your ISINs: `{" ".join(isins)}`.')
+    return (f'{THINK}\nNew-instrument backfill in `{D.parent}`: follow your agent instructions (backfill agent). '
+            f'TIMEFRAMES: `year_to_date seven_days one_month one_year max`. Your ISINs: `{" ".join(isins)}`.')
 
 def arg_isins(flag):
     i = sys.argv.index(flag)
@@ -337,14 +334,7 @@ def add_history(new):
     with open(HIST, 'w', encoding='utf-8', newline='') as f:
         w = csv.writer(f); w.writerow(['date', 'res'] + head[3:])
         for d in sorted(table): w.writerow([d, table[d]['res']] + [table[d].get(i, '') for i in head[3:]])
-    remerge_daily_history()
     return f'prices_history.csv: {n} history points of {len(new)} new ISIN(s) merged ({len(table)} rows)'
-
-
-def remerge_daily_history():
-    """Daily closes before 2026 (prices_history_daily.csv, finanzen.net) win over Scalable's month-end / 2nd-day points."""
-    if (D/'prices_history_daily.csv').exists():
-        run_cmd([sys.executable, str(D/'import_history.py'), '--merge', '--no-build'])
 
 
 if '--plan-add' in sys.argv:
@@ -429,116 +419,14 @@ if '--finish-add' in sys.argv:
     write_store(STORE_30M, s30); write_store(STORE_2H, s2h)
     print(f'prices_daily.csv: {len(head) - 3} columns; intraday.csv: {store_info(s30)}; intraday_2h.csv: {store_info(s2h)}')
     print(add_history({i: (got[i][5], got[i][6]) for i in new}))
-    # the raw year_to_date files stay as history in source/ (like the earlier backfills), the seven_days files are temporary
-    meta = D/'source'/'ytd_meta.csv'
-    new_meta = not meta.exists()
-    with open(meta, 'a', encoding='utf-8', newline='') as f:
-        w = csv.writer(f)
-        if new_meta: w.writerow(['isin', 'name', 'currency', 'source', 'points', 'first_timestamp', 'last_timestamp'])
-        for i in new:
-            y = got[i][2]
-            w.writerow([i, ins[i]['name'], 'EUR', f'year_to_date backfill {today}', len(y), fmt_ts(y[0][0]), fmt_ts(y[-1][0])])
-            dst = D/'source'/f'ytd_{i}.csv'
-            if dst.exists(): dst = D/'source'/f'ytd_{i}_{today}.csv'
-            (YTD/f'{i}.csv').replace(dst)
-            (INC/f'{i}.csv').unlink(); (INC2H/f'{i}.csv').unlink()
-            for sub, name in (('1y', 'one_year'), ('max', 'max')):
-                dh = D/'source'/f'history_{today}'/name
-                dh.mkdir(parents=True, exist_ok=True)
-                (INC/sub/f'{i}.csv').replace(dh/f'{i}.csv')
+    for i in new:   # the fetch files are temporary; their content now lives in the CSVs
+        for f in (YTD/f'{i}.csv', INC/f'{i}.csv', INC2H/f'{i}.csv', INC/'1y'/f'{i}.csv', INC/'max'/f'{i}.csv'):
+            if f.exists(): f.unlink()
     print('\n== rebuild ==')
     code, out = run_cmd([sys.executable, str(D/'build_data.py')])
     if code: print('\nSTOP: build_data.py failed (prices_daily.csv / intraday*.csv are already written). Show this to the user.'); sys.exit(1)
     alerts = [ln.strip() for ln in out.splitlines() if any(i in ln for i in new) and ('SPLIT' in ln or 'check value' in ln)]
     sys.exit(tests_status_report(alerts))
-
-
-# ------------------------------------------------------------------ history before the daily data: --plan-history / --finish-history
-# (user 28.09.2026) one_year = every 2nd trading day of the last year, max = month-end closes back to ~2016; both go to
-# prices_history.csv (date,res,<ISIN>…; res "2d" / "m"), only for dates before the first row of prices_daily.csv.
-
-if '--plan-history' in sys.argv:
-    i = sys.argv.index('--plan-history')
-    isins = arg_isins('--plan-history') if i + 1 < len(sys.argv) and not sys.argv[i + 1].startswith('--') else head[3:]
-    for d in (INC1Y, INCMAX):
-        d.mkdir(parents=True, exist_ok=True)
-        for x in isins:
-            if (d/f'{x}.csv').exists(): (d/f'{x}.csv').unlink()
-    k = math.ceil(len(isins) / ADD_BATCH)
-    size = math.ceil(len(isins) / k)
-    batches = [isins[j:j + size] for j in range(0, len(isins), size)]
-    print(f'HISTORY PLAN for {len(isins)} ISINs (one_year + max; the hook writes data/incoming/1y/ and data/incoming/max/):')
-    print(f'\nAGENT PROMPTS - start {len(batches)} agent(s): agent type price-fetcher, model claude-sonnet-5-5, one prompt each:')
-    for j, b in enumerate(batches, 1): print(f'--- prompt {j}/{len(batches)} ---\n' + agent_prompt(['one_year', 'max'], b))
-    print('--- end of prompts --- then: python data/update_prices.py --finish-history')
-    sys.exit(0)
-
-def history_rows(y_pts, m_pts, first_daily):
-    """one_year points {isin: [(ts, price)]} + max points -> {date: [res, {isin: price}]} before first_daily:
-    every one_year point before the daily data ("2d"), and for the months before the first one_year date one row per month
-    ("m", dated on the month's latest point over all ISINs; each ISIN's own month-end close)."""
-    out = {}
-    starts = [to_berlin(y[0][0]).date().isoformat() for y in y_pts.values() if y]
-    y_start = min(starts) if starts else first_daily
-    for i, y in y_pts.items():
-        for ts, p in y:
-            d = to_berlin(ts).date()
-            if d.isoformat() < first_daily and d.weekday() < 5: out.setdefault(d.isoformat(), ['2d', {}])[1][i] = p
-    months = {}
-    for i, m in m_pts.items():
-        for ts, p in m:
-            d = to_berlin(ts).date().isoformat()
-            if d < y_start: months.setdefault(d[:7], {})[i] = (d, p)
-    for mon, v in months.items():
-        d = max(x[0] for x in v.values())
-        while datetime.date.fromisoformat(d).weekday() > 4: d = (datetime.date.fromisoformat(d) - datetime.timedelta(1)).isoformat()
-        if d in out: continue
-        out[d] = ['m', {i: p for i, (_, p) in v.items()}]
-    return out
-
-if '--finish-history' in sys.argv:
-    first_daily = rows[0][0]
-    errs, redo, y_pts, m_pts = [], [], {}, {}
-    for i in head[3:]:
-        y, py = read_points(INC1Y/f'{i}.csv')
-        m, pm = read_points(INCMAX/f'{i}.csv')
-        prob = [f'incoming/1y/{i}.csv: {x}' for x in py] + [f'incoming/max/{i}.csv: {x}' for x in pm]
-        if prob: redo.append(i); errs.append(f'{i}: ' + '; '.join(prob[:3])); continue
-        off = []                                   # same source as the daily closes: final days must agree
-        for src, P in (('one_year', y), ('max', m)):
-            for ts, p in P:
-                r = by_date.get(to_berlin(ts).date().isoformat())
-                if r and r[1] == 'final' and r[col[i]] and abs(p / float(r[col[i]]) - 1) > 0.005:
-                    off.append(f'{src} {r[0]} {p:g} vs daily {r[col[i]]}')
-        if off: redo.append(i); errs.append(f'{i}: differs from prices_daily.csv on {len(off)} days, e.g. ' + '; '.join(off[:2]))
-        y_pts[i], m_pts[i] = y, m
-    if errs:
-        print('ERRORS (nothing written):', *errs, sep='\n  ')
-        if redo:
-            parts = [redo[j:j + ADD_BATCH] for j in range(0, len(redo), ADD_BATCH)]
-            print(f'\nFETCH AGAIN: start {len(parts)} agent(s) (price-fetcher, claude-sonnet-5-5), one prompt each, then --finish-history again:')
-            for j, b in enumerate(parts, 1): print(f'--- prompt {j}/{len(parts)} ---\n' + agent_prompt(['one_year', 'max'], b))
-            print('--- end of prompts ---')
-        sys.exit(1)
-    hist = history_rows(y_pts, m_pts, first_daily)
-    with open(HIST, 'w', encoding='utf-8', newline='') as f:
-        w = csv.writer(f); w.writerow(['date', 'res'] + head[3:])
-        for d in sorted(hist):
-            res, v = hist[d]
-            w.writerow([d, res] + ['%.10g' % v[i] if i in v else '' for i in head[3:]])
-    remerge_daily_history()
-    nm, n2 = sum(1 for v in hist.values() if v[0] == 'm'), sum(1 for v in hist.values() if v[0] == '2d')
-    firsts = sorted((min(d for d, v in hist.items() if i in v[1]), i) for i in head[3:] if any(i in v[1] for v in hist.values()))
-    print(f'prices_history.csv: {len(hist)} rows {min(hist)} .. {max(hist)} ({nm} month-end + {n2} every-2nd-day rows) for '
-          f'{len(firsts)} of {len(head) - 3} ISINs; latest first quote: ' + ', '.join(f'{i} {d}' for d, i in firsts[-5:]))
-    src = D/'source'/f'history_{today}'                  # the raw fetches stay as history, like the ytd backfills
-    for d, sub in ((INC1Y, 'one_year'), (INCMAX, 'max')):
-        (src/sub).mkdir(parents=True, exist_ok=True)
-        for p in d.glob('*.csv'): p.replace(src/sub/p.name)
-    print('\n== rebuild ==')
-    code, out = run_cmd([sys.executable, str(D/'build_data.py')])
-    if code: print('\nSTOP: build_data.py failed (prices_history.csv is written). Show this to the user.'); sys.exit(1)
-    sys.exit(tests_status_report([ln.strip() for ln in out.splitlines() if 'SPLIT' in ln and 'history' in ln]))
 
 
 # ------------------------------------------------------------------ read the hook's fetch files (+ validation)

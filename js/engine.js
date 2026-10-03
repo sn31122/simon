@@ -1,5 +1,5 @@
 /*
- * Yacht-Portfolio - calculation engine + German formatters (see SPEC.md, section "Engine API").
+ * Yacht-Portfolio - calculation engine + German formatters.
  * Pure functions, no DOM, no dependencies, classic script (no ES modules).
  * Browser: window.PFEngine      Node: const PFEngine = require('./js/engine.js')
  *
@@ -208,6 +208,26 @@
       skipped.push(INTERVAL_STEPS[k]);
     }
     return { key, want, stepped: key !== want, skipped, days };
+  }
+
+  /**
+   * thinIndices(ctx, start, end, step) -> [k…] indices into the daily range [start, end] (0 … end − start), ascending
+   * The points the chart keeps for a coarser price interval (user 03.10.): 'd' every point, '2d' every 2nd point counted
+   * back from the end, 'w' the last point of each week (Mon–Sun), 'm' the last point of each month. The first and the
+   * last point of the range are always kept, so start and end values never change.
+   */
+  function thinIndices(ctx, start, end, step) {
+    const L = end - start, out = [];
+    if (!(L >= 0)) return out;
+    if (step === '2d') {
+      for (let k = L; k > 0; k -= 2) out.push(k);
+      out.push(0); out.reverse();
+      return out[1] === 0 ? out.slice(1) : out;
+    }
+    const key = step === 'w' ? (i) => Math.floor((ctx.day[i] + 3) / 7) : step === 'm' ? (i) => ctx.dates[i].slice(0, 7) : null;
+    out.push(0);
+    for (let k = 1; k <= L; k++) if (!key || k === L || key(start + k) !== key(start + k + 1)) out.push(k);
+    return out;
   }
 
   /**
@@ -1002,7 +1022,7 @@
     PRESETS, ANN, DEFAULT_RF,
     prepare, presetRange, customRange, portfolio, benchmark, drawdown, stats, benchmarkHoldings, assets, groupSummary,
     withShares, coverageStart, notQuoted, depotNow, depotPeriod, depotChange,
-    assetsTotal, chartInterval, gridCovers, gridFrame,
+    assetsTotal, chartInterval, thinIndices, gridCovers, gridFrame,
     intraday, intradayBenchmark, intradayAsset, intradayWindow, equalValueWindow, benchmarkValueNow, benchmarkRealPl,
     fmt: { eur, num, pct, ratio, date, asofBerlin, parseDE, DASH },
     util: { mean, sampleSd, sampleCov, quantile, returnsOf, minusMonths, daysBetween, dayNumber },

@@ -14,6 +14,7 @@
   <div class="topbar" id="topBar">
     <header class="hdr">
       <div class="hdr-row">
+        <div class="hdr-ctl">
         <div class="pills" id="holdPills" role="group" aria-label="Zeitraum (gilt für Wert, Chart und Positionsliste)">
           <button type="button" class="pill" data-hp="1T">1T</button>
           <button type="button" class="pill" data-hp="1W">1W</button>
@@ -23,6 +24,14 @@
           <button type="button" class="pill" data-hp="YTD">YTD</button>
           <button type="button" class="pill" data-hp="1J">1J</button>
           <button type="button" class="pill" data-hp="SK">Seit Kauf</button>
+        </div>
+        <!-- price interval of the chart (user 03.10.): thins daily charts to every 2nd day / week / month -->
+        <div class="pills pills--step" id="stepPills" role="group" aria-label="Kursintervall des Charts">
+          <button type="button" class="pill" data-step="d">1 Tag</button>
+          <button type="button" class="pill" data-step="2d">2 Tage</button>
+          <button type="button" class="pill" data-step="w">1 Woche</button>
+          <button type="button" class="pill" data-step="m">1 Monat</button>
+        </div>
         </div>
       </div>
       <div class="wi-banner" id="wiBanner" role="status" aria-live="polite" hidden>

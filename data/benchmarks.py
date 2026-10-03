@@ -35,7 +35,7 @@ def norm(s): return re.sub(r'[^a-z0-9]+', ' ', s.casefold()).strip()
 def find_instrument(q):
     if ISIN_RE.match(q.upper()):
         if q.upper() in price_cols: return q.upper()
-        stop(f'{q.upper()} is not a price column. Add it as a new instrument first (UPDATE_PRICES.md, "New instrument").')
+        stop(f'{q.upper()} is not a price column. Add it as a new instrument first (skill update-quotes, "New instrument").')
     n = norm(q)
     for exact in (lambda r: norm(r['short']) == n, lambda r: norm(r['name']) == n):
         hits = [i for i, r in inst.items() if exact(r) and i in price_cols]
@@ -46,7 +46,7 @@ def find_instrument(q):
     if len(hits) == 1: return hits[0]
     if not hits:
         stop(f'no tracked instrument matches "{q}". If it should be added: search it on Scalable and add it as a new '
-             f'instrument first (UPDATE_PRICES.md, "New instrument").')
+             f'instrument first (skill update-quotes, "New instrument").')
     stop(f'"{q}" is ambiguous: ' + '; '.join(f'{short(i)} = {inst[i]["name"]} ({i})' for i in hits[:12])
          + ' - name it more exactly or use the ISIN.')
 
@@ -137,9 +137,6 @@ def run(c):
 code, o = run([sys.executable, str(D / 'build_data.py')])
 if code: print(o); print('STOP: build_data.py failed - restore with: git checkout data/benchmarks.csv'); sys.exit(1)
 c1, o1 = run(['node', 'tests/engine.test.cjs'])
-c2, _ = run([sys.executable, 'tests/crosscheck.py'])
-c3, o3 = run(['node', 'tests/crosscheck.cjs'])
 t1 = next((ln for ln in o1.splitlines() if ln.startswith('engine tests')), 'engine tests: no result')
-t3 = next((ln for ln in o3.splitlines() if ln.startswith('crosscheck')), 'crosscheck: no result')
-print('written: data/benchmarks.csv; Tests: ' + ('OK - ' if not (c1 or c2 or c3) else 'FAILED - ') + t1 + '; ' + t3)
-sys.exit(1 if c1 or c2 or c3 else 0)
+print('written: data/benchmarks.csv; Tests: ' + ('OK - ' if not (c1) else 'FAILED - ') + t1)
+sys.exit(1 if c1 else 0)

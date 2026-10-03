@@ -57,6 +57,7 @@
     hbOn: false,                               // card "Benchmark-Positionen" (P&L per holding of every shown benchmark), off by default
     yachtOn: true,                             // card "Yacht-Portfolio" (user 30.09.): its line in the chart, legend, measurement and Statistik
     sinceBuy: false, holdSort: 'value-desc',   // sinceBuy: pill "Seit Kauf" (chart shows MAX)
+    step: 'd',                                 // chart price interval for daily charts (user 03.10.): d / 2d / w / m; not persisted
     showHold: true, showAssets: false,         // list section toggles "Portfolio" / "Einzelwerte" (independent; not persisted)
     whatIf: HAS_WHATIF, overrides: {}                // Stück are always editable (what-if): {ISIN: shares}; not persisted
   };
@@ -215,6 +216,7 @@
     return state.sinceBuy ? 'MAX' : (state.preset || 'YTD');
   }
   var IV_SHORT = { m30: '30 Min.', h2: '2 Std.', day: '1 Tag' };
+  var STEP_SHORT = { d: '1 Tag', '2d': '2 Tage', w: '1 Woche', m: '1 Monat' };
   var IV_KURSE = { m30: '30-Min-Kurse', h2: '2-Std-Kurse' };
   var IV_LONG = { m30: '30-Minuten-Kurse', h2: '2-Stunden-Kurse' };
 
@@ -585,40 +587,47 @@
     return { main: main, dd: dd };
   }
 
+  /** Chart point -> index into the daily range (the same unless a coarser price interval thins the chart). */
+  function dayIdx(i) { return cur && cur.K && i != null ? cur.K[i] : i; }
   function chartModels(M) {
+    M.K = null;
     if (M.intra) return intraChartModels(M);
     var R = M.R, p = M.p, pl = state.mode === 'pl';
-    var dates = ctx.dates.slice(R.start, R.end + 1);
+    // price interval (user 03.10.): the chart keeps only the points E.thinIndices picks; M.K maps chart point -> range index
+    var K = M.K = state.step !== 'd' ? E.thinIndices(ctx, R.start, R.end, state.step) : null;
+    function pick(a) { return K && a ? K.map(function (k) { return a[k]; }) : a; }
+    var dates = pick(ctx.dates.slice(R.start, R.end + 1));
     var common = {
       dates: dates,
       firstIsMonthStart: R.start === 0 || ctx.dates[R.start - 1].slice(0, 7) !== ctx.dates[R.start].slice(0, 7),
       // a range with history points (a month / 2 days apart): x by calendar time instead of one slot per point
-      xs: R.start < (ctx.dailyFrom || 0) ? ctx.day.slice(R.start, R.end + 1) : null,
+      xs: R.start < (ctx.dailyFrom || 0) ? pick(ctx.day.slice(R.start, R.end + 1)) : null,
       monthLabel: monthLabel, dayLabel: dayLabel, emptyText: emptyText()
     };
     var benches = p ? M.selB.filter(function (x) { return x.s; }) : [];
     var main = extend({
-      series: p ? { values: pl ? p.pl : p.value } : null,
-      ghost: p && M.orig && state.yachtOn ? { values: pl ? M.orig.pl : M.orig.value } : null,
-      benches: benches.map(function (x) { return { id: x.id, color: x.color, values: pl ? x.s.pl : x.s.value }; }),
+      series: p ? { values: pick(pl ? p.pl : p.value) } : null,
+      ghost: p && M.orig && state.yachtOn ? { values: pick(pl ? M.orig.pl : M.orig.value) } : null,
+      benches: benches.map(function (x) { return { id: x.id, color: x.color, values: pick(pl ? x.s.pl : x.s.value) }; }),
       hideSeries: !state.yachtOn,
       baseline: p ? (pl ? 0 : p.startValue) : null,
       axisLabel: function (v) { return F.num(v, 2); },                 // app: "40.000,00"
       lastLabel: function (v) { return F.num(v, 2); },
       weekLabel: weekLabel,
-      hoverHTML: hoverHTML,
-      measureHTML: measureHTML
+      hoverHTML: function (i, mb) { return hoverHTML(dayIdx(i), mb); },
+      measureHTML: function (a, b) { return measureHTML(dayIdx(a), dayIdx(b)); }
     }, common);
-    var pdd = M.pdd, mk = null;
-    if (state.yachtOn && pdd && isNum(pdd.maxDD) && pdd.maxDD < 0 && isNum(pdd.trough) && dates[pdd.trough]) {
-      mk = { i: pdd.trough, value: pdd.maxDD, label: 'Max. ' + pctU(pdd.maxDD) + ' am ' + F.date(dates[pdd.trough], 'short') };
+    var pdd = M.pdd, mk = null, ddv = pdd ? pick(pdd.dd) : null, tr = null;
+    if (ddv) ddv.forEach(function (v, j) { if (isNum(v) && (tr === null || v < ddv[tr])) tr = j; });   // deepest drawn point
+    if (state.yachtOn && tr !== null && ddv[tr] < 0 && dates[tr]) {
+      mk = { i: tr, value: ddv[tr], label: 'Max. ' + pctU(ddv[tr]) + ' am ' + F.date(dates[tr], 'short') };
     }
     var dd = extend({
-      dd: pdd ? pdd.dd : null, hideSeries: !state.yachtOn,
-      benches: benches.filter(function (x) { return x.dd && x.dd.dd; }).map(function (x) { return { id: x.id, color: x.color, dd: x.dd.dd }; }),
+      dd: ddv, hideSeries: !state.yachtOn,
+      benches: benches.filter(function (x) { return x.dd && x.dd.dd; }).map(function (x) { return { id: x.id, color: x.color, dd: pick(x.dd.dd) }; }),
       maxMarker: mk,
       axisLabel: function (v, step) { return F.pct(v, { sign: false, dec: step < 0.01 ? 1 : 0 }); },
-      readout: ddReadout,
+      readout: function (i) { return ddReadout(i == null ? i : dayIdx(i)); },
       weekLabel: weekLabel
     }, common);
     return { main: main, dd: dd };
@@ -645,7 +654,7 @@
     if (pin && cur && cur.intra) {
       help.textContent = 'Messung ' + slotLabel(cur.intra, pin.a) + ' – ' + slotLabel(cur.intra, pin.b) + end;
     } else if (pin && cur && cur.p) {
-      var a = ctx.dates[cur.R.start + pin.a], b = ctx.dates[cur.R.start + pin.b];
+      var a = ctx.dates[cur.R.start + dayIdx(pin.a)], b = ctx.dates[cur.R.start + dayIdx(pin.b)];
       btn.title = 'Zeitraum auf ' + F.date(a, 'short') + ' – ' + F.date(b, 'short') + ' setzen';
       help.textContent = 'Messung ' + F.date(a, 'short') + ' – ' + F.date(b, 'short') + end;
     } else if (sync.following()) {
@@ -673,11 +682,11 @@
         if (ctx.res[k] === 'm') { hasM = true; lastM = ctx.dates[k]; } else if (ctx.res[k] === 'dh') hasDH = true; else has2 = true;
       }
       if (hasDH) why = 'davor Tagesschluss Xetra (finanzen.net; einzelne Titel ohne diese Daten: Monatsschluss), ab ' +
-        F.date(ctx.dates[scal], 'short') + ' Scalable';             // daily history 2006–2025 (import_history.py)
+        F.date(ctx.dates[scal], 'short') + ' Scalable';             // daily history 2006–2025 (finanzen.net)
       else why = 'davor ' + [has2 ? 'jeder 2. Handelstag' : '', hasM ? 'Monatsschluss' + (has2 && lastM ? ' bis ' + F.date(lastM, 'monthYear') : '') : '']
         .filter(Boolean).join(', ') + ' (ab ' + F.date(ctx.dates[scal], 'short') + ' täglich)';
     }
-    el.innerHTML = 'Intervall: <b>' + esc(IV_SHORT[iv.key]) + '</b>' + (why ? '<span class="chart-iv-why"> · ' + esc(why) + '</span>' : '');
+    el.innerHTML = 'Intervall: <b>' + esc(M.K ? STEP_SHORT[state.step] : IV_SHORT[iv.key]) + '</b>' + (why ? '<span class="chart-iv-why"> · ' + esc(why) + '</span>' : '');
     var have = ['m30', 'h2'].map(function (k) {
       var G = ctx.grids && ctx.grids[k];
       return G && G.D ? IV_SHORT[k] + ' für ' + G.D + (G.D === 1 ? ' Handelstag' : ' Handelstage') + ' (' +
@@ -1421,16 +1430,6 @@
       '</div>';
   }
 
-  function currentDDExtra(M) {
-    var s = M.ps, dd = M.pdd && M.pdd.dd;
-    if (!s || !dd || !isNum(s.currentDD)) return '';
-    if (s.currentDD >= 0) return 'auf Höchststand';
-    for (var k = dd.length - 1; k >= 0; k--) {
-      if (isNum(dd[k]) && dd[k] >= 0) return 'unter dem Hoch vom ' + esc(F.date(ctx.dates[M.R.start + k], 'short'));
-    }
-    return '';
-  }
-
   /** " · Risiko ab 02.01.2026 (Tageskurse)" when the range reaches into the history (risk metrics use daily data only). */
   function riskNote(M) {
     return M && M.R && M.R.start < (ctx.dailyFrom || 0) ? ' · Vol., Sharpe usw. ab ' + F.date(ctx.dates[ctx.dailyFrom], 'short') + ' (Tageskurse)' : '';
@@ -1476,21 +1475,6 @@
         value: colored(get(s, 'maxDD'), pctU(get(s, 'maxDD'))), extra: ddExtra, bench: bench(pctU(get(b, 'maxDD')))
       }),
       card({
-        label: 'Calmar-Ratio', title: 'Rendite p.a. / |Max. Drawdown|', weak: weak,
-        value: ratio(get(s, 'calmar')), extra: weak ? '<span class="weak">beruht auf Rendite p.a.</span>' : '',
-        bench: bench(ratio(get(b, 'calmar')))
-      }),
-      card({
-        label: 'VaR 95 % (1 Tag)', title: 'historischer Value at Risk: −(5-%-Quantil der Tagesrenditen) · € = VaR · Endwert',
-        value: pctU(get(s, 'var95')), extra: s ? '≈ ' + eur(s.var95EUR, { dec: 0 }) + ' Tagesverlust' : '',
-        bench: bench(pctU(get(b, 'var95')))
-      }),
-      card({
-        label: 'CVaR 95 % (1 Tag)', title: 'Expected Shortfall: −Ø der Tagesrenditen ≤ 5-%-Quantil · € = CVaR · Endwert',
-        value: pctU(get(s, 'cvar95')), extra: s ? '≈ ' + eur(s.cvar95EUR, { dec: 0 }) + ' Tagesverlust' : '',
-        bench: bench(pctU(get(b, 'cvar95')))
-      }),
-      card({
         label: 'Bester / Schlechtester Tag', title: 'höchste und niedrigste Tagesrendite im Zeitraum',
         value: colored(get(bd, 'ret'), pct(get(bd, 'ret'))) + '<span class="sep"> / </span>' + colored(get(wd, 'ret'), pct(get(wd, 'ret'))),
         extra: s ? esc(dshort(bd && bd.date) + ' / ' + dshort(wd && wd.date)) : '',
@@ -1500,10 +1484,6 @@
         label: 'Positive Tage', title: 'Anteil der Handelstage mit Rendite > 0',
         value: pctU(get(s, 'pctPositive'), 1), extra: M.p && M.p.ret ? 'von ' + int(M.p.ret.length) + ' Handelstagen' : '',
         bench: bench(pctU(get(b, 'pctPositive'), 1))
-      }),
-      card({
-        label: 'Aktueller Drawdown', title: 'V_Ende / bisheriges Hoch − 1',
-        value: colored(get(s, 'currentDD'), pctU(get(s, 'currentDD'))), extra: currentDDExtra(M), bench: bench(pctU(get(b, 'currentDD')))
       })
     ];
     $('kpis').innerHTML = cards.join('');
@@ -2045,12 +2025,26 @@
     renderHeadline(cur);
     renderCharts(cur);
     renderInterval(cur);
+    renderStep(cur);
     renderHoldings();
     renderKpis(cur);
     renderHoldBreak(cur);
     renderCmpPanel(cur);
     renderAssets(cur);
     renderMeasureBar();
+  }
+
+  /** Price-interval pills under the period pills: active step; disabled while the chart runs on 30-min / 2-h points. */
+  function renderStep(M) {
+    var off = !!(M && M.intra);
+    Array.prototype.forEach.call($('stepPills').querySelectorAll('[data-step]'), function (b) {
+      var on = b.getAttribute('data-step') === state.step;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.disabled = off;
+    });
+    $('stepPills').title = off ? 'Kursintervall: bei 1T / 1W / 1M zeigt der Chart 30-Min- bzw. 2-Std-Kurse' :
+      'Kursintervall des Charts (Kennzahlen und Listen bleiben auf Tagesschlusskursen)';
   }
 
   /** What-if: a Stück input was committed (Enter / blur). */
@@ -2150,7 +2144,7 @@
   function applyMeasure() {
     var pin = sync.pinned();
     if (!pin || !cur) return;
-    var from = ctx.dates[cur.R.start + pin.a], to = ctx.dates[cur.R.start + pin.b];
+    var from = ctx.dates[cur.R.start + dayIdx(pin.a)], to = ctx.dates[cur.R.start + dayIdx(pin.b)];
     if (!from || !to || !E.customRange(ctx, from, to)) return;
     setRangeHint('');
     state.custom = { from: from, to: to };
@@ -2230,6 +2224,12 @@
     $('wiReset').addEventListener('click', function () { state.overrides = {}; update(); });
     $('selAll').addEventListener('click', function () { state.selected = new Set(ALL); update(); });
     $('selNone').addEventListener('click', function () { state.selected = new Set(); update(); });
+    $('stepPills').addEventListener('click', function (ev) {
+      var b = ev.target.closest && ev.target.closest('[data-step]');
+      if (!b || b.disabled || b.getAttribute('data-step') === state.step) return;
+      state.step = b.getAttribute('data-step');
+      update();
+    });
     $('holdPills').addEventListener('click', function (ev) {
       var b = ev.target.closest('[data-hp]');
       if (!b || b.getAttribute('data-hp') === periodKey()) return;

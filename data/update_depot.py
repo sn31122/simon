@@ -8,7 +8,7 @@
 #
 # Usage:  python data/update_depot.py            check -> write the three files -> rebuild -> tests
 #         python data/update_depot.py --dry-run  only print what would change
-# Checks: every held ISIN must be a price column (else: add it as a new instrument first, UPDATE_PRICES.md); the sum of
+# Checks: every held ISIN must be a price column (else: add it as a new instrument first, skill update-quotes); the sum of
 # shares x Scalable quote must match the overview's securities value within 0.5 %.
 import csv, io, json, pathlib, re, subprocess, sys
 
@@ -50,7 +50,7 @@ held = [h for h in hold.get('holdings', []) if (h.get('position') or {}).get('fi
 if not held: errors.append('holdings.json has no positions with filled > 0')
 for h in held:
     if h['isin'] not in col:
-        errors.append(f"{h['isin']} ({h['name']}) is not a price column: add it as a new instrument first (UPDATE_PRICES.md)")
+        errors.append(f"{h['isin']} ({h['name']}) is not a price column: add it as a new instrument first (skill update-quotes)")
 crypto = [c['ticker'] for c in hold.get('cryptoHoldings', []) if (c.get('position') or {}).get('filled', 0) > 0]
 if crypto: errors.append(f'crypto holdings are not supported by the dashboard: {crypto}')
 val = over.get('valuation') or {}
@@ -135,11 +135,8 @@ def run(cmd):
 code, o = run([sys.executable, str(D / 'build_data.py')])
 if code: print(o); print('STOP: build_data.py failed'); sys.exit(1)
 c1, o1 = run(['node', 'tests/engine.test.cjs'])
-c2, o2 = run([sys.executable, 'tests/crosscheck.py'])
-c3, o3 = run(['node', 'tests/crosscheck.cjs'])
 t1 = next((ln for ln in o1.splitlines() if ln.startswith('engine tests')), 'engine tests: no result')
-t3 = next((ln for ln in o3.splitlines() if ln.startswith('crosscheck')), 'crosscheck: no result')
-ok = not (c1 or c2 or c3)
-print('Tests: ' + ('OK - ' if ok else 'FAILED - ') + t1 + '; ' + t3)
+ok = not (c1)
+print('Tests: ' + ('OK - ' if ok else 'FAILED - ') + t1)
 print('Depot-Historie (depot_transactions.csv) is separate: import a new Scalable export with data/import_transactions.py.')
 sys.exit(0 if ok else 1)

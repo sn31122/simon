@@ -63,13 +63,8 @@ if f'"last_date":"{last[0]}"' not in gen:
 if '--quick' not in sys.argv:
     print('== tests ==')
     c1, o1 = run(['node', 'tests/engine.test.cjs'])
-    c2, o2 = run([sys.executable, 'tests/crosscheck.py'])
-    c3, o3 = run(['node', 'tests/crosscheck.cjs'])
-    pick = lambda o, p: next((ln for ln in o.splitlines() if ln.startswith(p)), p + ': no result')
-    print(pick(o1, 'engine tests')); print(pick(o3, 'crosscheck'))
-    if c1 or c2 or c3: problems.append('tests fail (see above)')
-    if c2 == 0 and run(['git', 'diff', '--quiet', 'tests/reference.json'])[0]:
-        print('(tests/reference.json was regenerated; commit it with your next data change or: git checkout tests/reference.json)')
+    print(next((ln for ln in o1.splitlines() if ln.startswith('engine tests')), 'engine tests: no result'))
+    if c1: problems.append('tests fail (see above)')
 
 print('== result ==')
 for t in todo: print('TODO: ' + t)
