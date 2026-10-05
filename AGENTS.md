@@ -81,7 +81,7 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 03.10.2026 23:24 Berlin): 193 trading days 2026-01-02 … 2026-10-02; last row 2026-10-02 = final; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (daily); 30-min (intraday.csv): 11 sessions 2026-09-18 … 2026-10-02; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 18 passed, 0 failed.
+- Data status (update 05.10.2026 07:14 Berlin): 194 trading days 2026-01-02 … 2026-10-05; last row 2026-10-05 = intraday, asof 2026-10-05T05:13Z; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (daily); 30-min (intraday.csv): 12 sessions 2026-09-18 … 2026-10-05; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 18 passed, 0 failed.
 <!-- data-status:end -->
 - 108 price series, 32 Yacht positions; real depot 7 positions (snapshot 02.10.2026 23:00). Presets: "Mein Depot" card
   at load; menu: Situational Awareness, Memory, Depot-Historie, Historie (9 phases). The page opens on 1T.
