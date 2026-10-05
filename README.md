@@ -13,12 +13,12 @@ Scalable depot and benchmark baskets. Plain HTML/CSS/JS with bundled data – no
 relative paths only. `python tools/check.py` checks it (section `portable`) along with git, tools, data and tests.
 
 ## Setup (once per computer)
-| | Windows PC | MacBook (2013 Air, macOS Big Sur 11) |
+| | Windows PC | MacBook (2013 Air, macOS Ventura 13) |
 |---|---|---|
-| Browser | Edge / Chrome / Firefox | Safari 16 (latest update for Big Sur), Chrome or Firefox |
+| Browser | Edge / Chrome / Firefox | Safari, Chrome or Firefox (Safari 16 or newer) |
 | Live view | Git for Windows | Command Line Tools (`xcode-select --install`, offered by the launcher) |
-| Python (scripts) | Python 3 from python.org, command `python` | the Command Line Tools' `python3` (3.8); **`python` is Python 2 there – always type `python3`** |
-| Node (tests, Claude hooks) | Node LTS | **Node 22 LTS** (Node 24 needs macOS 13.5) |
+| Python (scripts) | Python 3 from python.org, command `python` | the Command Line Tools' `python3` (3.9); **there is no `python` on the Mac – always type `python3`** |
+| Node (tests, Claude hooks) | Node LTS | Node LTS (Node 24 needs Ventura 13.5 or newer, else Node 22) |
 | Checkout for agents | `%USERPROFILE%\simon` | `~/simon` |
 
 What you can say to the agent: **"update"** (new Scalable prices + depot snapshot, Claude Code only), **"update depot"**,

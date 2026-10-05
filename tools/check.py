@@ -48,15 +48,15 @@ print(f'system: {platform.system()} {platform.mac_ver()[0] if MAC else platform.
 for exe, need in (('node', 'tests, price hook'), ('git', 'sync')):
     print(f'{exe}: ' + (run([exe, '--version'])[1].splitlines()[0] if shutil.which(exe) else 'MISSING'))
     if not shutil.which(exe):
-        problems.append(f'{exe} is not on PATH ({need})' + ('; Mac: Node 22 LTS from nodejs.org (Node 24 needs macOS 13.5)'
+        problems.append(f'{exe} is not on PATH ({need})' + ('; Mac: Node LTS from nodejs.org (Node 24 needs macOS 13.5, else Node 22)'
                                                              if MAC and exe == 'node' else ''))
 nv = re.match(r'v(\d+)', run(['node', '--version'])[1]) if shutil.which('node') else None
 if nv and int(nv.group(1)) < 18: problems.append(f'node {nv.group(0)} is too old: install Node 22 LTS')
 print(f'python: {sys.version.split()[0]} ({sys.executable})')
-# 3.8 = python3 of the Command Line Tools on macOS Big Sur (2013 MacBook Air); everything runs on it
+# everything runs on 3.8 (tested); the Command Line Tools bring python3 3.9 on macOS Ventura, 3.8 on Big Sur
 if sys.version_info < (3, 8): problems.append('Python 3.8 or newer is needed')
-if MAC and shutil.which('python') and not run(['python', '--version'])[1].startswith('Python 3'):
-    print('note: on this Mac `python` is Python 2 - always type python3 (e.g. python3 tools/check.py)')
+if MAC and not (shutil.which('python') and run(['python', '--version'])[1].startswith('Python 3')):
+    print('note: on this Mac `python` is missing or Python 2 - always type python3 (e.g. python3 tools/check.py)')
 
 print('== portable ==')
 # the page must run from its own folder on Windows and Mac: offline, relative paths, no modules, exact file-name case
