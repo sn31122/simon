@@ -411,7 +411,6 @@ button { -webkit-tap-highlight-color: transparent; }
 .dd-readout { min-height: 17px; color: var(--muted); font-size: 12px; }
 .dd-readout b { font-weight: 600; }
 .dd-readout .sw { display: inline-block; width: 10px; height: 2px; margin: 0 5px 0 2px; vertical-align: middle; border-radius: 1px; }
-.footnote { margin: 6px 2px 0; color: var(--muted); font-size: 11.5px; }
 
 /* KPI cards */
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }

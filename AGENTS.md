@@ -79,7 +79,7 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 03.10.2026 23:24 Berlin): 193 trading days 2026-01-02 … 2026-10-02; last row 2026-10-02 = final; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 11 sessions 2026-09-18 … 2026-10-02; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 16 passed, 0 failed.
+- Data status (update 03.10.2026 23:24 Berlin): 193 trading days 2026-01-02 … 2026-10-02; last row 2026-10-02 = final; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (daily); 30-min (intraday.csv): 11 sessions 2026-09-18 … 2026-10-02; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 18 passed, 0 failed.
 <!-- data-status:end -->
 - 108 price series, 32 Yacht positions; real depot 7 positions (snapshot 02.10.2026 23:00). Presets: "Mein Depot" card
   at load; menu: Situational Awareness, Memory, Depot-Historie, Historie (9 phases). The page opens on 1T.
@@ -87,6 +87,10 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
   crosscheck, raw archives (`data/source/`), the finanzen.net importer (its data stays in `prices_history.csv`), the
   history-fetch mode of `update_prices.py`, SPEC / UPDATE_PRICES / HANDOFF (merged here); engine tests cut to the core;
   Kennzahlen without Calmar, VaR, CVaR, Aktueller Drawdown. New: price-interval pills for daily charts.
+- Optimized 05.10.2026: `portfolio-data.js` stores price series packed (a negative integer −k = k dates without a quote,
+  `engine.fillPrices` unpacks; 3,6 → 2,4 MB), sparklines keep at most 2 points per pixel column (`charts.sparkIndices`;
+  MAX/Seit Kauf update ~3× faster, same picture), `build_data.py` 5 s → 1,6 s (date index instead of list scans), footer
+  notes come from the data (`build_data.notes`), dead title-bar code removed. Tests: + packed prices, + sparkline thinning.
 - Data notes: Astera Labs history begins 13.11.2025. No daily history before 2026 (month-end only): Western Digital,
   Applied Optoelectronics, Astera Labs, Eaton, Keel, SanDisk, Alphabet 2x, SpaceX, Memory 3x.
 

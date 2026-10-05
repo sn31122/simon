@@ -5,13 +5,19 @@ if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8', 
 
 D = pathlib.Path(__file__).resolve().parent
 LOGO_DIR = 'company-logos'   # Scalable logos (128x128 PNG, file = <ISIN>.png), copied 1:1 from Downloads/scalable-company-pictures/images
-NOTES = [
-    'Rückrechnung mit den Stückzahlen vom 02.09.2026 (keine Transaktionshistorie): Werte vor dem Kaufdatum sind hypothetisch.',
-    'Kurse: Scalable (Mid, EUR, CONSOLIDATED). Tagesschlusskurse ab 02.01.2026; davor jeder 2. Handelstag (29.09.–29.12.2025) '
-    'und Monatsschlusskurse bis etwa 2016 (je nach Titel). Volatilität, Sharpe, Sortino, VaR, Beta, Korrelation usw. nutzen nur die Tageskurse.',
-    'Vor dem ersten Kurs eines Titels (z. B. SpaceX ab 12.06.2026) zählt er mit dem ersten Kurs, also ohne Wertänderung.',
-    'Reine Kursentwicklung in EUR: Dividenden ausschüttender Aktien sind nicht enthalten, Währungseffekte stecken in den EUR-Kursen.',
-]
+def de_date(iso):
+    return f'{iso[8:10]}.{iso[5:7]}.{iso[:4]}'
+
+def notes(ref_date, first_date, daily_from):
+    """The 'Hinweise' footer of the dashboard (dates from the data, so they never go stale)."""
+    return [
+        f'Rückrechnung mit den Stückzahlen vom {de_date(ref_date)} (keine Transaktionshistorie): Werte vor dem Kaufdatum sind hypothetisch.',
+        f'Kurse: Scalable (Mid, EUR, CONSOLIDATED), Tagesschlusskurse ab {de_date(daily_from)}; davor Xetra-Tagesschlusskurse von '
+        f'finanzen.net (ab {de_date(first_date)}, einzelne Titel nur Monatsschlusskurse). Volatilität und Sharpe-Ratio nutzen die '
+        'Tagesrenditen des gewählten Zeitraums; Rendite, p.a. und Max. Drawdown alle Kurse.',
+        'Vor dem ersten Kurs eines Titels (z. B. SpaceX ab 12.06.2026) zählt er mit dem ersten Kurs, also ohne Wertänderung.',
+        'Reine Kursentwicklung in EUR: Dividenden ausschüttender Aktien sind nicht enthalten, Währungseffekte stecken in den EUR-Kursen.',
+    ]
 
 SPLIT_RATIOS = (2, 3, 4, 5, 8, 10, 20, 25, 50, 100, 200)   # day-to-day price ratios that usually mean a split
 
@@ -47,6 +53,7 @@ res = hres + ['d'] * len(rows)
 n_hist = len(hrows)
 rows = hrows + rows
 dates, status = [r[0] for r in rows], [r[1] for r in rows]
+date_idx = {d: k for k, d in enumerate(dates)}          # date -> row index (the grids and the depot replay look dates up a lot)
 for a, b in zip(dates, dates[1:]):
     if b <= a: errors.append(f'dates not ascending/unique: {a} -> {b}')
 for k, d in enumerate(dates):
@@ -97,10 +104,10 @@ def depot_schedule(dates_daily, prices_daily):
           and r['assetType'] == 'Security' and r['type'] in ('Buy', 'Sell') and r['isin'] not in cfg['ignore']]
     tx.sort(key=lambda r: (r['date'], r['time']))
     # proxy factor per replaced ISIN: mean(trade price / proxy close on the trade date)
-    factor = {}
+    factor, idx = {}, {d: k for k, d in enumerate(dates_daily)}
     for i, pi in cfg['proxy'].items():
-        rs = [de_num(r['price']) / prices_daily[pi][dates_daily.index(r['date'])] for r in tx
-              if r['isin'] == i and r['date'] in dates_daily and prices_daily[pi][dates_daily.index(r['date'])]]
+        rs = [de_num(r['price']) / prices_daily[pi][idx[r['date']]] for r in tx
+              if r['isin'] == i and r['date'] in idx and prices_daily[pi][idx[r['date']]]]
         if not rs: errors.append(f'Depot-Historie: no proxy prices for {i}'); return None
         factor[i] = sum(rs) / len(rs)
     # bridged instruments: (buy date, buy amount, sell date, sell amount) -> value per day in between
@@ -233,9 +240,11 @@ def _last_sunday(y, m):
     while d.weekday() != 6: d -= datetime.timedelta(1)
     return d
 
+_DST = {}
 def to_berlin(t):
-    start = datetime.datetime.combine(_last_sunday(t.year, 3), datetime.time(1), datetime.timezone.utc)
-    end = datetime.datetime.combine(_last_sunday(t.year, 10), datetime.time(1), datetime.timezone.utc)
+    if t.year not in _DST:                     # CEST from the last Sunday of March 01:00 UTC to the last Sunday of October 01:00 UTC
+        _DST[t.year] = tuple(datetime.datetime.combine(_last_sunday(t.year, m), datetime.time(1), datetime.timezone.utc) for m in (3, 10))
+    start, end = _DST[t.year]
     return (t + datetime.timedelta(hours=2 if start <= t < end else 1)).replace(tzinfo=None)
 
 def build_grid(fname, times, needed):
@@ -250,7 +259,7 @@ def build_grid(fname, times, needed):
         if not mins[0] - SLOT_TOL <= m <= mins[-1] + SLOT_TOL: outside += 1; continue
         slot = min(range(len(mins)), key=lambda k: (abs(mins[k] - m), -k))   # a tie goes to the later slot
         day = b.date().isoformat()
-        if day not in dates: foreign.add(day); continue
+        if day not in date_idx: foreign.add(day); continue
         cell = grid.setdefault((r['isin'], day), {})
         if slot not in cell or ts > cell[slot][0]: cell[slot] = (ts, float(r['price']))
         asof = max(asof or ts, ts)
@@ -261,7 +270,7 @@ def build_grid(fname, times, needed):
         arr = [None] * (len(days) * S)
         for k, d in enumerate(days):
             for s, (_, p) in grid.get((i, d), {}).items(): arr[k * S + s] = p
-            di = dates.index(d)
+            di = date_idx[d]
             close = prices[i][di]
             if status[di] == 'final' and close is not None:
                 if arr[k * S + S - 1] is None: arr[k * S + S - 1] = close
@@ -269,7 +278,7 @@ def build_grid(fname, times, needed):
         if not any((i, d) in grid for d in days): missing.append(i)
         if all(v is None for v in arr): continue
         px[i] = arr
-    last_day, di = days[-1], dates.index(days[-1])
+    last_day, di = days[-1], date_idx[days[-1]]
     for i in px:                                        # the open session: latest point vs the daily price
         last = next((v for v in reversed(px[i][-S:]) if v is not None), None)
         daily = prices[i][di]
@@ -287,16 +296,30 @@ def check_latest(g, fname, charts):
     if g['dates'][-1] != dates[-1]:
         warns.append(f"{fname}: last session {g['dates'][-1]} is not the last daily date {dates[-1]} - {charts} step down to a coarser interval")
 
+def packed(series):
+    """[None, None, 12.0, None, 13.0] -> [-2, 12.0, -1, 13.0]: a run of k empty cells becomes the integer -k (prices are
+    always > 0). Most series have no quote before their listing, so this cuts the data file by about a third;
+    engine.fillPrices unpacks it (a plain array with nulls is still accepted)."""
+    out, run = [], 0
+    for v in series:
+        if v is None: run += 1
+        else:
+            if run: out.append(-run); run = 0
+            out.append(v)
+    if run: out.append(-run)
+    return out
+
 positions = [{'isin': p['isin'], 'name': p['name'], 'short': p['short'], 'group': p['group'], 'shares': float(p['shares']),
               'ref_date': p['ref_date'], 'ref_price': float(p['ref_price']), 'gv_ref': float(p['gv_ref']),
               'cost_basis': float(p['cost_basis']), 'note': p['note'], 'first_date': first_date(p['isin']),
               'logo': logo_for(p)} for p in pos]
 data = {
     'meta': {'title': 'Yacht-Portfolio', 'currency': 'EUR',
-             'source': 'Scalable MCP get_security_chart year_to_date (Tagesschluss, Mid, EUR)',
+             'source': 'Scalable (get_security_chart: Mid, EUR, CONSOLIDATED); Historie bis 2025: finanzen.net (Xetra-Tagesschluss)',
              'generated_at': datetime.datetime.now().astimezone().isoformat(timespec='seconds'),
              'first_date': dates[0], 'last_date': dates[-1], 'last_status': status[-1], 'daily_from': dates[n_hist],
-             'last_asof_utc': rows[-1][2], 'positions_ref_date': pos[0]['ref_date'], 'notes': NOTES},
+             'last_asof_utc': rows[-1][2], 'positions_ref_date': pos[0]['ref_date'],
+             'notes': notes(pos[0]['ref_date'], dates[0], dates[n_hist])},
     'dates': dates,
     'status': status,
     'res': res,                               # resolution per date: 'm' month-end, '2d' every 2nd trading day, 'd' daily
@@ -310,7 +333,7 @@ data = {
     'instruments': sorted(({'isin': i, 'name': (inst.get(i) or {}).get('name') or i, 'short': (inst.get(i) or {}).get('short') or i,
                             'type': (inst.get(i) or {}).get('type') or '', 'position': i in {p['isin'] for p in pos}}
                            for i in isins), key=lambda x: x['short'].casefold()),
-    'prices': {i: prices[i] for i in dict.fromkeys(needed)},
+    'prices': {i: packed(prices[i]) for i in dict.fromkeys(needed)},   # packed: -k = k dates without a quote (engine.fillPrices)
     'grids': {'m30': build_grid('intraday.csv', TIMES, list(dict.fromkeys(needed))),
               'h2': build_grid('intraday_2h.csv', TIMES_2H, list(dict.fromkeys(needed)))},
 }

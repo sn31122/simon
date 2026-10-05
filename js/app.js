@@ -698,20 +698,8 @@
   }
 
   // ------------------------------------------------------------------ header / controls
-  function renderHeader() {
-    var title = META.title || 'Portfolio';
-    document.title = title;
-    if (!$('metaLine')) return;                         // title bar removed (user 30.09.): only the window title
-    $('title').textContent = title;
-    var last = ctx.dates[ctx.n - 1];
-    var parts = [ctx.positions.length + ' Positionen'];
-    parts.push('Kurse bis ' + F.date(last, 'short') +
-      (META.last_status === 'intraday' ? (ASOF ? ', ' + ASOF : '') + ' (intraday)' : ' (Schlusskurs)'));
-    parts.push('Tagesschlusskurse in ' + (META.currency || 'EUR'));
-    if (META.positions_ref_date) parts.push('Stückzahlen vom ' + F.date(META.positions_ref_date, 'short'));
-    $('metaLine').textContent = parts.join(' · ');
-    $('metaLine').title = parts.join(' · ');          // full text when the sticky bar cuts it on phones
-  }
+  /** Only the window title (the title bar was removed, user 30.09.). */
+  function renderHeader() { document.title = META.title || 'Portfolio'; }
 
   function renderRangeBar() {
     var R = cur.R;

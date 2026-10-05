@@ -184,7 +184,9 @@ def tests_status_report(alerts, step=''):
     hist = ''
     if HIST.exists():
         hr = [r for r in csv.reader(open(HIST, encoding='utf-8')) if r][1:]
-        if hr: hist = f'history (prices_history.csv): {len(hr)} rows {hr[0][0]} … {hr[-1][0]} (month-end + every 2nd trading day); '
+        kinds = {'dh': 'daily', '2d': 'every 2nd trading day', 'm': 'month-end'}
+        res = ', '.join(kinds.get(k, k) for k in kinds if any(r[1] == k for r in hr))
+        if hr: hist = f'history (prices_history.csv): {len(hr)} rows {hr[0][0]} … {hr[-1][0]} ({res}); '
     status = (f'<!-- data-status:start (written by update_prices.py --finish) -->\n'
               f'- Data status (update {now_berlin:%d.%m.%Y %H:%M} Berlin): {len(rr)} trading days {rr[0][0]} … {last[0]}; '
               f'last row {last[0]} = {last[1]}{asof}; {hist}30-min (intraday.csv): {span(idays)}; 2-h (intraday_2h.csv): {span(hdays)}; '
