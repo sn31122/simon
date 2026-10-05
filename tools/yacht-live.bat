@@ -5,7 +5,11 @@ rem Der Ordner %DIR% ist nur eine Kopie von main: lokale Aenderungen darin werde
 setlocal EnableDelayedExpansion
 title Yacht-Dashboard live
 set "REPO=https://github.com/sn31122/simon.git"
-set "DIR=%USERPROFILE%\yacht-live-main"
+rem Kopie im Downloads-Ordner (user 05.10.2026; auch wenn Downloads verschoben wurde), frueher %USERPROFILE%\yacht-live-main
+set "DL=%USERPROFILE%\Downloads"
+for /f "tokens=2,*" %%a in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" /v {374DE290-123F-4565-9164-39C4925E467B} 2^>nul') do set "DL=%%b"
+set "DIR=%DL%\yacht-live-main"
+set "OLDDIR=%USERPROFILE%\yacht-live-main"
 rem anderer Ordner fuer die Kopie: Umgebungsvariable YACHT_LIVE_DIR setzen
 if defined YACHT_LIVE_DIR set "DIR=%YACHT_LIVE_DIR%"
 rem Ordner dieser Datei: liegt sie in tools\ eines Checkouts, ist dessen dashboard.html der Offline-Ersatz
@@ -23,6 +27,12 @@ if errorlevel 1 if exist "%LOCALAPPDATA%\Programs\Git\cmd\git.exe" set "PATH=%LO
 where git >nul 2>nul
 if errorlevel 1 goto nogit
 
+if exist "%DIR%\.git" goto sync
+rem vorhandene Kopie vom alten Ort einmalig umziehen (spart das Klonen und die Anmeldung)
+if not exist "%DIR%" if exist "%OLDDIR%\.git" (
+  echo Ziehe die Kopie um: !OLDDIR! nach !DIR! ...
+  move "!OLDDIR!" "!DIR!" >nul
+)
 if exist "%DIR%\.git" goto sync
 echo Erster Start: lade das Repository nach %DIR% ...
 echo Falls ein Anmeldefenster erscheint: mit deinem GitHub-Konto anmelden.

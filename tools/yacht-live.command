@@ -5,7 +5,9 @@
 # Der Ordner $DIR ist nur eine Kopie von main: lokale Aenderungen darin werden bei jedem Abgleich verworfen.
 REPO="https://github.com/sn31122/simon.git"
 # anderer Ordner fuer die Kopie: Umgebungsvariable YACHT_LIVE_DIR setzen
-DIR="${YACHT_LIVE_DIR:-$HOME/yacht-live-main}"
+# Kopie im Downloads-Ordner (user 05.10.2026), frueher $HOME/yacht-live-main
+DIR="${YACHT_LIVE_DIR:-$HOME/Downloads/yacht-live-main}"
+OLDDIR="$HOME/yacht-live-main"
 # Ordner dieser Datei: liegt sie in tools/ eines Checkouts, ist dessen dashboard.html der Offline-Ersatz
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BRANCH="main"
@@ -31,6 +33,13 @@ oder: https://git-scm.com/download/mac). Danach diese Datei erneut starten."
 fi
 
 show() { git -C "$DIR" log -1 --format="Stand: %h  %cd  %s" --date=format:"%d.%m.%Y %H:%M"; }
+
+# vorhandene Kopie vom alten Ort einmalig umziehen (spart das Klonen und die Anmeldung). Beim ersten Zugriff auf
+# Downloads fragt macOS, ob das Terminal darauf zugreifen darf: mit OK bestaetigen.
+if [ ! -e "$DIR" ] && [ -d "$OLDDIR/.git" ]; then
+  echo "Ziehe die Kopie um: $OLDDIR nach $DIR ..."
+  mkdir -p "$(dirname "$DIR")" && mv "$OLDDIR" "$DIR"
+fi
 
 if [ ! -d "$DIR/.git" ]; then
   echo "Erster Start: lade das Repository nach $DIR ..."
