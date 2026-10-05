@@ -87,6 +87,7 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
   crosscheck, raw archives (`data/source/`), the finanzen.net importer (its data stays in `prices_history.csv`), the
   history-fetch mode of `update_prices.py`, SPEC / UPDATE_PRICES / HANDOFF (merged here); engine tests cut to the core;
   Kennzahlen without Calmar, VaR, CVaR, Aktueller Drawdown. New: price-interval pills for daily charts.
+- Fixed 05.10.2026: "+ Benchmark" menu entries could not be picked in Safari (Mac) – a press inside the menu now keeps the focus.
 - Data notes: Astera Labs history begins 13.11.2025. No daily history before 2026 (month-end only): Western Digital,
   Applied Optoelectronics, Astera Labs, Eaton, Keel, SanDisk, Alphabet 2x, SpaceX, Memory 3x.
 
