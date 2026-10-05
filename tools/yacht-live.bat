@@ -6,14 +6,20 @@ setlocal EnableDelayedExpansion
 title Yacht-Dashboard live
 set "REPO=https://github.com/sn31122/simon.git"
 set "DIR=%USERPROFILE%\yacht-live-main"
+rem anderer Ordner fuer die Kopie: Umgebungsvariable YACHT_LIVE_DIR setzen
+if defined YACHT_LIVE_DIR set "DIR=%YACHT_LIVE_DIR%"
+rem Ordner dieser Datei: liegt sie in tools\ eines Checkouts, ist dessen dashboard.html der Offline-Ersatz
+set "HERE=%~dp0"
 set "BRANCH=main"
 set "WAIT=60"
 rem 1 = bei neuer Version das Dashboard automatisch neu oeffnen (neuer Tab), 0 = nur Hinweis im Fenster
 set "REOPEN=1"
 
-rem Git: aus PATH, sonst aus dem Standardordner von Git for Windows
+rem Git: aus PATH, sonst aus den Standardordnern von Git for Windows (fuer alle / nur fuer mich installiert)
 where git >nul 2>nul
 if errorlevel 1 if exist "%ProgramFiles%\Git\cmd\git.exe" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
+where git >nul 2>nul
+if errorlevel 1 if exist "%LOCALAPPDATA%\Programs\Git\cmd\git.exe" set "PATH=%LOCALAPPDATA%\Programs\Git\cmd;%PATH%"
 where git >nul 2>nul
 if errorlevel 1 goto nogit
 
@@ -36,6 +42,7 @@ if errorlevel 1 (
   git -C "%DIR%" reset --quiet --hard origin/%BRANCH%
 )
 call :show
+if not exist "%DIR%\dashboard.html" goto noclone
 start "" "%DIR%\dashboard.html"
 echo.
 echo Dashboard geoeffnet: %DIR%\dashboard.html
@@ -68,11 +75,21 @@ exit /b 0
 :nogit
 echo Git wurde nicht gefunden. Bitte Git for Windows installieren: https://git-scm.com/download/win
 echo Danach dieses Fenster schliessen und die Datei erneut starten.
+call :local
 pause
 exit /b 1
 
 :noclone
 echo Klonen fehlgeschlagen. Pruefe die Internetverbindung und ob die GitHub-Anmeldung geklappt hat,
 echo dann die Datei erneut starten. Ein halb angelegter Ordner %DIR% darf vorher geloescht werden.
+call :local
 pause
 exit /b 1
+
+:local
+rem Offline-Ersatz: das Dashboard des Checkouts, in dem diese Datei liegt (Stand dieses Checkouts, nicht GitHub)
+if not exist "%HERE%..\dashboard.html" exit /b 0
+echo.
+echo Oeffne solange die lokale Kopie neben dieser Datei: %HERE%..\dashboard.html
+start "" "%HERE%..\dashboard.html"
+exit /b 0
