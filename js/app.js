@@ -1363,6 +1363,11 @@
     document.addEventListener('pointerdown', function (ev) {      // a press outside the "+ Benchmark" tile closes its menu
       if (menuOpen() && !ev.target.closest('.bb-addw')) setMenu(false);
     }, true);
+    // Safari (Mac) does not focus a button on click: a press on a menu entry would blur the focused entry, the focusout
+    // below would close the menu before the click lands, and nothing could be picked. The press keeps the focus instead.
+    box.addEventListener('mousedown', function (ev) {
+      if (ev.button === 0 && ev.target.closest('.bb-addw')) ev.preventDefault();
+    });
     box.addEventListener('focusout', function (ev) {
       var w = box.querySelector('.bb-addw');
       if (menuOpen() && w && w.contains(ev.target) && !(ev.relatedTarget && w.contains(ev.relatedTarget))) setTimeout(function () {
