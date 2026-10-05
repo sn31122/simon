@@ -129,3 +129,6 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
 - Proposed, awaiting the user: ticker tiers (core / daily-only / on-demand) for more tickers.
 - Update on launch needs the user's one-time setup: create the routine "Yacht Kurs-Update" (section "Update on launch"),
   add its API trigger, then on each computer start the launcher and answer "j" (or `python tools/update_on_launch.py --setup`).
+- An update before ~07:15 Berlin adds today's row from pre-market quotes (Scalable quotes from 06:00), which the 30-min /
+  2-h grids (07:30–23:00) ignore, so 1T/1W/1M fall back to daily until the next update after 07:15. The launcher only
+  fires before 07:30 when a final close is missing.
