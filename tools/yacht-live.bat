@@ -5,34 +5,18 @@ rem Der Ordner %DIR% ist nur eine Kopie von main: lokale Aenderungen darin werde
 setlocal EnableDelayedExpansion
 title Yacht-Dashboard live
 set "REPO=https://github.com/sn31122/simon.git"
-rem Kopie im Downloads-Ordner (user 05.10.2026; auch wenn Downloads verschoben wurde), frueher %USERPROFILE%\yacht-live-main
-set "DL=%USERPROFILE%\Downloads"
-for /f "tokens=2,*" %%a in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" /v {374DE290-123F-4565-9164-39C4925E467B} 2^>nul') do set "DL=%%b"
-set "DIR=%DL%\yacht-live-main"
-set "OLDDIR=%USERPROFILE%\yacht-live-main"
-rem anderer Ordner fuer die Kopie: Umgebungsvariable YACHT_LIVE_DIR setzen
-if defined YACHT_LIVE_DIR set "DIR=%YACHT_LIVE_DIR%"
-rem Ordner dieser Datei: liegt sie in tools\ eines Checkouts, ist dessen dashboard.html der Offline-Ersatz
-set "HERE=%~dp0"
+set "DIR=%USERPROFILE%\yacht-live-main"
 set "BRANCH=main"
 set "WAIT=60"
 rem 1 = bei neuer Version das Dashboard automatisch neu oeffnen (neuer Tab), 0 = nur Hinweis im Fenster
 set "REOPEN=1"
 
-rem Git: aus PATH, sonst aus den Standardordnern von Git for Windows (fuer alle / nur fuer mich installiert)
+rem Git: aus PATH, sonst aus dem Standardordner von Git for Windows
 where git >nul 2>nul
 if errorlevel 1 if exist "%ProgramFiles%\Git\cmd\git.exe" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
 where git >nul 2>nul
-if errorlevel 1 if exist "%LOCALAPPDATA%\Programs\Git\cmd\git.exe" set "PATH=%LOCALAPPDATA%\Programs\Git\cmd;%PATH%"
-where git >nul 2>nul
 if errorlevel 1 goto nogit
 
-if exist "%DIR%\.git" goto sync
-rem vorhandene Kopie vom alten Ort einmalig umziehen (spart das Klonen und die Anmeldung)
-if not exist "%DIR%" if exist "%OLDDIR%\.git" (
-  echo Ziehe die Kopie um: !OLDDIR! nach !DIR! ...
-  move "!OLDDIR!" "!DIR!" >nul
-)
 if exist "%DIR%\.git" goto sync
 echo Erster Start: lade das Repository nach %DIR% ...
 echo Falls ein Anmeldefenster erscheint: mit deinem GitHub-Konto anmelden.
@@ -52,7 +36,6 @@ if errorlevel 1 (
   git -C "%DIR%" reset --quiet --hard origin/%BRANCH%
 )
 call :show
-if not exist "%DIR%\dashboard.html" goto noclone
 start "" "%DIR%\dashboard.html"
 echo.
 echo Dashboard geoeffnet: %DIR%\dashboard.html
@@ -85,21 +68,11 @@ exit /b 0
 :nogit
 echo Git wurde nicht gefunden. Bitte Git for Windows installieren: https://git-scm.com/download/win
 echo Danach dieses Fenster schliessen und die Datei erneut starten.
-call :local
 pause
 exit /b 1
 
 :noclone
 echo Klonen fehlgeschlagen. Pruefe die Internetverbindung und ob die GitHub-Anmeldung geklappt hat,
 echo dann die Datei erneut starten. Ein halb angelegter Ordner %DIR% darf vorher geloescht werden.
-call :local
 pause
 exit /b 1
-
-:local
-rem Offline-Ersatz: das Dashboard des Checkouts, in dem diese Datei liegt (Stand dieses Checkouts, nicht GitHub)
-if not exist "%HERE%..\dashboard.html" exit /b 0
-echo.
-echo Oeffne solange die lokale Kopie neben dieser Datei: %HERE%..\dashboard.html
-start "" "%HERE%..\dashboard.html"
-exit /b 0

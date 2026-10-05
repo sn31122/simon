@@ -1,6 +1,6 @@
 /* Yacht-Portfolio Dashboard – SVG charts (classic script, no libraries, works from file://).
  *
- *   PFCharts = { Sync, MainChart, DrawdownChart, sparkline, splitSpark, sparkIndices, niceTicks }
+ *   PFCharts = { Sync, MainChart, DrawdownChart, sparkline, niceTicks }
  *
  * The charts only map numbers to pixels – no financial math happens here. Every value,
  * label and tooltip text is supplied by app.js (which gets it from PFEngine).
@@ -799,33 +799,9 @@
   }
 
   /**
-   * sparkIndices(values, cols, off) -> ascending indices a sparkline of `cols` pixel columns keeps: the first and the last
-   * point, `off` (where the context ends), every gap (null, so the pen still lifts) and per column the lowest and the
-   * highest point. The drawn envelope is the same as with every point; the path shrinks from thousands of points (MAX:
-   * ~5000 per position) to at most 2 per column – less DOM for the lists, no visible change at this size.
-   */
-  function sparkIndices(values, cols, off) {
-    var n = values.length, keep = {}, per = (n - 1) / cols;
-    keep[0] = keep[n - 1] = keep[off] = 1;
-    for (var c = 0; c < cols; c++) {
-      var a = Math.ceil(c * per), b = Math.min(n - 1, Math.ceil((c + 1) * per) - 1), lo = -1, hi = -1;
-      for (var k = a; k <= b; k++) {
-        var v = values[k];
-        if (!isNum(v)) { keep[k] = 1; continue; }
-        if (lo < 0 || v < values[lo]) lo = k;
-        if (hi < 0 || v > values[hi]) hi = k;
-      }
-      if (lo >= 0) keep[lo] = 1;
-      if (hi >= 0) keep[hi] = 1;
-    }
-    return Object.keys(keep).map(Number).sort(function (x, y) { return x - y; });
-  }
-
-  /**
    * Sparkline: values[0..off] grey context, values[off..] teal where >= base and red where below
    * (split exactly at the crossings), dashed baseline at `base` (default values[off] = period start).
    * o = { w, h, off, base, includeBase (y-extent includes base), baseline:false, cls, fluid (scales with CSS size) }
-   * Series longer than 4 points per pixel column are thinned with sparkIndices (same picture, far less path data).
    */
   function splitSpark(values, o) {
     o = o || {};
@@ -840,19 +816,15 @@
     if (!ext || !isNum(base)) return out + '</svg>';
     var lo = ext.lo, hi = ext.hi;
     if (hi - lo < 1e-12) { lo -= 1; hi += 1; }
-    var cols = Math.max(1, Math.round(w - 2 * pad));
-    var idx = n > 4 * cols ? sparkIndices(values, cols, off) : null;              // thinned: kept indices, in order
-    var pts = idx ? idx.map(function (i) { return values[i]; }) : values, offK = idx ? idx.indexOf(off) : off;
-    var xAt = function (i) { return pad + (n > 1 ? i * (w - 2 * pad) / (n - 1) : (w - 2 * pad) / 2); };
-    var xOf = idx ? function (j) { return xAt(idx[j]); } : xAt;                  // x of a point by its original index
+    var xOf = function (i) { return pad + (n > 1 ? i * (w - 2 * pad) / (n - 1) : (w - 2 * pad) / 2); };
     var yOf = function (v) { return pad + (hi - v) / (hi - lo) * (h - 2 * pad); };
     var ve = o.fluid ? ' vector-effect="non-scaling-stroke"' : '';
     if (o.baseline !== false) {
       var yb = r1(yOf(base));
       out += '<line class="spk-base" x1="0" x2="' + w + '" y1="' + yb + '" y2="' + yb + '"' + ve + '/>';
     }
-    if (offK > 0) out += '<path class="spk-ctx" d="' + linePath(pts.slice(0, offK + 1), xOf, yOf) + '"' + ve + '/>';
-    var sp = splitPaths(pts, offK, xOf, yOf, base);
+    if (off > 0) out += '<path class="spk-ctx" d="' + linePath(values.slice(0, off + 1), xOf, yOf) + '"' + ve + '/>';
+    var sp = splitPaths(values, off, xOf, yOf, base);
     if (sp.dn) out += '<path class="spk-dn" d="' + sp.dn + '"' + ve + '/>';
     if (sp.up) out += '<path class="spk-up" d="' + sp.up + '"' + ve + '/>';
     return out + '</svg>';
@@ -870,7 +842,6 @@
     DrawdownChart: DrawdownChart,
     sparkline: sparkline,
     splitSpark: splitSpark,
-    sparkIndices: sparkIndices,
     niceTicks: niceTicks
   };
 })(typeof window !== 'undefined' ? window : this);

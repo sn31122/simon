@@ -796,12 +796,6 @@ th.is-sorted { color: var(--text); }
 .hb-grp td { padding-top: 8px; padding-bottom: 8px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--gc) 16%, var(--card)); }
 .hb-grp td:first-child { box-shadow: inset 3px 0 0 var(--gc); }
 .hb-box .tbl tbody tr.hb-grp:hover td { background: color-mix(in srgb, var(--gc) 16%, var(--card)); }
-/* older browsers without color-mix (Safari < 16.2, Chrome < 111): plain tones instead of
-   blank borders / backgrounds (a color-mix with var() does not fall back to the previous declaration) */
-@supports not (color: color-mix(in srgb, red 50%, blue)) {
-  .hb-box { border-color: var(--border); }
-  .hb-grp td, .hb-box .tbl tbody tr.hb-grp:hover td { background: rgba(255, 255, 255, .045); }
-}
 .hb-note td { color: var(--muted); font-size: 11px; }
 .hb-pos { display: inline-flex; align-items: baseline; gap: 6px; padding-left: 11px; min-width: 0; max-width: 100%; }
 .hb-pos-row .hb-nm { color: var(--text); font-weight: 500; }
