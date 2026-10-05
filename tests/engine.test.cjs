@@ -1,4 +1,4 @@
-// Core unit tests for js/engine.js (synthetic, hand-computed) + two real-data sweeps.
+// Core unit tests for js/engine.js (synthetic, hand-computed) + two real-data sweeps + the sparkline thinning of js/charts.js.
 // Run from the project folder:  node tests/engine.test.cjs      (plain assert, no dependencies)
 'use strict';
 const assert = require('assert');
@@ -7,6 +7,7 @@ const path = require('path');
 const ENGINE = path.join(__dirname, '..', 'js', 'engine.js');
 const E = require(ENGINE);
 const F = E.fmt;
+const C = require(path.join(__dirname, '..', 'js', 'charts.js')).PFCharts;   // string builders only (no DOM needed)
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -82,6 +83,25 @@ test('prepare: forward-fill gaps, back-fill before first quote, no mutation', ()
   assert.deepStrictEqual(raw, copy, 'input prices must not be mutated');
   const s = E.portfolio(ctx, { selected: ['P'], start: 0, end: 5 });
   approxArr(s.ret, [0, 0, 0, 0.2, 0], 1e-15, 'flat before listing, zero return');
+});
+
+test('prepare: packed price series (-k = k dates without a quote, build_data.py) fill exactly like plain arrays', () => {
+  const dates = calendar('2026-01-05', '2026-01-16', true);   // 10 weekdays
+  const plain = { P: [null, null, 10, null, 12, null, null, 13, 14, null], Q: [5, null, null, 6, null, 7, 7, null, null, 8],
+    Z: [null, null, null, null, null, null, null, null, null, null], S: [null, 3, 4] };   // S: shorter than the dates
+  const packed = { P: [-2, 10, -1, 12, -2, 13, 14, -1], Q: [5, -2, 6, -1, 7, 7, -2, 8], Z: [-10], S: [-1, 3, 4] };
+  const positions = Object.keys(plain).map((i) => ({ isin: i, group: 'G1', shares: 1 }));
+  const a = ctxOf(dates, { prices: plain, positions }), b = ctxOf(dates, { prices: packed, positions });
+  for (const i of Object.keys(plain)) {
+    assert.deepStrictEqual(b.px[i], a.px[i], 'px ' + i);
+    assert.strictEqual(b.firstIdx[i], a.firstIdx[i], 'firstIdx ' + i);
+  }
+  assert.deepStrictEqual(b.px.P, [10, 10, 10, 10, 12, 12, 12, 13, 14, 14]);
+  assert.deepStrictEqual(b.px.Z, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); assert.strictEqual(b.firstIdx.Z, 10);
+  assert.deepStrictEqual(b.px.S, [3, 3, 4, 4, 4, 4, 4, 4, 4, 4], 'flat after the last cell');
+  const c = ctxOf(dates, { prices: { R: [-3, 1, -20] }, positions: [{ isin: 'R', group: 'G1', shares: 1 }] });
+  assert.deepStrictEqual(c.px.R, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'a run beyond the end is cut');
+  assert.strictEqual(c.firstIdx.R, 3);
 });
 
 // ======================================================================= presetRange
@@ -245,6 +265,39 @@ test('fmt.eur / num / pct / ratio', () => {
   assert.strictEqual(F.ratio(-0.5), '-0,50');
   assert.strictEqual(F.ratio(2.239586), '2,24');
   assert.strictEqual(F.ratio(undefined), '–');
+});
+
+// ======================================================================= charts: sparkline thinning (js/charts.js)
+test('sparkIndices: first, last, off, gaps and the per-column extremes are kept; short series are drawn as they are', () => {
+  const n = 5000, v = Array.from({ length: n }, (_, i) => 100 + 10 * Math.sin(i / 37) + (i % 11) * 0.2);
+  v[1234] = 150; v[2345] = 50;                                   // the extremes must survive the thinning
+  const k = C.sparkIndices(v, 60, 7);
+  assert.ok(k.length <= 2 * 60 + 3 && k.length > 60, 'size ' + k.length);
+  assert.ok(k.every((x, j) => j === 0 || x > k[j - 1]), 'ascending, unique');
+  for (const must of [0, 7, 1234, 2345, n - 1]) assert.ok(k.includes(must), 'keeps ' + must);
+  const kept = k.map((i) => v[i]);
+  assert.strictEqual(Math.max(...kept), Math.max(...v)); assert.strictEqual(Math.min(...kept), Math.min(...v));
+  // a gap (null) stays, so the pen still lifts there
+  const g = v.slice(); g[3000] = null;
+  assert.ok(C.sparkIndices(g, 60, 0).includes(3000));
+  // the SVG: thinned only beyond 4 points per pixel column (64 px wide, 2 px padding -> 60 columns -> > 240 points);
+  // a rising series never crosses its baseline, so every drawn point is one path command
+  const svg = (vals, o) => C.splitSpark(vals, Object.assign({ w: 64, h: 22 }, o));
+  const up = (m) => Array.from({ length: m }, (_, i) => 100 + i);
+  assert.strictEqual((svg(up(240)).match(/[ML]/g) || []).length, 240, 'every point drawn');
+  assert.ok((svg(up(241)).match(/[ML]/g) || []).length <= 123, 'thinned to at most 2 per column + first/last/off');
+  // same baseline and y-extent, same first and last point as the full drawing
+  const full = svg(v), thin = C.splitSpark(v, { w: 64, h: 22, pad: 2 });
+  assert.strictEqual(full.match(/<line[^>]*>/)[0], thin.match(/<line[^>]*>/)[0], 'baseline unchanged');
+  const first = (s) => s.match(/M([\d.]+ [\d.]+)/)[1], last = (s) => { const m = s.match(/([\d.]+ [\d.]+)"\/>\s*(<path class="spk-up"[^>]*>)?<\/svg>$/); return m && m[1]; };
+  assert.strictEqual(first(thin), first(full)); assert.strictEqual(last(thin), last(full));
+  // the context part (grey) ends exactly at `off` in both drawings
+  const ctxPath = (s) => (s.match(/class="spk-ctx" d="([^"]+)"/) || [])[1];
+  const fullC = C.splitSpark(v, { w: 64, h: 22, off: 500 }), thinC = C.splitSpark(v, { w: 64, h: 22, off: 500 });
+  assert.ok(ctxPath(fullC) && ctxPath(thinC));
+  assert.strictEqual(ctxPath(thinC).split('L').pop(), ctxPath(fullC).split('L').pop(), 'context ends at off');
+  assert.strictEqual(C.sparkline([1, 2, 3], {}).includes('spk-up'), true, 'tiny series untouched');
+  assert.strictEqual(C.splitSpark([], {}), '<svg class="spark" viewBox="0 0 64 22" width="64" height="22" aria-hidden="true" focusable="false"></svg>');
 });
 
 // ======================================================================= UMD wrapper (browser global)

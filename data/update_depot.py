@@ -8,6 +8,7 @@
 #
 # Usage:  python data/update_depot.py            check -> write the three files -> rebuild -> tests
 #         python data/update_depot.py --dry-run  only print what would change
+#         python data/update_depot.py --no-tests rebuild without the tests (update_prices.py --finish runs them afterwards)
 # Checks: every held ISIN must be a price column (else: add it as a new instrument first, skill update-quotes); the sum of
 # shares x Scalable quote must match the overview's securities value within 0.5 %.
 import csv, io, json, pathlib, re, subprocess, sys
@@ -134,6 +135,7 @@ def run(cmd):
 
 code, o = run([sys.executable, str(D / 'build_data.py')])
 if code: print(o); print('STOP: build_data.py failed'); sys.exit(1)
+if '--no-tests' in sys.argv: sys.exit(0)        # update_prices.py --finish: tests + AGENTS.md status follow there
 c1, o1 = run(['node', 'tests/engine.test.cjs'])
 t1 = next((ln for ln in o1.splitlines() if ln.startswith('engine tests')), 'engine tests: no result')
 ok = not (c1)
