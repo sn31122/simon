@@ -13,8 +13,8 @@ def notes(ref_date, first_date, daily_from):
     return [
         f'Rückrechnung mit den Stückzahlen vom {de_date(ref_date)} (keine Transaktionshistorie): Werte vor dem Kaufdatum sind hypothetisch.',
         f'Kurse: Scalable (Mid, EUR, CONSOLIDATED), Tagesschlusskurse ab {de_date(daily_from)}; davor Xetra-Tagesschlusskurse von '
-        f'finanzen.net (ab {de_date(first_date)}, einzelne Titel nur Monatsschlusskurse). Volatilität und Sharpe-Ratio nutzen die '
-        'Tagesrenditen des gewählten Zeitraums; Rendite, p.a. und Max. Drawdown alle Kurse.',
+        f'finanzen.net (ab {de_date(first_date)}, einzelne Titel nur Monatsschlusskurse). Volatilität, Sharpe-Ratio und bester / '
+        'schlechtester Tag nutzen die Tagesrenditen des gewählten Zeitraums; Rendite, p.a. und Max. Drawdown alle Kurse.',
         'Vor dem ersten Kurs eines Titels (z. B. SpaceX ab 12.06.2026) zählt er mit dem ersten Kurs, also ohne Wertänderung.',
         'Reine Kursentwicklung in EUR: Dividenden ausschüttender Aktien sind nicht enthalten, Währungseffekte stecken in den EUR-Kursen.',
     ]
