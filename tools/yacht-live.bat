@@ -1,23 +1,22 @@
 @echo off
-rem Yacht-Dashboard live (neu 30.09.2026): holt github.com/sn31122/simon (Branch main) in einen eigenen Ordner, oeffnet
-rem dashboard.html und prueft alle 60 Sekunden auf neue Commits. Die Datei kann in einem beliebigen Ordner liegen.
-rem Der Ordner %DIR% ist nur eine Kopie von main: lokale Aenderungen darin werden bei jedem Abgleich verworfen.
+rem Yacht-Dashboard live (Windows). Seit 05.10.2026 (user) ohne eigene Kopie: die Datei aktualisiert den Repo-Ordner, in
+rem dem sie liegt (<Ordner>\tools\yacht-live.bat), von GitHub und oeffnet dessen dashboard.html; danach prueft sie alle
+rem 60 Sekunden auf neue Commits. Aktualisiert wird der Branch, der im Ordner ausgecheckt ist, nur vorwaerts
+rem (fast-forward) und nur ohne lokale Aenderungen - es wird nie etwas ueberschrieben. Ein als ZIP geladener Ordner
+rem (ohne .git) wird nur geoeffnet.
 setlocal EnableDelayedExpansion
 title Yacht-Dashboard live
-set "REPO=https://github.com/sn31122/simon.git"
-rem Kopie im Downloads-Ordner (user 05.10.2026; auch wenn Downloads verschoben wurde), frueher %USERPROFILE%\yacht-live-main
-set "DL=%USERPROFILE%\Downloads"
-for /f "tokens=2,*" %%a in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" /v {374DE290-123F-4565-9164-39C4925E467B} 2^>nul') do set "DL=%%b"
-set "DIR=%DL%\yacht-live-main"
-set "OLDDIR=%USERPROFILE%\yacht-live-main"
-rem anderer Ordner fuer die Kopie: Umgebungsvariable YACHT_LIVE_DIR setzen
-if defined YACHT_LIVE_DIR set "DIR=%YACHT_LIVE_DIR%"
-rem Ordner dieser Datei: liegt sie in tools\ eines Checkouts, ist dessen dashboard.html der Offline-Ersatz
-set "HERE=%~dp0"
-set "BRANCH=main"
 set "WAIT=60"
 rem 1 = bei neuer Version das Dashboard automatisch neu oeffnen (neuer Tab), 0 = nur Hinweis im Fenster
 set "REOPEN=1"
+for %%d in ("%~dp0..") do set "DIR=%%~fd"
+set "PAGE=%DIR%\dashboard.html"
+if not exist "%PAGE%" (
+  echo Neben tools\ fehlt dashboard.html: %DIR%
+  echo Die Datei muss im Ordner tools\ des Repos liegen.
+  pause
+  exit /b 1
+)
 
 rem Git: aus PATH, sonst aus den Standardordnern von Git for Windows (fuer alle / nur fuer mich installiert)
 where git >nul 2>nul
@@ -25,81 +24,66 @@ if errorlevel 1 if exist "%ProgramFiles%\Git\cmd\git.exe" set "PATH=%ProgramFile
 where git >nul 2>nul
 if errorlevel 1 if exist "%LOCALAPPDATA%\Programs\Git\cmd\git.exe" set "PATH=%LOCALAPPDATA%\Programs\Git\cmd;%PATH%"
 where git >nul 2>nul
-if errorlevel 1 goto nogit
+if errorlevel 1 goto onlyopen
+if not exist "%DIR%\.git" goto onlyopen
 
-if exist "%DIR%\.git" goto sync
-rem vorhandene Kopie vom alten Ort einmalig umziehen (spart das Klonen und die Anmeldung)
-if not exist "%DIR%" if exist "%OLDDIR%\.git" (
-  echo Ziehe die Kopie um: !OLDDIR! nach !DIR! ...
-  move "!OLDDIR!" "!DIR!" >nul
-)
-if exist "%DIR%\.git" goto sync
-echo Erster Start: lade das Repository nach %DIR% ...
-echo Falls ein Anmeldefenster erscheint: mit deinem GitHub-Konto anmelden.
-echo.
-git -c core.autocrlf=false clone --branch %BRANCH% %REPO% "%DIR%"
-if errorlevel 1 goto noclone
-
-:sync
-rem Ordner fest auf origin/main setzen (kein pull: ein pull bricht bei lokalen Abweichungen still ab)
-git -C "%DIR%" config core.autocrlf false
-git -C "%DIR%" remote set-url origin %REPO%
-git -C "%DIR%" fetch --quiet origin %BRANCH%
-if errorlevel 1 (
-  echo [%time:~0,8%] Abgleich mit GitHub fehlgeschlagen - kein Netz oder keine Anmeldung. Zeige den letzten Stand.
-) else (
-  git -C "%DIR%" checkout --quiet -B %BRANCH% origin/%BRANCH%
-  git -C "%DIR%" reset --quiet --hard origin/%BRANCH%
-)
+set "BRANCH="
+for /f "delims=" %%b in ('git -C "%DIR%" rev-parse --abbrev-ref HEAD') do set "BRANCH=%%b"
+call :update
 call :show
-if not exist "%DIR%\dashboard.html" goto noclone
-start "" "%DIR%\dashboard.html"
+start "" "%PAGE%"
 echo.
-echo Dashboard geoeffnet: %DIR%\dashboard.html
+echo Dashboard geoeffnet: %PAGE%
 echo Dieses Fenster offen lassen: alle %WAIT% Sekunden wird "%BRANCH%" auf GitHub geprueft.
 echo Im Browser nach einer neuen Version STRG+F5 druecken (laedt auch CSS/JS neu). Beenden: Fenster schliessen.
 echo.
 
 :loop
 timeout /t %WAIT% /nobreak >nul
-for /f "delims=" %%h in ('git -C "%DIR%" rev-parse HEAD') do set "OLD=%%h"
-git -C "%DIR%" fetch --quiet origin %BRANCH% >nul 2>&1
-if errorlevel 1 (
-  echo [%time:~0,8%] Abgleich fehlgeschlagen - neuer Versuch in %WAIT% s.
-  goto loop
-)
-for /f "delims=" %%h in ('git -C "%DIR%" rev-parse origin/%BRANCH%') do set "NEW=%%h"
-if not "!OLD!"=="!NEW!" (
-  git -C "%DIR%" reset --quiet --hard origin/%BRANCH%
+call :update
+if "!NEWVER!"=="1" (
   echo.
-  echo [%date% %time:~0,8%] NEUE VERSION geladen - im Browser STRG+F5 druecken:
+  echo [%date% !time:~0,8!] NEUE VERSION geladen - im Browser STRG+F5 druecken:
   call :show
-  if "%REOPEN%"=="1" start "" "%DIR%\dashboard.html"
+  if "%REOPEN%"=="1" start "" "%PAGE%"
 )
 goto loop
+
+rem holt origin/<Branch> und spult vor, wenn das gefahrlos geht; NEWVER=1 = neuer Stand geladen
+:update
+set "NEWVER=0"
+if "%BRANCH%"=="HEAD" exit /b 0
+if "%BRANCH%"=="" exit /b 0
+git -C "%DIR%" fetch --quiet origin %BRANCH% >nul 2>&1
+if errorlevel 1 (
+  echo [!time:~0,8!] Abgleich mit GitHub fehlgeschlagen - kein Netz oder keine Anmeldung. Zeige den lokalen Stand.
+  exit /b 0
+)
+for /f "delims=" %%h in ('git -C "%DIR%" rev-parse HEAD') do set "OLD=%%h"
+for /f "delims=" %%h in ('git -C "%DIR%" rev-parse origin/%BRANCH%') do set "NEW=%%h"
+if "!OLD!"=="!NEW!" exit /b 0
+set "DIRTY="
+for /f "delims=" %%s in ('git -C "%DIR%" status --porcelain --untracked-files^=no') do set "DIRTY=1"
+if defined DIRTY (
+  echo [!time:~0,8!] Neue Version auf GitHub, aber lokale Aenderungen im Ordner - nichts ueberschrieben.
+  exit /b 0
+)
+git -C "%DIR%" merge --ff-only --quiet origin/%BRANCH% >nul 2>&1
+if errorlevel 1 (
+  echo [!time:~0,8!] Neue Version auf GitHub, aber eigene Commits im Ordner - nichts ueberschrieben.
+  exit /b 0
+)
+set "NEWVER=1"
+exit /b 0
 
 :show
 git -C "%DIR%" log -1 --format="Stand: %%h  %%cd  %%s" --date=format:"%%d.%%m.%%Y %%H:%%M"
 exit /b 0
 
-:nogit
-echo Git wurde nicht gefunden. Bitte Git for Windows installieren: https://git-scm.com/download/win
-echo Danach dieses Fenster schliessen und die Datei erneut starten.
-call :local
+:onlyopen
+start "" "%PAGE%"
+echo Dashboard geoeffnet: %PAGE%
+echo Kein Abgleich mit GitHub: der Ordner ist kein Git-Klon oder Git fehlt (https://git-scm.com/download/win).
+echo Fuer automatische Updates das Repo mit git clone laden. Dieses Fenster kann geschlossen werden.
 pause
-exit /b 1
-
-:noclone
-echo Klonen fehlgeschlagen. Pruefe die Internetverbindung und ob die GitHub-Anmeldung geklappt hat,
-echo dann die Datei erneut starten. Ein halb angelegter Ordner %DIR% darf vorher geloescht werden.
-call :local
-pause
-exit /b 1
-
-:local
-rem Offline-Ersatz: das Dashboard des Checkouts, in dem diese Datei liegt (Stand dieses Checkouts, nicht GitHub)
-if not exist "%HERE%..\dashboard.html" exit /b 0
-echo.
-echo Oeffne solange die lokale Kopie neben dieser Datei: %HERE%..\dashboard.html
-start "" "%HERE%..\dashboard.html"
 exit /b 0
