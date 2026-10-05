@@ -118,14 +118,14 @@ def planned_timeframes():
         if m: return m.group(1).split()
     return ['seven_days', 'one_month']
 
-def clear_incoming():
-    """Removes the fetch files of the normal update, the depot snapshot included (never incoming/ytd/: pending
-    new-instrument backfills live there)."""
+def clear_incoming(depot=False):
+    """Removes the fetch files of the normal update (never incoming/ytd/: pending new-instrument backfills live there);
+    depot: also the saved depot answers (--plan; the merge keeps them for the depot step of --finish)."""
     n = 0
     for d in (INC, INC2H, INC3M):
         for p in list(d.glob('*.csv')) + list(d.glob('*.tmp')) if d.exists() else []:
             p.unlink(); n += p.suffix == '.csv'
-    for p in DEPOT_FILES:
+    for p in DEPOT_FILES if depot else []:
         if p.exists(): p.unlink()
     return n
 
@@ -140,7 +140,7 @@ def weekdays_between(a, b):   # weekdays after a up to and including b
 # ------------------------------------------------------------------ --plan
 if '--plan' in sys.argv:
     INC.mkdir(exist_ok=True)
-    left = clear_incoming()            # leftovers of an earlier, unmerged fetch: fetched again
+    left = clear_incoming(depot=True)  # leftovers of an earlier, unmerged fetch: fetched again
     isins, nm = head[3:], names()
     k = math.ceil(len(isins) / BATCH)
     size = math.ceil(len(isins) / k)
@@ -256,6 +256,7 @@ if '--finish' in sys.argv:
     if depot_saved():
         code, _ = run_cmd([sys.executable, str(D / 'update_depot.py'), '--no-tests'])
         if code: print('\nSTOP: depot snapshot refused (the prices are merged). Show the STOP line to the user.'); sys.exit(1)
+        for f in DEPOT_FILES: f.unlink()   # merged into depot.csv / depot_ref.csv / benchmarks.csv
     else:
         print('DEPOT MISSING: call get_portfolio_holdings and get_portfolio_overview (includeYearToDate: true, no portfolioId; '
               'the hook saves both), then run: python data/update_depot.py')
