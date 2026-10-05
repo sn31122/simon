@@ -225,8 +225,9 @@ def logo_for(p):
     return None
 
 # ---- sub-daily grids (Europe/Berlin slots, Scalable trading hours 07:30-23:00), every collected session -> data.grids:
-#   m30  30-min slots 07:30 .. 23:00 (32) from intraday.csv (seven_days)             -> charts 1T, 1W, custom <= 7 days
-#   h2   2-hour slots 07:30 .. 21:30 + 23:00 (9) from intraday_2h.csv (one_month)    -> chart 1M, custom <= 31 days
+#   m30  30-min slots 07:30 .. 23:00 (32) from intraday.csv (seven_days)                    -> charts 1T, 1W, custom <= 7 days
+#   h2   2-hour slots 07:30 .. 21:30 + 23:00 (9): the 30-min point nearest to each slot (+-15 min) from intraday.csv; days
+#        without 30-min points take their points from intraday_2h.csv (one_month, only fetched after a gap) -> chart 1M, custom <= 31 days
 # The engine picks the chart interval per range from these grids (engine.chartInterval / gridFrame); 1T = the last session of m30.
 # A point goes to the nearest slot (the latest point wins a slot). On a final day the 23:00 slot of every instrument is its
 # daily close when no point landed there (one_month's last point of a day is ~21:30 Berlin, not the close), so every
@@ -247,29 +248,35 @@ def to_berlin(t):
     start, end = _DST[t.year]
     return (t + datetime.timedelta(hours=2 if start <= t < end else 1)).replace(tzinfo=None)
 
-def build_grid(fname, times, needed):
-    f = D/fname
-    if not f.exists(): return None
+def build_grid(files, times, needed):
+    """files: [(csv name, near)] in order of priority - a later file only fills slots the earlier files left empty;
+    near = a point counts only within that many minutes of a slot (None: the nearest slot, however far away)."""
+    files = [(D/f, near) for f, near in files if (D/f).exists()]
+    if not files: return None
+    fname = ' + '.join(f.name for f, _ in files)
     mins = [int(t[:2]) * 60 + int(t[3:]) for t in times]
-    grid, asof, outside, foreign = {}, None, 0, set()   # (isin, day) -> {slot: (ts, price)}
-    for r in csv.DictReader(open(f, encoding='utf-8')):
-        ts = datetime.datetime.fromisoformat(r['timestamp_utc'].replace('Z', '+00:00')).astimezone(datetime.timezone.utc)
-        b = to_berlin(ts)
-        m = b.hour * 60 + b.minute + b.second / 60        # 05:59:39 UTC -> 07:59.65 Berlin -> slot 08:00
-        if not mins[0] - SLOT_TOL <= m <= mins[-1] + SLOT_TOL: outside += 1; continue
-        slot = min(range(len(mins)), key=lambda k: (abs(mins[k] - m), -k))   # a tie goes to the later slot
-        day = b.date().isoformat()
-        if day not in date_idx: foreign.add(day); continue
-        cell = grid.setdefault((r['isin'], day), {})
-        if slot not in cell or ts > cell[slot][0]: cell[slot] = (ts, float(r['price']))
-        asof = max(asof or ts, ts)
+    grid, asof, outside, foreign = {}, None, 0, set()   # (isin, day) -> {slot: (ts, price, file rank)}
+    for rank, (f, near) in enumerate(files):
+        for r in csv.DictReader(open(f, encoding='utf-8')):
+            ts = datetime.datetime.fromisoformat(r['timestamp_utc'].replace('Z', '+00:00')).astimezone(datetime.timezone.utc)
+            b = to_berlin(ts)
+            m = b.hour * 60 + b.minute + b.second / 60        # 05:59:39 UTC -> 07:59.65 Berlin -> slot 08:00
+            if not mins[0] - SLOT_TOL <= m <= mins[-1] + SLOT_TOL: outside += 1; continue
+            slot = min(range(len(mins)), key=lambda k: (abs(mins[k] - m), -k))   # a tie goes to the later slot
+            if near is not None and abs(mins[slot] - m) > near: continue
+            day = b.date().isoformat()
+            if day not in date_idx: foreign.add(day); continue
+            cell = grid.setdefault((r['isin'], day), {})
+            if slot in cell and cell[slot][2] < rank: continue   # filled by a file of higher priority
+            if slot not in cell or ts > cell[slot][0]: cell[slot] = (ts, float(r['price']), rank)
+            asof = max(asof or ts, ts)
     days = sorted({d for _, d in grid})
     if not days: return None
     S, px, missing, off = len(times), {}, [], []
     for i in needed:
         arr = [None] * (len(days) * S)
         for k, d in enumerate(days):
-            for s, (_, p) in grid.get((i, d), {}).items(): arr[k * S + s] = p
+            for s, (_, p, _rank) in grid.get((i, d), {}).items(): arr[k * S + s] = p
             di = date_idx[d]
             close = prices[i][di]
             if status[di] == 'final' and close is not None:
@@ -334,10 +341,10 @@ data = {
                             'type': (inst.get(i) or {}).get('type') or '', 'position': i in {p['isin'] for p in pos}}
                            for i in isins), key=lambda x: x['short'].casefold()),
     'prices': {i: packed(prices[i]) for i in dict.fromkeys(needed)},   # packed: -k = k dates without a quote (engine.fillPrices)
-    'grids': {'m30': build_grid('intraday.csv', TIMES, list(dict.fromkeys(needed))),
-              'h2': build_grid('intraday_2h.csv', TIMES_2H, list(dict.fromkeys(needed)))},
+    'grids': {'m30': build_grid([('intraday.csv', None)], TIMES, list(dict.fromkeys(needed))),
+              'h2': build_grid([('intraday.csv', SLOT_TOL), ('intraday_2h.csv', None)], TIMES_2H, list(dict.fromkeys(needed)))},
 }
-check_latest(data['grids']['m30'], 'intraday.csv', '1T/1W'); check_latest(data['grids']['h2'], 'intraday_2h.csv', '1M')
+check_latest(data['grids']['m30'], 'intraday.csv', '1T/1W'); check_latest(data['grids']['h2'], 'intraday.csv + intraday_2h.csv', '1M')
 js = ('// Generated by build_data.py from positions.csv, benchmarks.csv, history_phases.csv, instruments.csv, prices_history.csv, prices_daily.csv, intraday.csv, intraday_2h.csv. Do not edit by hand.\n'
       '(typeof window !== "undefined" ? window : globalThis).PORTFOLIO_DATA = '
       + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n')

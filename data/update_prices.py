@@ -6,7 +6,10 @@
 #   incoming/<ISIN>.csv     seven_days   30-min points of ~6 sessions: the last point per Europe/Berlin date is that day's
 #                                        close / today's latest price (closes of NEW days only) + intraday.csv
 #   incoming/2h/<ISIN>.csv  one_month    2-hour points of ~1 month (the last point of a day, ~19:30 UTC, is NOT the close)
-#                                        -> intraday_2h.csv only
+#                                        -> intraday_2h.csv only; fetched only when the 30-min store has a gap of > 5 weekdays
+#                                        (the 1M chart takes its 2-h points from the 30-min points, build_data.py)
+#   incoming/depot/*.json   get_portfolio_holdings + get_portfolio_overview, saved by .claude/hooks/save-portfolio.cjs:
+#                                        the fetch agent calls both (DEPOT: yes); --finish passes them to update_depot.py
 #   incoming/3m/<ISIN>.csv  three_months daily closes; only fetched after a break of > 5 weekdays (--plan says so) and
 #                                        only used for new days that seven_days no longer covers
 #   incoming/ytd/<ISIN>.csv year_to_date daily closes since 1 January: new-instrument backfill (--plan-add/--finish-add)
@@ -16,7 +19,8 @@
 #
 # Usage (normal update = --plan, fetch agents, --finish; see the update-quotes skill):
 #         python update_prices.py --plan      empties incoming/, prints one ready agent prompt per batch
-#         python update_prices.py --finish    check -> merge -> rebuild -> tests -> AGENTS.md status block -> short report
+#         python update_prices.py --finish    check -> merge -> rebuild -> depot snapshot (update_depot.py) -> tests -> AGENTS.md
+#                                             status block -> short report
 #   new instrument (only on user instruction; row in instruments.csv first):
 #         python update_prices.py --plan-add ISIN[,ISIN]    prints the backfill prompts (year_to_date + seven_days + one_month
 #                                                           + one_year + max: the history before 2026, prices_history.csv)
@@ -37,7 +41,8 @@ INC1Y, INCMAX = INC / '1y', INC / 'max'           # one_year / max fetches: hist
 HIST = D / 'prices_history.csv'
 CLOSE_HOUR_BERLIN = 23   # a day's last point counts as the close once Berlin time is past 23:00
 BATCH = 1000             # max ISINs per fetch agent: one Sonnet 5.5 agent handles all calls (user 02.10.2026)
-GAP_DAYS = 5             # more weekdays since the last final close: also fetch three_months (seven_days covers ~5 sessions)
+GAP_DAYS = 5             # more weekdays since the last final close / the last 30-min session: also fetch three_months / one_month
+                         # (seven_days covers ~6 sessions)
 MAX_GAP_DAYS = 60        # three_months covers ~63 sessions; beyond that ask the user (year_to_date by hand, AGENTS.md)
 LINE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z,\d+(\.\d+)?$')
 
@@ -90,10 +95,20 @@ def last_price(isin):
     return None
 
 THINK = 'Thinking ON: think step by step before each tool call and before writing each file.'
-def agent_prompt(tfs, isins):
-    """The exact prompt for one price-fetcher agent (Claude Sonnet 5.5)."""
+def agent_prompt(tfs, isins, depot=True):
+    """The exact prompt for one price-fetcher agent (Claude Sonnet 5.5); depot: it also saves the depot snapshot."""
     return (f'{THINK}\nNormal update in `{D.parent}`: follow your agent instructions (fetch agent). '
-            f'TIMEFRAMES: `{" ".join(tfs)}`. Your ISINs: `{" ".join(isins)}`.')
+            f'TIMEFRAMES: `{" ".join(tfs)}`. DEPOT: {"yes" if depot else "no"}. Your ISINs: `{" ".join(isins)}`.')
+
+DEPOT_FILES = [INC / 'depot' / 'holdings.json', INC / 'depot' / 'overview.json']
+def depot_saved():
+    return all(f.exists() for f in DEPOT_FILES)
+
+def last_session(f):
+    """Newest Berlin date with points in intraday.csv / intraday_2h.csv (None when empty)."""
+    if not f.exists(): return None
+    ts = max((r['timestamp_utc'] for r in csv.DictReader(open(f, encoding='utf-8'))), default=None)
+    return to_berlin(parse_ts(ts)).date().isoformat() if ts else None
 
 def planned_timeframes():
     """Timeframes of the current plan (line 'TIMEFRAMES:' in incoming/_plan.txt); default seven_days + one_month."""
@@ -104,11 +119,14 @@ def planned_timeframes():
     return ['seven_days', 'one_month']
 
 def clear_incoming():
-    """Removes the fetch files of the normal update (never incoming/ytd/: pending new-instrument backfills live there)."""
+    """Removes the fetch files of the normal update, the depot snapshot included (never incoming/ytd/: pending
+    new-instrument backfills live there)."""
     n = 0
     for d in (INC, INC2H, INC3M):
         for p in list(d.glob('*.csv')) + list(d.glob('*.tmp')) if d.exists() else []:
             p.unlink(); n += p.suffix == '.csv'
+    for p in DEPOT_FILES:
+        if p.exists(): p.unlink()
     return n
 
 def weekdays_between(a, b):   # weekdays after a up to and including b
@@ -128,17 +146,25 @@ if '--plan' in sys.argv:
     size = math.ceil(len(isins) / k)
     batches = [isins[j:j + size] for j in range(0, len(isins), size)]
     gap = weekdays_between(last_final, today) if last_final else 99
-    tfs = ['seven_days', 'one_month'] + (['three_months'] if gap > GAP_DAYS else [])
+    last30 = last_session(STORE_30M)
+    gap30 = weekdays_between(last30, today) if last30 else 99
+    tfs = ['seven_days'] + (['one_month'] if gap30 > GAP_DAYS else []) + (['three_months'] if gap > GAP_DAYS else [])
     lines = [f'FETCH PLAN  (Berlin {now_berlin:%Y-%m-%d %H:%M}, last final close in prices_daily.csv: {last_final})',
              f'TIMEFRAMES: {" ".join(tfs)}',
              'TOOL: get_security_chart(isin=<ISIN>, timeframe=<each timeframe>)   (read-only; no portfolioId)',
-             'FILES: written by the hook .claude/hooks/save-chart.cjs (data/incoming/<ISIN>.csv, 2h/, 3m/); the result is one line "SAVED ..."',
+             'DEPOT: yes - the agent also calls get_portfolio_holdings + get_portfolio_overview (includeYearToDate: true); --finish runs update_depot.py',
+             'FILES: written by the hooks .claude/hooks/save-chart.cjs / save-portfolio.cjs (data/incoming/<ISIN>.csv, 2h/, 3m/, depot/); '
+             'the result is one line "SAVED ..."',
              f'{len(isins)} ISINs in {len(batches)} batch(es) (one fetch agent per batch):']
     for j, b in enumerate(batches, 1):
         lines.append(f'BATCH {j}: ' + ' '.join(b))
         for i in b: lines.append(f'    {i}  {nm.get(i, "")}')
+    if 'one_month' in tfs:
+        lines.append(f'NOTE: last 30-min session {last30}, {gap30} weekdays ago - one_month fills the 2-h points of the days seven_days no longer covers.')
+    else:
+        lines.append(f'NOTE: no one_month call - the 1M chart takes its 2-h points from the 30-min points (stored up to {last30}).')
     if gap > GAP_DAYS:
-        lines.append(f'NOTE: {gap} weekdays since {last_final} - seven_days covers only ~5 sessions, so three_months fills the closes in between.')
+        lines.append(f'NOTE: {gap} weekdays since {last_final} - seven_days covers only ~6 sessions, so three_months fills the closes in between.')
     if gap > MAX_GAP_DAYS:
         lines.append(f'WARNING: {gap} weekdays since {last_final} - more than three_months covers. Ask the user before fetching '
                      '(the older closes need year_to_date into the legacy data/incoming.csv, AGENTS.md).')
@@ -210,22 +236,30 @@ def tests_status_report(alerts, step=''):
 # ------------------------------------------------------------------ --finish: check -> merge -> tests -> AGENTS.md status -> report
 if '--finish' in sys.argv:
     me = [sys.executable, str(pathlib.Path(__file__).resolve())]
-    print('== 1/3 check ==')
+    print('== 1/4 check ==')
     code, out = run_cmd(me + ['--check'])
     if code:
         redo = [ln.split(':')[0].strip() for ln in out.splitlines() if re.match(r'^\s+[A-Z]{2}[A-Z0-9]{9}\d:', ln)]
         parts = [redo[j:j + BATCH] for j in range(0, len(redo), BATCH)] or [[]]
         print(f'\nFETCH AGAIN: start {len(parts)} agent(s) (price-fetcher, claude-sonnet-5-5), one prompt each:')
-        for j, b in enumerate(parts, 1): print(f'--- prompt {j}/{len(parts)} ---\n' + agent_prompt(planned_timeframes(), b))
+        for j, b in enumerate(parts, 1):
+            print(f'--- prompt {j}/{len(parts)} ---\n' + agent_prompt(planned_timeframes(), b, depot=not depot_saved()))
         print('--- end of prompts --- then run: python data/update_prices.py --finish   '
               '(after 2 failed rounds for the same ISIN: ask the user)')
         sys.exit(1)
-    print('\n== 2/3 merge + rebuild ==')
+    print('\n== 2/4 merge + rebuild ==')
     code, out = run_cmd(me)
     if code:
         print('\nSTOP: merge refused (nothing written). Show these ERRORS to the user.'); sys.exit(1)
     alerts = [ln.strip() for ln in out.splitlines() if 'SPLIT' in ln or 'final close' in ln]
-    sys.exit(tests_status_report(alerts, '3/3 '))
+    print('\n== 3/4 depot snapshot ==')
+    if depot_saved():
+        code, _ = run_cmd([sys.executable, str(D / 'update_depot.py'), '--no-tests'])
+        if code: print('\nSTOP: depot snapshot refused (the prices are merged). Show the STOP line to the user.'); sys.exit(1)
+    else:
+        print('DEPOT MISSING: call get_portfolio_holdings and get_portfolio_overview (includeYearToDate: true, no portfolioId; '
+              'the hook saves both), then run: python data/update_depot.py')
+    sys.exit(tests_status_report(alerts, '4/4 '))
 
 
 # ------------------------------------------------------------------ new instruments: --plan-add / --finish-add (backfill)
