@@ -111,12 +111,12 @@ def last_session(f):
     return to_berlin(parse_ts(ts)).date().isoformat() if ts else None
 
 def planned_timeframes():
-    """Timeframes of the current plan (line 'TIMEFRAMES:' in incoming/_plan.txt); default seven_days + one_month."""
+    """Timeframes of the current plan (line 'TIMEFRAMES:' in incoming/_plan.txt); default seven_days."""
     f = INC / '_plan.txt'
     if f.exists():
         m = re.search(r'^TIMEFRAMES: (.+)$', f.read_text(encoding='utf-8'), re.M)
         if m: return m.group(1).split()
-    return ['seven_days', 'one_month']
+    return ['seven_days']
 
 def clear_incoming(depot=False):
     """Removes the fetch files of the normal update (never incoming/ytd/: pending new-instrument backfills live there);

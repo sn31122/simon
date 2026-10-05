@@ -226,8 +226,9 @@ def logo_for(p):
 
 # ---- sub-daily grids (Europe/Berlin slots, Scalable trading hours 07:30-23:00), every collected session -> data.grids:
 #   m30  30-min slots 07:30 .. 23:00 (32) from intraday.csv (seven_days)                    -> charts 1T, 1W, custom <= 7 days
-#   h2   2-hour slots 07:30 .. 21:30 + 23:00 (9): the 30-min point nearest to each slot (+-15 min) from intraday.csv; days
-#        without 30-min points take their points from intraday_2h.csv (one_month, only fetched after a gap) -> chart 1M, custom <= 31 days
+#   h2   2-hour slots 07:30 .. 21:30 + 23:00 (9): the 30-min point nearest to each slot (+-15 min) from intraday.csv; slots
+#        without one (days before the 30-min store, gaps) from intraday_2h.csv (one_month, only fetched after a gap) -> chart 1M,
+#        custom <= 31 days
 # The engine picks the chart interval per range from these grids (engine.chartInterval / gridFrame); 1T = the last session of m30.
 # A point goes to the nearest slot (the latest point wins a slot). On a final day the 23:00 slot of every instrument is its
 # daily close when no point landed there (one_month's last point of a day is ~21:30 Berlin, not the close), so every
