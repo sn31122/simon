@@ -16,7 +16,7 @@ persisted. Ask the user whenever something is even slightly unclear. Reply in th
 ## The jobs
 | User says | What runs | Who |
 |---|---|---|
-| "update", "refresh", "new prices", "Kurse aktualisieren" | skill `update-quotes`: `update_prices.py --plan` → one `price-fetcher` agent → `--finish` → depot snapshot (`update_depot.py`) | **Claude Code only** (Scalable connector + hook `.claude/hooks/save-chart.cjs`) |
+| "update", "refresh", "new prices", "Kurse aktualisieren" | skill `update-quotes`: `update_prices.py --plan` → one `price-fetcher` agent (one `seven_days` chart call per ISIN + the two depot calls) → `--finish` (merge, rebuild, `update_depot.py`, tests, status) | **Claude Code only** (Scalable connector + hooks `.claude/hooks/*.cjs`) |
 | "update depot" | `get_portfolio_holdings` + `get_portfolio_overview` (hook saves them) → `python data/update_depot.py` | Claude Code |
 | "add benchmark asdf: microsoft 30 nvidia 40", "change …", "rename …", "remove …", "list benchmarks" | `python data/benchmarks.py add / set / rename / remove / list …` (names via `instruments.csv`, 100 % check) | any tool (Claude Code: skill `benchmarks`) |
 | "import transactions" | `python data/import_transactions.py [FILE]` (default: newest Scalable export in `~/Downloads`) | any tool |
@@ -36,7 +36,7 @@ sources. Stale prices → tell the user to run "update" in Claude Code. Everythi
 | `data/instruments.csv` | isin, name, short, type for **every** price column | a row per new column |
 | `data/prices_daily.csv` | `date,status,asof_utc,<ISIN>…` EUR close per trading day since 02.01.2026; only the last row may be `intraday` | only via `update_prices.py` |
 | `data/prices_history.csv` | `date,res,<ISIN>…` before 2026: `dh` daily (finanzen.net, from 2006, one-time import 02.10.2026), `m` month-end, `2d` every 2nd day | only via `update_prices.py --finish-add` |
-| `data/intraday.csv`, `data/intraday_2h.csv` | `isin,timestamp_utc,price`: 30-min / 2-h points, kept forever | only via `update_prices.py` |
+| `data/intraday.csv`, `data/intraday_2h.csv` | `isin,timestamp_utc,price`: 30-min points (every update) / 2-h points (`one_month`, only after a gap; fill days without 30-min points), kept forever | only via `update_prices.py` |
 | `data/incoming/` | hook output (git-ignored) | only by the hooks |
 | `.claude/hooks/*.cjs` + `.claude/settings.json` | PostToolUse hooks saving chart / depot answers | change together with the scripts |
 | `js/engine.js` | all math + formatters (`PFEngine`), pure functions | math only here, with a test |
@@ -48,8 +48,9 @@ sources. Stale prices → tell the user to run "update" in Claude Code. Everythi
 ## Scalable (read-only!)
 Only `get_security_chart`, `get_security_quote`, `search_securities`, and for the depot `get_portfolio_holdings` /
 `get_portfolio_overview`. Never any order, savings-plan, watchlist, price-alert, portfolio-group or other write tool. Omit
-`portfolioId`. Timeframes (one ISIN per call): `seven_days` = 30-min points (last of a day = close), `one_month` = 2-h
-points, `three_months` / `year_to_date` = daily closes, `one_year` / `max` = every 2nd day / month-end (history only).
+`portfolioId`. Timeframes (one ISIN per call): `seven_days` = 30-min points (last of a day = close; the 1M chart's 2-h points
+come from them), `one_month` = 2-h points (only after a gap of > 5 weekdays), `three_months` / `year_to_date` = daily closes,
+`one_year` / `max` = every 2nd day / month-end (history only).
 Before 23:00 Berlin today is `intraday`. Never delete old rows. > ~60 weekdays gap: ask the user.
 
 **Build warnings:** `SPLIT` (ratio near 2/3/4/5/10/…) → confirm with the user, divide the history before the split, note
@@ -68,7 +69,8 @@ XS3388191457, Bloom / D-Wave Nov 2024, Riot −74 % 21.01.2009 (its `CHECK WITH 
 - Top blocks: the real Yacht, and "Mein Depot" with value and G/V **exactly as Scalable reports them** (`depot_ref.csv`,
   refreshed with every price update; big value = `valuation.securities`); only a free Von/Bis range falls back to our
   own computation (marked).
-- Chart interval: 1T/1W 30 min, 1M 2 h, longer daily; steps down where sessions are missing. Daily charts can be thinned
+- Chart interval: 1T/1W 30 min, 1M 2 h (the 30-min point nearest each 2-h slot; days without 30-min points from
+  `intraday_2h.csv`), longer daily; steps down where sessions are missing. Daily charts can be thinned
   with the price-interval pills under the period pills (1 Tag / 2 Tage / 1 Woche / 1 Monat, `E.thinIndices`; first and
   last point always kept). Kennzahlen, tables and lists stay daily.
 
@@ -79,7 +81,7 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
-- Data status (update 03.10.2026 23:24 Berlin): 193 trading days 2026-01-02 … 2026-10-02; last row 2026-10-02 = final; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (month-end + every 2nd trading day); 30-min (intraday.csv): 11 sessions 2026-09-18 … 2026-10-02; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 16 passed, 0 failed.
+- Data status (update 05.10.2026 07:37 Berlin): 194 trading days 2026-01-02 … 2026-10-05; last row 2026-10-05 = intraday, asof 2026-10-05T05:35Z; history (prices_history.csv): 4897 rows 2006-10-03 … 2025-12-30 (daily); 30-min (intraday.csv): 12 sessions 2026-09-18 … 2026-10-05; 2-h (intraday_2h.csv): 29 sessions 2026-08-25 … 2026-10-02; engine tests: 18 passed, 0 failed.
 <!-- data-status:end -->
 - 108 price series, 32 Yacht positions; real depot 7 positions (snapshot 02.10.2026 23:00). Presets: "Mein Depot" card
   at load; menu: Situational Awareness, Memory, Depot-Historie, Historie (9 phases). The page opens on 1T.
@@ -87,6 +89,17 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
   crosscheck, raw archives (`data/source/`), the finanzen.net importer (its data stays in `prices_history.csv`), the
   history-fetch mode of `update_prices.py`, SPEC / UPDATE_PRICES / HANDOFF (merged here); engine tests cut to the core;
   Kennzahlen without Calmar, VaR, CVaR, Aktueller Drawdown. New: price-interval pills for daily charts.
+- Optimized 05.10.2026: `portfolio-data.js` stores price series packed (a negative integer −k = k dates without a quote,
+  `engine.fillPrices` unpacks; 3,6 → 2,4 MB), sparklines keep at most 2 points per pixel column (`charts.sparkIndices`;
+  MAX/Seit Kauf update ~3× faster, same picture), `build_data.py` 5 s → 1,6 s (date index instead of list scans), footer
+  notes come from the data (`build_data.notes`), dead title-bar code removed. Tests: + packed prices, + sparkline thinning.
+- Update pipeline 05.10.2026: a normal update is 108 chart calls (`seven_days` only) instead of 216; `one_month` /
+  `three_months` only after a gap of > 5 weekdays (`--plan` decides and says why). The depot snapshot is fetched by the same
+  `price-fetcher` agent (`DEPOT: yes`) and merged by `--finish` (`update_depot.py --no-tests`), so the main session runs
+  plan → one agent → finish → report. `save-portfolio.cjs` is unchanged (saves the depot answers, the model still sees
+  them). Both hooks also run in cloud (Projects) sessions, so an update can run there too. Nothing was removed (user
+  05.10.2026: "keine Features entfernen"); the 1M chart keeps its 2-h points, `intraday_2h.csv` stays and is still filled
+  after a gap.
 - Data notes: Astera Labs history begins 13.11.2025. No daily history before 2026 (month-end only): Western Digital,
   Applied Optoelectronics, Astera Labs, Eaton, Keel, SanDisk, Alphabet 2x, SpaceX, Memory 3x.
 
@@ -94,3 +107,9 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
 - Codex has no Scalable connector: price and depot updates stay in Claude Code.
 - At ~1500–1650 px window width the fixed period pills touch the end of the "Mein Depot" label.
 - Proposed, awaiting the user: ticker tiers (core / daily-only / on-demand) for more tickers.
+- Update on open (user 05.10.2026: "make the prices update upon launch", then "die cloud updates weglassen, es soll nur
+  geupdated werden, wenn man das portfolio öffnet"): no scheduled updates. Awaiting the user's choice where the run that
+  the launcher starts happens (Claude cloud routine fired by the launcher, or local Claude Code); prices still come only
+  through Claude + Scalable.
+- An update before ~07:15 Berlin adds today's row from pre-market quotes (Scalable quotes from 06:00), which the 30-min /
+  2-h grids (07:30–23:00) ignore, so 1T/1W/1M fall back to daily until the next update after 07:15.

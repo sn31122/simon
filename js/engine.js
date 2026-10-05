@@ -83,17 +83,34 @@
   function daysBetween(a, b) { const x = dayNumber(a), y = dayNumber(b); return x === null || y === null ? null : y - x; }
 
   // ------------------------------------------------------------------ prepare
+  /**
+   * fillPrices(raw, n) -> { px: [n filled prices], first: index of the first real quote (n = never quoted) }
+   * raw = one price per date (null = no quote), or packed as build_data.py writes it: a negative integer -k stands for
+   * k dates without a quote ([null, null, 12, null, 13] == [-2, 12, -1, 13]; prices are always > 0, so this is
+   * unambiguous). Gaps are forward-filled, the dates before the first quote back-filled (flat); never quoted -> 0.
+   */
   function fillPrices(raw, n) {
     const out = new Array(n);
-    let first = -1;
-    if (Array.isArray(raw)) for (let k = 0; k < n; k++) if (isNum(raw[k]) && raw[k] > 0) { first = k; break; }
+    let first = -1, last = null, k = 0;
+    if (Array.isArray(raw)) {
+      for (let j = 0; j < raw.length && k < n; j++) {
+        const v = raw[j];
+        if (isNum(v) && v < 0) {                                           // packed run of -v missing quotes
+          const end = Math.min(n, k + Math.round(-v));
+          while (k < end) out[k++] = last;
+          continue;
+        }
+        if (isNum(v) && v > 0) { if (first < 0) first = k; last = v; }
+        out[k++] = last;
+      }
+    }
     if (first < 0) { out.fill(0); return { px: out, first: n }; }         // never quoted: value 0, "listed after the end"
-    let last = raw[first];                                                 // back-fill before the first quote (flat)
-    for (let k = 0; k < n; k++) { const v = raw[k]; if (isNum(v) && v > 0) last = v; out[k] = last; }   // forward-fill gaps
+    for (let i = 0; i < first; i++) out[i] = out[first];                  // back-fill before the first quote (flat)
+    while (k < n) out[k++] = last;                                         // a shorter array: flat after its last cell
     return { px: out, first };
   }
 
-  /** prepare(data) -> ctx with filled price arrays (forward-fill, back-fill before the first quote). */
+  /** prepare(data) -> ctx with filled price arrays (fillPrices: plain or packed, forward-fill, back-fill before the first quote). */
   function prepare(data) {
     data = data || {};
     const dates = Array.isArray(data.dates) ? data.dates : [];
@@ -221,8 +238,8 @@
     if (!(L >= 0)) return out;
     if (step === '2d') {
       for (let k = L; k > 0; k -= 2) out.push(k);
-      out.push(0); out.reverse();
-      return out[1] === 0 ? out.slice(1) : out;
+      out.push(0);
+      return out.reverse();
     }
     const key = step === 'w' ? (i) => Math.floor((ctx.day[i] + 3) / 7) : step === 'm' ? (i) => ctx.dates[i].slice(0, 7) : null;
     out.push(0);
