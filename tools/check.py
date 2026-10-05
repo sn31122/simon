@@ -1,6 +1,7 @@
 # Session check for every tool (Claude Code, Codex, a terminal): run it at the start of a session.
-#   python tools/check.py          git sync with origin/main, tools, data freshness, tests
+#   python tools/check.py          git sync with origin/main or origin/optimiert, tools, data freshness, tests
 #   python tools/check.py --quick  without the tests
+#   python tools/check.py --base optimiert   compare with that branch instead of the closest of main / optimiert
 # Changes nothing; prints what to do (e.g. "git pull") and exits 1 if something blocks work.
 import csv, datetime, os, pathlib, platform, re, shutil, subprocess, sys
 
@@ -31,16 +32,25 @@ if R.name == 'yacht-live-main':
 
 print('== git ==')
 c, branch = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
-c2, _ = run(['git', 'fetch', '--quiet', 'origin', 'main'], timeout=60)
+# base branch: `main`, or `optimiert` (user 05.10.2026: newest version on that side branch, main kept at the old state);
+# a feature branch is compared with the one it is closest to; `--base X` overrides
+BASES = ('main', 'optimiert')
+c2, _ = run(['git', 'fetch', '--quiet', 'origin'] + list(BASES), timeout=60)
+if c2: c2, _ = run(['git', 'fetch', '--quiet', 'origin', 'main'], timeout=60)
 _, dirty = run(['git', 'status', '--porcelain', '--untracked-files=no'])
-_, counts = run(['git', 'rev-list', '--left-right', '--count', 'HEAD...origin/main'])
-ahead, behind = (int(x) for x in counts.split()) if c2 == 0 and len(counts.split()) == 2 else (0, 0)
-print(f'branch {branch}; {ahead} commit(s) not on main, {behind} commit(s) of main missing'
+dist = {}
+for b in BASES:
+    cc, counts = run(['git', 'rev-list', '--left-right', '--count', f'HEAD...origin/{b}'])
+    if cc == 0 and len(counts.split()) == 2: dist[b] = tuple(int(x) for x in counts.split())
+base = (sys.argv[sys.argv.index('--base') + 1] if '--base' in sys.argv[:-1] else branch if branch in dist
+        else min(dist, key=lambda b: (sum(dist[b]), BASES.index(b))) if dist else 'main')
+ahead, behind = dist.get(base, (0, 0)) if c2 == 0 else (0, 0)
+print(f'branch {branch}; base {base}; {ahead} commit(s) not on {base}, {behind} commit(s) of {base} missing'
       + ('' if c2 == 0 else ' (fetch failed: offline or no GitHub login)') + (f'; uncommitted changes:\n  ' + dirty.replace(chr(10), chr(10) + '  ') if dirty else ''))
 if behind:
-    if branch == 'main' and not dirty: todo.append('git pull --ff-only   (main has newer commits)')
-    elif branch == 'main': todo.append('commit or stash your changes, then git pull --ff-only')
-    else: todo.append('git merge origin/main   (this branch is behind main)')
+    if branch == base and not dirty: todo.append(f'git pull --ff-only   ({base} has newer commits)')
+    elif branch == base: todo.append('commit or stash your changes, then git pull --ff-only')
+    else: todo.append(f'git merge origin/{base}   (this branch is behind {base})')
 
 print('== tools ==')
 MAC = sys.platform == 'darwin'
@@ -103,5 +113,5 @@ if '--quick' not in sys.argv:
 print('== result ==')
 for t in todo: print('TODO: ' + t)
 for p in problems: print('PROBLEM: ' + p)
-if not todo and not problems: print('OK: in sync with main, tools present, data current, tests green.')
+if not todo and not problems: print(f'OK: in sync with {base}, tools present, data current, tests green.')
 sys.exit(1 if problems else 0)

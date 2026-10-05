@@ -6,8 +6,8 @@ persisted. Ask the user whenever something is even slightly unclear. Reply in th
 
 ## Session protocol
 1. **Start:** `python tools/check.py` (Windows `python`, else `python3`): fetches `origin/main` and says what to do
-   (`git pull --ff-only` on main, `git merge origin/main` on a branch behind it). Never work in `Downloads/yacht-live-main`
-   (the live-view clone is hard-reset every 60 s; `check.py` refuses to run there).
+   (`git pull --ff-only` on main, `git merge origin/main` on a branch behind it). Never work in an old
+   `yacht-live-main` copy (`check.py` refuses to run there).
 2. **Work** on a branch (`claude/…` or `codex/…`), never commit straight to `main`.
 3. **End:** `node tests/engine.test.cjs`, commit, push, pull request to `main`; merge when the user says "merge".
    Keep the "State" section below current in the same commit (the `data-status` block is written by `update_prices.py`).
@@ -42,7 +42,7 @@ sources. Stale prices → tell the user to run "update" in Claude Code. Everythi
 | `js/engine.js` | all math + formatters (`PFEngine`), pure functions | math only here, with a test |
 | `dashboard.html`, `css/`, `js/charts.js`, `js/app.js` | UI | no financial math |
 | `tests/engine.test.cjs` | core engine tests | keep green |
-| `tools/check.py`, `tools/yacht-live.bat` / `.command` | session check (incl. `portable`: page offline, relative, exact-case files); live view of `main` in `Downloads/yacht-live-main` (Windows / Mac) | |
+| `tools/check.py`, `tools/yacht-live.bat` / `.command` | session check (incl. `portable`: page offline, relative, exact-case files); live view: updates the repo folder it sits in (ff-only, only when clean) and opens its page (Windows / Mac) | |
 | `company-logos/<ISIN>.png` | 128×128 logos (missing → initials) | |
 
 ## Scalable (read-only!)
@@ -81,7 +81,7 @@ only from 13.5, else 22). Keep Python 3.8-compatible (no `zoneinfo`, `removepref
 and the page ES2015 + Safari-16 APIs (no `color-mix` without fallback, no `popover`, `:has`). The page folder stays
 self-contained: no web addresses, modules, `fetch`, absolute paths (`tools/check.py` section `portable` fails on them).
 `.gitattributes` normalizes line endings (`*.bat` CRLF, else LF). Codex on Windows: install Git, Python 3, Node LTS; clone
-to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python tools/check.py and tell me the state".
+to `%USERPROFILE%\simon`; first message "Run python tools/check.py and tell me the state".
 
 ## State
 <!-- data-status:start (written by update_prices.py --finish) -->
@@ -104,9 +104,10 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
   them). Both hooks also run in cloud (Projects) sessions, so an update can run there too. Nothing was removed (user
   05.10.2026: "keine Features entfernen"); the 1M chart keeps its 2-h points, `intraday_2h.csv` stays and is still filled
   after a gap.
-- Portable 05.10.2026 (user: self-contained, every feature on the Windows PC and the MacBook): live view copy moved to
-  `Downloads/yacht-live-main` (old copy in the home folder is moved once; `YACHT_LIVE_DIR` overrides), offline fallback to
-  the launcher's checkout, `check.py` section `portable` + Python 3.8 accepted, `color-mix` fallback, README setup table.
+- Portable 05.10.2026 (user: self-contained, every feature on the Windows PC and the MacBook): `check.py` section
+  `portable` + Python 3.8 accepted, `color-mix` fallback, README setup table. Launchers (user 05.10.2026, "das
+  automatische Speichern soll wieder entfernt werden"): no own copy any more (no `yacht-live-main`, no Downloads copy);
+  they update the folder they sit in and open its page; ZIP downloads are only opened.
 - Data notes: Astera Labs history begins 13.11.2025. No daily history before 2026 (month-end only): Western Digital,
   Applied Optoelectronics, Astera Labs, Eaton, Keel, SanDisk, Alphabet 2x, SpaceX, Memory 3x.
 

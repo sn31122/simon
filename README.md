@@ -3,11 +3,10 @@
 Private repository **sn31122/simon**. An offline dashboard (`dashboard.html`) comparing the Yacht portfolio, the real
 Scalable depot and benchmark baskets. Plain HTML/CSS/JS with bundled data – no build step, no packages.
 
-- **Always the latest `main`:** double-click `tools/yacht-live.bat` (Windows) or `tools/yacht-live.command` (Mac); it keeps
-  its own copy in `Downloads/yacht-live-main` (an older copy in the home folder is moved there once) and reopens the
-  page when `main` changes. Never edit files in that folder.
-  Offline or not logged in: it shows the last copy, or (first start) the checkout the launcher file sits in.
-  Another folder for the copy: set the environment variable `YACHT_LIVE_DIR`.
+- **Always the latest version:** double-click `tools/yacht-live.bat` (Windows) or `tools/yacht-live.command` (Mac) in your
+  downloaded repo. It updates that same folder from GitHub (fast-forward of the checked-out branch, only without local
+  changes, never overwrites anything), opens its `dashboard.html` and reopens it when GitHub has a newer version. No second
+  copy anywhere. A ZIP download (no `.git`) or a computer without Git just opens the page.
 - **From a checkout:** open `dashboard.html` directly.
 
 **Self-contained:** the folder holds everything the page needs (data, scripts, styles, logos); no internet, no server,
