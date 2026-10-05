@@ -115,8 +115,10 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
 - Update pipeline 05.10.2026: a normal update is 108 chart calls (`seven_days` only) instead of 216; `one_month` /
   `three_months` only after a gap of > 5 weekdays (`--plan` decides and says why). The depot snapshot is fetched by the same
   `price-fetcher` agent (`DEPOT: yes`) and merged by `--finish` (`update_depot.py --no-tests`), so the main session runs
-  plan → one agent → finish → report. `save-portfolio.cjs` answers one `SAVED depot …` line (full JSON in
-  `data/incoming/depot/`). Both hooks also run in cloud (Projects) sessions, so an update can run there too.
+  plan → one agent → finish → report. `save-portfolio.cjs` is unchanged (saves the depot answers, the model still sees
+  them). Both hooks also run in cloud (Projects) sessions, so an update can run there too. Nothing was removed (user
+  05.10.2026: "keine Features entfernen"); the 1M chart keeps its 2-h points, `intraday_2h.csv` stays and is still filled
+  after a gap.
 - Update on launch 05.10.2026 (user): `tools/update_on_launch.py` + the routine "Yacht Kurs-Update" (section "Update on
   launch"). A project session cannot create a routine that starts a fresh session per run, so the user creates it once in
   claude.ai/code/routines and stores its API URL + token per computer (`--setup`).

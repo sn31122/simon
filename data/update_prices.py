@@ -153,8 +153,8 @@ if '--plan' in sys.argv:
              f'TIMEFRAMES: {" ".join(tfs)}',
              'TOOL: get_security_chart(isin=<ISIN>, timeframe=<each timeframe>)   (read-only; no portfolioId)',
              'DEPOT: yes - the agent also calls get_portfolio_holdings + get_portfolio_overview (includeYearToDate: true); --finish runs update_depot.py',
-             'FILES: written by the hooks .claude/hooks/save-chart.cjs / save-portfolio.cjs (data/incoming/<ISIN>.csv, 2h/, 3m/, depot/); '
-             'the result is one line "SAVED ..."',
+             'FILES: written by the hooks .claude/hooks/save-chart.cjs (data/incoming/<ISIN>.csv, 2h/, 3m/; the chart result is one line '
+             '"SAVED ...") and save-portfolio.cjs (data/incoming/depot/; the depot answers stay visible)',
              f'{len(isins)} ISINs in {len(batches)} batch(es) (one fetch agent per batch):']
     for j, b in enumerate(batches, 1):
         lines.append(f'BATCH {j}: ' + ' '.join(b))
