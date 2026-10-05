@@ -6,8 +6,8 @@ persisted. Ask the user whenever something is even slightly unclear. Reply in th
 
 ## Session protocol
 1. **Start:** `python tools/check.py` (Windows `python`, else `python3`): fetches `origin/main` and says what to do
-   (`git pull --ff-only` on main, `git merge origin/main` on a branch behind it). Never work in `yacht-live-main` (the
-   live-view clone is hard-reset every 60 s).
+   (`git pull --ff-only` on main, `git merge origin/main` on a branch behind it). Never work in `Downloads/yacht-live-main`
+   (the live-view clone is hard-reset every 60 s; `check.py` refuses to run there).
 2. **Work** on a branch (`claude/…` or `codex/…`), never commit straight to `main`.
 3. **End:** `node tests/engine.test.cjs`, commit, push, pull request to `main`; merge when the user says "merge".
    Keep the "State" section below current in the same commit (the `data-status` block is written by `update_prices.py`).
@@ -42,7 +42,7 @@ sources. Stale prices → tell the user to run "update" in Claude Code. Everythi
 | `js/engine.js` | all math + formatters (`PFEngine`), pure functions | math only here, with a test |
 | `dashboard.html`, `css/`, `js/charts.js`, `js/app.js` | UI | no financial math |
 | `tests/engine.test.cjs` | core engine tests | keep green |
-| `tools/check.py`, `tools/yacht-live.bat` / `.command` | session check; live view of `main` (Windows / Mac) | |
+| `tools/check.py`, `tools/yacht-live.bat` / `.command` | session check (incl. `portable`: page offline, relative, exact-case files); live view of `main` in `Downloads/yacht-live-main` (Windows / Mac) | |
 | `company-logos/<ISIN>.png` | 128×128 logos (missing → initials) | |
 
 ## Scalable (read-only!)
@@ -74,8 +74,12 @@ XS3388191457, Bloom / D-Wave Nov 2024, Riot −74 % 21.01.2009 (its `CHECK WITH 
   with the price-interval pills under the period pills (1 Tag / 2 Tage / 1 Woche / 1 Monat, `E.thinIndices`; first and
   last point always kept). Kennzahlen, tables and lists stay daily.
 
-## Portability (Windows + Codex)
+## Portability (Windows PC + MacBook + Codex)
 Python standard library and Node built-ins only. `pathlib`, `encoding='utf-8'`, CSVs with `newline=''`, UTF-8 stdout.
+Machines: Windows PC and a 2013 MacBook Air on macOS Ventura (no `python` there, only `python3` 3.9; Safari 16+; Node 24
+only from 13.5, else 22). Keep Python 3.8-compatible (no `zoneinfo`, `removeprefix`, `list[str]` at runtime, `dict | dict`)
+and the page ES2015 + Safari-16 APIs (no `color-mix` without fallback, no `popover`, `:has`). The page folder stays
+self-contained: no web addresses, modules, `fetch`, absolute paths (`tools/check.py` section `portable` fails on them).
 `.gitattributes` normalizes line endings (`*.bat` CRLF, else LF). Codex on Windows: install Git, Python 3, Node LTS; clone
 to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python tools/check.py and tell me the state".
 
@@ -100,6 +104,9 @@ to `%USERPROFILE%\simon` (not the live-view folder); first message "Run python t
   them). Both hooks also run in cloud (Projects) sessions, so an update can run there too. Nothing was removed (user
   05.10.2026: "keine Features entfernen"); the 1M chart keeps its 2-h points, `intraday_2h.csv` stays and is still filled
   after a gap.
+- Portable 05.10.2026 (user: self-contained, every feature on the Windows PC and the MacBook): live view copy moved to
+  `Downloads/yacht-live-main` (old copy in the home folder is moved once; `YACHT_LIVE_DIR` overrides), offline fallback to
+  the launcher's checkout, `check.py` section `portable` + Python 3.8 accepted, `color-mix` fallback, README setup table.
 - Data notes: Astera Labs history begins 13.11.2025. No daily history before 2026 (month-end only): Western Digital,
   Applied Optoelectronics, Astera Labs, Eaton, Keel, SanDisk, Alphabet 2x, SpaceX, Memory 3x.
 
