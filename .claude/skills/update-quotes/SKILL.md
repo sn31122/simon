@@ -10,7 +10,7 @@ data files by hand. The hook `.claude/hooks/save-chart.cjs` writes every chart a
 1. **Plan**: `python data/update_prices.py --plan`
    - `WARNING: … more than three_months covers` → stop and ask the user how to proceed.
    - Otherwise it prints one prompt (`--- prompt 1/1 ---`) for all ISINs. Do not print it to the user.
-2. **Fetch**: start **one** agent (agent type `price-fetcher`, model `claude-sonnet-5-5`) with the prompt copied exactly.
+2. **Fetch**: start **one** agent (agent type `price-fetcher`, model `claude-haiku-5-5`) with the prompt copied exactly.
    Wait for its answer (`SAVED n of m` plus any problem lines).
    - `HOOK NOT ACTIVE` → stop. Tell the user the quote-saving hook did not run: Node must be on PATH, and Claude Code must
      be restarted once after `.claude/settings.json` was added (`/hooks` lists it). Never copy prices by hand.
