@@ -9,7 +9,7 @@ All shared rules and the current state are in `AGENTS.md` (also read by Codex). 
 - **Benchmark portfolios** ("add benchmark …", "change … to …", "remove …"): skill `benchmarks`.
 - **Hooks** (`.claude/settings.json`, need `node` on PATH): `save-chart.cjs` turns every `get_security_chart` answer into a
   file + one `SAVED …` line; `save-portfolio.cjs` saves the depot answers. A chart call that shows raw JSON = hook not active.
-- **Subagents:** price lookups go to **one** agent of type `price-fetcher` (Claude Sonnet 5.5, `claude-sonnet-5-5`) for all
+- **Subagents:** price lookups go to **one** agent of type `price-fetcher` (Claude Haiku 5.5, `claude-haiku-5-5`) for all
   ISINs, with the prompt printed by `update_prices.py` copied exactly. Everything else is done by the main session; other
   subagents only when the user asks. Do not resume old agent IDs.
 

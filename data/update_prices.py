@@ -36,7 +36,7 @@ STORE_30M, STORE_2H = D / 'intraday.csv', D / 'intraday_2h.csv'
 INC1Y, INCMAX = INC / '1y', INC / 'max'           # one_year / max fetches: history before 2026 (prices_history.csv)
 HIST = D / 'prices_history.csv'
 CLOSE_HOUR_BERLIN = 23   # a day's last point counts as the close once Berlin time is past 23:00
-BATCH = 1000             # max ISINs per fetch agent: one Sonnet 5.5 agent handles all calls (user 02.10.2026)
+BATCH = 1000             # max ISINs per fetch agent: one Haiku 5.5 agent handles all calls (user 02.10.2026)
 GAP_DAYS = 5             # more weekdays since the last final close: also fetch three_months (seven_days covers ~5 sessions)
 MAX_GAP_DAYS = 60        # three_months covers ~63 sessions; beyond that ask the user (year_to_date by hand, AGENTS.md)
 LINE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z,\d+(\.\d+)?$')
@@ -91,7 +91,7 @@ def last_price(isin):
 
 THINK = 'Thinking ON: think step by step before each tool call and before writing each file.'
 def agent_prompt(tfs, isins):
-    """The exact prompt for one price-fetcher agent (Claude Sonnet 5.5)."""
+    """The exact prompt for one price-fetcher agent (Claude Haiku 5.5)."""
     return (f'{THINK}\nNormal update in `{D.parent}`: follow your agent instructions (fetch agent). '
             f'TIMEFRAMES: `{" ".join(tfs)}`. Your ISINs: `{" ".join(isins)}`.')
 
@@ -145,7 +145,7 @@ if '--plan' in sys.argv:
     if left:
         lines.append(f'NOTE: removed {left} files of an earlier, unmerged fetch from data/incoming/ (they are fetched again).')
     lines.append('')
-    lines.append(f'AGENT PROMPTS - start {len(batches)} agent(s): agent type price-fetcher, model claude-sonnet-5-5, one prompt each '
+    lines.append(f'AGENT PROMPTS - start {len(batches)} agent(s): agent type price-fetcher, model claude-haiku-5-5, one prompt each '
                  '(copy each block exactly):')
     for j, b in enumerate(batches, 1):
         lines += [f'--- prompt {j}/{len(batches)} ---', agent_prompt(tfs, b)]
@@ -213,7 +213,7 @@ if '--finish' in sys.argv:
     if code:
         redo = [ln.split(':')[0].strip() for ln in out.splitlines() if re.match(r'^\s+[A-Z]{2}[A-Z0-9]{9}\d:', ln)]
         parts = [redo[j:j + BATCH] for j in range(0, len(redo), BATCH)] or [[]]
-        print(f'\nFETCH AGAIN: start {len(parts)} agent(s) (price-fetcher, claude-sonnet-5-5), one prompt each:')
+        print(f'\nFETCH AGAIN: start {len(parts)} agent(s) (price-fetcher, claude-haiku-5-5), one prompt each:')
         for j, b in enumerate(parts, 1): print(f'--- prompt {j}/{len(parts)} ---\n' + agent_prompt(planned_timeframes(), b))
         print('--- end of prompts --- then run: python data/update_prices.py --finish   '
               '(after 2 failed rounds for the same ISIN: ask the user)')
@@ -232,7 +232,7 @@ YTD = INC / 'ytd'
 ADD_BATCH = BATCH        # new-instrument backfill and history: also one agent
 
 def add_prompt(isins):
-    """The exact prompt for one backfill agent (price-fetcher, Claude Sonnet 5.5)."""
+    """The exact prompt for one backfill agent (price-fetcher, Claude Haiku 5.5)."""
     return (f'{THINK}\nNew-instrument backfill in `{D.parent}`: follow your agent instructions (backfill agent). '
             f'TIMEFRAMES: `year_to_date seven_days one_month one_year max`. Your ISINs: `{" ".join(isins)}`.')
 
@@ -353,7 +353,7 @@ if '--plan-add' in sys.argv:
     missing = [i for i in new if i not in ins]
     if missing:
         print('TODO before --finish-add: add a row to data/instruments.csv (isin,name,short,type) for: ' + ', '.join(missing))
-    print(f'\nAGENT PROMPTS - start {len(batches)} agent(s): agent type price-fetcher, model claude-sonnet-5-5, one prompt each:')
+    print(f'\nAGENT PROMPTS - start {len(batches)} agent(s): agent type price-fetcher, model claude-haiku-5-5, one prompt each:')
     for j, b in enumerate(batches, 1): print(f'--- prompt {j}/{len(batches)} ---\n' + add_prompt(b))
     print('--- end of prompts --- then: python data/update_prices.py --finish-add ' + ','.join(new))
     sys.exit(0)
@@ -397,7 +397,7 @@ if '--finish-add' in sys.argv:
     if errs:
         print('ERRORS (nothing written):', *errs, sep='\n  ')
         if redo:
-            print('\nFETCH AGAIN: start one agent (price-fetcher, claude-sonnet-5-5) with this prompt, then run --finish-add again:')
+            print('\nFETCH AGAIN: start one agent (price-fetcher, claude-haiku-5-5) with this prompt, then run --finish-add again:')
             print('--- prompt 1/1 ---\n' + add_prompt(redo) + '\n--- end of prompts ---')
         sys.exit(1)
     alerts = []
