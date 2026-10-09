@@ -55,7 +55,7 @@ Before 23:00 Berlin today is `intraday`. Never delete old rows. > ~60 weekdays g
 **Build warnings:** `SPLIT` (ratio near 2/3/4/5/10/…) → confirm with the user, divide the history before the split, note
 it below (done: FR0010342592 1:200 on 2026-07-09). Moves > 30 % are flagged; confirmed real: Marvell 02.06., D-Wave 21.05.,
 AT&S 15.06., Bloom/Nebius/IREN 30.07., SanDisk 30.07., Halbleiter 3x 05.06., IREN / CleanSpark 05.02., Applied Digital
-06.02., Applied Optoelectronics 27.02., Atlassian 06.08., Super Micro 20.03. / 10.06.2026, the leveraged ETPs XS2779861082 /
+06.02., Applied Optoelectronics 27.02., Atlassian 06.08., Super Micro 20.03. / 10.06.2026, WhiteFiber 28.01.2026, the leveraged ETPs XS2779861082 /
 XS3388191457, Bloom / D-Wave Nov 2024, Riot −74 % 21.01.2009 (its `CHECK WITH USER` line needs no action).
 
 ## Model conventions
